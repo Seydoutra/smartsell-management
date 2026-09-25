@@ -897,14 +897,11 @@ function ProjectsPage({ admin }: { admin: boolean }) {
     [open, setOpen] = useState(false),
     [selected, setSelected] = useState<string | null>(null),
     [error, setError] = useState("");
-  const load = () =>
-    Promise.all([listProjects(), listClients(), listProfiles()])
-      .then(([a, b, c]) => {
-        setRows(a);
-        setClients(b);
-        setProfiles(c);
-      })
-      .catch((e) => setError(e.message));
+  const load = () => listProjects().then(setRows).catch((e) => setError(e.message));
+  const openCreator = () => {
+    setOpen(true);
+    if (!clients.length || !profiles.length) void Promise.all([listClients(), listProfiles()]).then(([a, b]) => { setClients(a); setProfiles(b); }).catch((e) => setError(e.message));
+  };
   useEffect(() => {
     void load();
   }, []);
@@ -913,13 +910,13 @@ function ProjectsPage({ admin }: { admin: boolean }) {
       <Header
         title="Projets"
         copy="Suivi détaillé, équipe, progression, tâches et facturation."
-        onAdd={() => setOpen(true)}
+        onAdd={openCreator}
         add="Nouveau projet"
       />
       <ErrorBar value={error} />
       <div className="records panel">
         {!rows.length ? (
-          <Empty name="projet" onAdd={() => setOpen(true)} />
+          <Empty name="projet" onAdd={openCreator} />
         ) : (
           rows.map((r) => (
             <article
@@ -1040,14 +1037,11 @@ function TasksPage({
       useState<CalendarConnection | null>(null),
     [calendarBusy, setCalendarBusy] = useState(false),
     [error, setError] = useState("");
-  const load = () =>
-    Promise.all([listTasks(), listProjects(), listProfiles()])
-      .then(([a, b, c]) => {
-        setRows(a);
-        setProjects(b);
-        setProfiles(c);
-      })
-      .catch((e) => setError(e.message));
+  const load = () => listTasks().then(setRows).catch((e) => setError(e.message));
+  const loadReferences = () => {
+    if (!projects.length || !profiles.length) void Promise.all([listProjects(), listProfiles()]).then(([a, b]) => { setProjects(a); setProfiles(b); }).catch((e) => setError(e.message));
+  };
+  const openCreator = () => { setOpen(true); loadReferences(); };
   useEffect(() => {
     void load();
   }, []);
@@ -1073,7 +1067,7 @@ function TasksPage({
             ? "Échéances, rappels personnalisés et ajout dans Google Agenda."
             : "Affectation, statut, priorité et alertes multicanales."
         }
-        onAdd={() => setOpen(true)}
+        onAdd={openCreator}
         add="Nouvelle tâche"
       />
       {planning && (
@@ -1116,13 +1110,13 @@ function TasksPage({
       <ErrorBar value={error} />
       <div className="records panel">
         {!rows.length ? (
-          <Empty name="tâche" onAdd={() => setOpen(true)} />
+          <Empty name="tâche" onAdd={openCreator} />
         ) : (
           rows.map((r) => (
             <article
               className="clickable-row"
               key={r.id}
-              onClick={() => setSelected(r)}
+              onClick={() => { setSelected(r); loadReferences(); }}
             >
               <div className="record-main">
                 <span className="record-avatar">✓</span>
@@ -2534,7 +2528,7 @@ function CommunicationPage() {
           <p>
             Le connecteur d’appels est prêt côté serveur. Il sera activé dès que
             les identifiants du fournisseur téléphonique seront ajoutés dans
-            Netlify.
+            Supabase.
           </p>
           <span className="status">Connecteur API prêt</span>
           <h3>Sécurité</h3>

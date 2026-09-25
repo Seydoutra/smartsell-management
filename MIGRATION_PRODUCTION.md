@@ -20,16 +20,16 @@ Le fichier `supabase/reset_business_data.sql` supprime uniquement les données m
 
 Ne l’exécutez qu’après sauvegarde et confirmation explicite. Pour supprimer également des utilisateurs, utilisez **Authentication → Users** dans Supabase, en conservant impérativement le compte Super Admin de Traoré Seydou.
 
-## 4. Activer la production Netlify
+## 4. Activer la production GitHub Pages + Supabase
 
-Dans **Netlify → Project configuration → Environment variables** :
+Dans **GitHub → Settings → Secrets and variables → Actions** :
 
 ```text
-VITE_DEMO_MODE=false
-COMMUNICATION_TEST_MODE=true
+Variable : VITE_SUPABASE_URL
+Secret : VITE_SUPABASE_ANON_KEY
 ```
 
-Gardez les communications en mode test. Lancez ensuite **Deploys → Trigger deploy → Clear cache and deploy site**.
+Les clés privées et fournisseurs restent exclusivement dans **Supabase → Edge Functions → Secrets**. Chaque mise à jour de la branche `main` déclenche le déploiement GitHub Pages.
 
 ## 5. Tester dans cet ordre
 

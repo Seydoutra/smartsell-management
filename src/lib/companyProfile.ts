@@ -1,8 +1,8 @@
 export const companyProfile = {
   company_name: 'Smartsell',
   product_name: 'Smartsell Management',
-  logo_light: '/brand/wordmark-white.png',
-  logo_dark: '/brand/wordmark-yellow.png',
+  logo_light: `${import.meta.env.BASE_URL}brand/wordmark-white.png`,
+  logo_dark: `${import.meta.env.BASE_URL}brand/wordmark-yellow.png`,
   primary_color: '#6A2B85',
   secondary_color: '#0A0A0D',
   accent_color: '#FAEE35',
