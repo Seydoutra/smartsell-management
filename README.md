@@ -16,6 +16,10 @@ Compte de démonstration :
 
 Ces identifiants ne sont utilisés qu’en mode démo. Ils ne doivent jamais servir en production.
 
+## Passage en production
+
+Pour utiliser Supabase réel, définissez `VITE_DEMO_MODE=false`, exécutez `supabase/setup.sql`, puis `supabase/production_upgrade.sql`. Le parcours client → projet → tâche → facture → paiement est alors enregistré dans Supabase. Consultez `MIGRATION_PRODUCTION.md` avant toute remise à zéro.
+
 ## Vérifications
 
 - `pnpm build` construit la version de production.

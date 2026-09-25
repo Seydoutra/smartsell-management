@@ -8,6 +8,8 @@ import {
 import { companyProfile } from './lib/companyProfile'
 import { demoData, DemoRecord } from './lib/demoData'
 import { endSession, getDemoActivity, pulseSession, startSession, trackActivity } from './services/activityTracker'
+import { isDemoMode } from './services/supabase'
+import ProductionApp from './ProductionApp'
 
 type Theme = 'light' | 'dark'
 type Page = 'Dashboard' | 'Prospects' | 'Clients' | 'Projets' | 'Tâches' | 'Planning' | 'Production' | 'Éditorial' | 'Finance' | 'Matériel' | 'Équipe' | 'Documents' | 'Communication' | 'Administration' | 'Paramètres'
@@ -196,9 +198,11 @@ function Shell({ onLogout }: { onLogout: () => void }) {
   </div>
 }
 
-export default function App(){
+function DemoApp(){
   const [loggedIn,setLoggedIn]=useState(()=>sessionStorage.getItem('smartsell-demo-session')==='true')
   const login=()=>{sessionStorage.setItem('smartsell-demo-session','true');startSession();setLoggedIn(true)}
   const logout=()=>{endSession();sessionStorage.removeItem('smartsell-demo-session');setLoggedIn(false)}
   return <AnimatePresence mode="wait">{loggedIn?<motion.div key="app" initial={{opacity:0}} animate={{opacity:1}}><Shell onLogout={logout}/></motion.div>:<motion.div key="login" initial={{opacity:0}} animate={{opacity:1}}><Login onLogin={login}/></motion.div>}</AnimatePresence>
 }
+
+export default function App(){return isDemoMode?<DemoApp/>:<ProductionApp/>}

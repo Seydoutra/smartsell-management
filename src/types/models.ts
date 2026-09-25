@@ -1,0 +1,7 @@
+export type Client = { id:string; name:string; legal_name:string|null; sector:string|null; phone:string|null; whatsapp:string|null; email:string|null; address:string|null; status:string; created_at:string }
+export type Project = { id:string; name:string; type:string|null; client_id:string|null; manager_id:string|null; starts_on:string|null; ends_on:string|null; budget:number; currency:string; status:string; priority:string; progress:number; description:string|null; clients?:{name:string}|null }
+export type Task = { id:string; title:string; description:string|null; project_id:string|null; assignee_id:string|null; status:string; priority:string; due_at:string|null; projects?:{name:string}|null }
+export type Invoice = { id:string; number:string; client_id:string; project_id:string|null; issue_date:string; due_date:string|null; status:string; currency:string; discount:number; tax:number; total:number; clients?:{name:string;email:string|null;address:string|null}|null; projects?:{name:string}|null; invoice_items?:InvoiceItem[]; payments?:Payment[] }
+export type InvoiceItem = { id?:string; description:string; quantity:number; unit_price:number; tax_rate:number }
+export type Payment = { id:string; invoice_id:string; amount:number; currency:string; paid_at:string; method:string|null; reference:string|null; invoices?:{number:string;total:number;clients?:{name:string}|null}|null }
+export type Profile = { id:string; full_name:string; role:string; active:boolean; must_change_password:boolean; department_id:string|null }
