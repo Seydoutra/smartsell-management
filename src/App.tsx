@@ -9,7 +9,7 @@ import { companyProfile } from './lib/companyProfile'
 import { demoData, DemoRecord } from './lib/demoData'
 import { endSession, getDemoActivity, pulseSession, startSession, trackActivity } from './services/activityTracker'
 import { isDemoMode } from './services/supabase'
-import ProductionApp from './ProductionApp'
+import ProductionApp from './ProductionAppV2'
 
 type Theme = 'light' | 'dark'
 type Page = 'Dashboard' | 'Prospects' | 'Clients' | 'Projets' | 'Tâches' | 'Planning' | 'Production' | 'Éditorial' | 'Finance' | 'Matériel' | 'Équipe' | 'Documents' | 'Communication' | 'Administration' | 'Paramètres'
