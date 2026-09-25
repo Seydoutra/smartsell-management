@@ -1,0 +1,15 @@
+export const companyProfile = {
+  company_name: 'Smartsell',
+  product_name: 'Smartsell Management',
+  logo_light: '/brand/wordmark-white.png',
+  logo_dark: '/brand/wordmark-yellow.png',
+  primary_color: '#6A2B85',
+  secondary_color: '#0A0A0D',
+  accent_color: '#FAEE35',
+  phone: '620 619 064',
+  whatsapp: '620 619 064',
+  email: 'contact@smartsell.pro',
+  address: 'Soloprimo, Conakry',
+  website: '',
+  social_links: {},
+} as const
