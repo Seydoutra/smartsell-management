@@ -1,7 +1,7 @@
 import { type CSSProperties, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  ArrowRight, BarChart3, Bot, BriefcaseBusiness, CalendarDays, Camera, Check,
+  ArrowRight, ArrowUp, BarChart3, Bot, BriefcaseBusiness, CalendarDays, Camera, Check,
   ChevronLeft, ChevronRight, CircleDollarSign, Clock3, FileCheck2, Gauge,
   Layers3, Mail, Megaphone, Menu, MessageSquareText, PackageCheck, Palette,
   Play, Settings2, ShieldCheck, Sparkles, Target, Users, WandSparkles, X, Zap,
@@ -96,14 +96,40 @@ export default function LandingPage({ onOpenApp, onSignUp }: { onOpenApp: () => 
   const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null)
   const [demoOpen, setDemoOpen] = useState(false)
   const [billing, setBilling] = useState<'monthly' | 'annual'>('monthly')
+  const [scrolled, setScrolled] = useState(false)
+  const [scrollProgress, setScrollProgress] = useState(0)
+  const [activeSection, setActiveSection] = useState('accueil')
 
   useEffect(() => { const close = () => setMenuOpen(false); window.addEventListener('resize', close); return () => window.removeEventListener('resize', close) }, [])
   useEffect(() => { document.body.style.overflow = selectedFeature || demoOpen ? 'hidden' : ''; return () => { document.body.style.overflow = '' } }, [selectedFeature, demoOpen])
-  const go = (id: string) => { setMenuOpen(false); document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' }) }
+  useEffect(() => {
+    const update = () => {
+      setScrolled(window.scrollY > 24)
+      const available = document.documentElement.scrollHeight - window.innerHeight
+      setScrollProgress(available > 0 ? Math.min(100, (window.scrollY / available) * 100) : 0)
+      const sections = ['accueil', 'demo-produit', 'solution', 'fonctionnement', 'personnalisation', 'tarifs']
+      const current = sections.reduce((visible, id) => (document.getElementById(id)?.getBoundingClientRect().top ?? 9999) <= 180 ? id : visible, 'accueil')
+      setActiveSection(current)
+    }
+    update()
+    window.addEventListener('scroll', update, { passive: true })
+    return () => window.removeEventListener('scroll', update)
+  }, [])
+  const go = (id: string) => { setMenuOpen(false); setActiveSection(id); document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' }) }
   const openDemo = () => setDemoOpen(true)
 
   return <div className="landing-page">
-    <header className="landing-header"><a className="landing-brand" href="#accueil" aria-label="SmartSell, accueil"><img src={companyProfile.logo_light} alt="SmartSell"/><span>Management</span></a><nav className={menuOpen ? 'open' : ''} aria-label="Navigation principale"><button onClick={() => go('solution')}>Fonctionnalités</button><button onClick={() => go('fonctionnement')}>Fonctionnement</button><button onClick={() => go('personnalisation')}>Personnalisation</button><button onClick={() => go('tarifs')}>Tarifs</button><button className="mobile-signup" onClick={onSignUp}>S’inscrire · essai 72 h</button></nav><div className="landing-header-actions"><button className="landing-login" onClick={onOpenApp}>Se connecter</button><button className="landing-nav-cta" onClick={onSignUp}>S’inscrire <ArrowRight/></button></div><button className="landing-menu" onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}>{menuOpen ? <X/> : <Menu/>}</button></header>
+    <header className={`landing-header ${scrolled ? 'is-scrolled' : ''}`}>
+      <div className="header-aurora"/><div className="header-grid"/>
+      <a className="landing-brand" href="#accueil" onClick={() => setActiveSection('accueil')} aria-label="SmartSell, accueil"><span className="brand-orbit"><i/><img src={companyProfile.logo_light} alt="SmartSell"/></span><span>Management<small>BUSINESS OS</small></span></a>
+      <nav className={menuOpen ? 'open' : ''} aria-label="Navigation principale">
+        {[['solution', 'Fonctionnalités'], ['fonctionnement', 'Fonctionnement'], ['personnalisation', 'Personnalisation'], ['tarifs', 'Tarifs']].map(([id, label]) => <button key={id} className={activeSection === id ? 'active' : ''} onClick={() => go(id)}><span>{label}</span><i/></button>)}
+        <button className="mobile-signup" onClick={onSignUp}>S’inscrire · essai 72 h</button>
+      </nav>
+      <div className="landing-header-actions"><button className="landing-login" onClick={onOpenApp}><i/> Se connecter</button><button className="landing-nav-cta" onClick={onSignUp}><span>S’inscrire</span><small>72 h offertes</small><ArrowRight/></button></div>
+      <button className={`landing-menu ${menuOpen ? 'active' : ''}`} onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}>{menuOpen ? <X/> : <Menu/>}</button>
+      <div className="header-progress" style={{ '--header-progress': `${scrollProgress}%` } as CSSProperties}/>
+    </header>
 
     <main>
       <section className="landing-hero" id="accueil"><div className="landing-orb landing-orb-one"/><div className="landing-orb landing-orb-two"/><motion.div className="landing-hero-copy" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .6 }}><div className="landing-kicker"><Sparkles/> Toute votre entreprise. Une seule plateforme.</div><h1>Un seul espace.<br/><em>Toute votre activité.</em></h1><p>SmartSell réunit clients, projets, planning, production, équipe, communication et finances pour transformer chaque journée en décisions claires.</p><div className="landing-hero-actions"><button className="landing-primary" onClick={onSignUp}>Créer ma démo · 72 h <ArrowRight/></button><button className="landing-secondary" onClick={() => go('demo-produit')}><Play/> Voir la plateforme en action</button></div><div className="landing-trust"><span><Check/> 100% à votre image</span><span><Check/> Toutes vos opérations</span><span><Check/> Accès d’essai limité à 72 h</span></div></motion.div><ProductPreview/><div className="landing-marquee"><span>CRM</span><i/><span>PROJETS</span><i/><span>PLANNING</span><i/><span>PRODUCTION</span><i/><span>FACTURATION</span><i/><span>RH</span><i/><span>IA</span></div></section>
@@ -129,7 +155,17 @@ export default function LandingPage({ onOpenApp, onSignUp }: { onOpenApp: () => 
       <section className="landing-final"><div className="landing-final-mark">S</div><span>72 HEURES POUR VOIR LA DIFFÉRENCE</span><h2>Votre entreprise.<br/><em>Enfin, au même endroit.</em></h2><p>Découvrez une plateforme vivante, personnalisée et prête à accompagner chaque métier.</p><button className="landing-primary" onClick={openDemo}>Tester l’application · 72 h <ArrowRight/></button></section>
     </main>
 
-    <footer className="landing-footer"><div><img src={companyProfile.logo_light} alt="SmartSell"/><p>La plateforme de gestion personnalisée pour les équipes qui veulent avancer avec clarté.</p></div><div><strong>Produit</strong><button onClick={() => go('solution')}>Fonctionnalités</button><button onClick={() => go('personnalisation')}>Personnalisation</button><button onClick={() => go('tarifs')}>Tarifs</button></div><div><strong>Contact</strong><a href={`mailto:${companyProfile.email}`}>{companyProfile.email}</a><a href={`tel:${companyProfile.phone.replaceAll(' ', '')}`}>{companyProfile.phone}</a><span>{companyProfile.address}</span><a href="#privacy">Confidentialité</a><a href="#terms">Conditions d’utilisation</a></div><small>© {new Date().getFullYear()} SmartSell. Tous droits réservés.</small></footer>
+    <footer className="landing-footer">
+      <div className="footer-aurora"/><div className="footer-grid"/>
+      <div className="footer-callout"><div><span><Sparkles/> PRÊT À PASSER AU NIVEAU SUPÉRIEUR ?</span><h2>Faites entrer votre entreprise<br/><em>dans le mouvement.</em></h2></div><button onClick={onSignUp}>Démarrer mes 72 h <ArrowRight/></button></div>
+      <div className="footer-main">
+        <div className="footer-brand"><div className="footer-logo-wrap"><i/><img src={companyProfile.logo_light} alt="SmartSell"/></div><p>Le système d’exploitation de votre entreprise : clients, projets, équipe et finances enfin synchronisés.</p><span className="footer-status"><i/> Tous les systèmes sont opérationnels</span></div>
+        <div className="footer-column"><strong>EXPLORER</strong><button onClick={() => go('demo-produit')}>Plateforme en action <ChevronRight/></button><button onClick={() => go('solution')}>Fonctionnalités <ChevronRight/></button><button onClick={() => go('personnalisation')}>Personnalisation <ChevronRight/></button><button onClick={() => go('tarifs')}>Tarifs <ChevronRight/></button></div>
+        <div className="footer-column"><strong>SMARTSELL</strong><button onClick={onSignUp}>S’inscrire <ChevronRight/></button><button onClick={onOpenApp}>Se connecter <ChevronRight/></button><a href="#privacy">Confidentialité <ChevronRight/></a><a href="#terms">Conditions d’utilisation <ChevronRight/></a></div>
+        <div className="footer-contact"><strong>PARLONS DE VOTRE PROJET</strong><a href={`mailto:${companyProfile.email}`}>{companyProfile.email}<ArrowRight/></a><a href={`tel:${companyProfile.phone.replaceAll(' ', '')}`}>{companyProfile.phone}<ArrowRight/></a><span>{companyProfile.address}</span></div>
+      </div>
+      <div className="footer-bottom"><small>© {new Date().getFullYear()} SmartSell Management. Tous droits réservés.</small><div><span>CONÇU POUR L’AFRIQUE · PRÊT POUR LE MONDE</span><i/></div><button onClick={() => go('accueil')} aria-label="Retour en haut"><ArrowUp/></button></div>
+    </footer>
 
     {selectedFeature && <div className="landing-modal-backdrop" role="presentation" onMouseDown={() => setSelectedFeature(null)}><motion.div className="landing-demo-modal feature-modal" role="dialog" aria-modal="true" aria-labelledby="feature-title" initial={{ opacity: 0, scale: .96, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} onMouseDown={event => event.stopPropagation()}><button className="modal-close" onClick={() => setSelectedFeature(null)} aria-label="Fermer"><X/></button><span className="modal-number">MODULE {selectedFeature.number}</span><selectedFeature.icon/><h2 id="feature-title">{selectedFeature.title}</h2><p>{selectedFeature.copy}</p><ul>{selectedFeature.details.map(detail => <li key={detail}><Check/>{detail}</li>)}</ul><button className="landing-primary" onClick={() => { setSelectedFeature(null); openDemo() }}>Tester ce module pendant 72 h <ArrowRight/></button></motion.div></div>}
 
