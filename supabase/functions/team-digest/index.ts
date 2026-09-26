@@ -10,7 +10,7 @@ Deno.serve(async (request) => {
     const body = await request.json().catch(() => ({})) as { kind?: "EVENING" | "WEEKLY" };
     const kind = body.kind === "WEEKLY" ? "WEEKLY" : "EVENING";
     const admin = adminClient(); const now = new Date(); const dateKey = now.toISOString().slice(0, 10);
-    const { data: profiles, error } = await admin.from("profiles").select("id,full_name,phone").eq("active", true).not("phone", "is", null);
+    const { data: profiles, error } = await admin.from("profiles").select("id,full_name,phone,is_beta_tester").eq("active", true).eq("is_beta_tester", false).not("phone", "is", null);
     if (error) return json(request, { error: error.message }, 500);
     let sent = 0, skipped = 0;
     for (const profile of profiles || []) {
