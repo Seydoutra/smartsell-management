@@ -43,6 +43,7 @@ import {
   X,
 } from "lucide-react";
 import { companyProfile } from "./lib/companyProfile";
+import { useOnlineStatus } from "./lib/network";
 import BetaSandboxApp from "./BetaSandboxApp";
 import CommunicationHub from "./CommunicationHub";
 import { contactsFromCsv, contactsFromFile, googleSheetCsvUrl, ImportedContact } from "./lib/contactImport";
@@ -2893,6 +2894,7 @@ function Shell({
   profile: Profile;
   onLogout: () => void;
 }) {
+  const online = useOnlineStatus();
   const [page, setPage] = useState<Page>(pageFromHash),
     [theme, setTheme] = useState<"light" | "dark">(
       () =>
@@ -3016,6 +3018,7 @@ function Shell({
           </div>
         </header>
         <main>
+          {!online&&<div className="offline-banner" role="status"><strong>Mode hors connexion</strong><span>Les écrans déjà chargés restent disponibles. La synchronisation reprend au retour du réseau.</span></div>}
           <AnimatePresence mode="wait">
             <motion.div
               key={currentPage}
