@@ -41,7 +41,9 @@ export async function authenticated(request: Request) {
   const admin = adminClient();
   const { data, error } = await admin.auth.getUser(token);
   if (error || !data.user) throw new Response(JSON.stringify({ error: "Session invalide" }), { status: 401, headers: { ...corsHeaders(request), "content-type": "application/json" } });
-  const { data: profile } = await admin.from("profiles").select("is_beta_tester").eq("id", data.user.id).maybeSingle();
+  const { data: profile } = await admin.from("profiles").select("active,is_beta_tester,access_expires_at").eq("id", data.user.id).maybeSingle();
+  if (!profile?.active) throw new Response(JSON.stringify({ error: "Compte suspendu" }), { status: 403, headers: { ...corsHeaders(request), "content-type": "application/json" } });
+  if (profile.access_expires_at && new Date(profile.access_expires_at).getTime() <= Date.now()) throw new Response(JSON.stringify({ error: "Période d’essai terminée" }), { status: 403, headers: { ...corsHeaders(request), "content-type": "application/json" } });
   if (profile?.is_beta_tester) throw new Response(JSON.stringify({ error: "Action réelle désactivée dans le bac à sable bêta" }), { status: 403, headers: { ...corsHeaders(request), "content-type": "application/json" } });
   return { admin, user: data.user };
 }
