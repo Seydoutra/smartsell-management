@@ -38,6 +38,7 @@ import {
   X,
 } from "lucide-react";
 import { companyProfile } from "./lib/companyProfile";
+import BetaSandboxApp from "./BetaSandboxApp";
 import { contactsFromCsv, contactsFromFile, googleSheetCsvUrl, ImportedContact } from "./lib/contactImport";
 import { can, Permission, Role } from "./lib/permissions";
 import {
@@ -3039,6 +3040,7 @@ export default function ProductionAppV2() {
   if (!profile) return <Login onSuccess={refresh} />;
   if (showWelcome) return <WelcomeSplash profile={profile} onComplete={() => setShowWelcome(false)} />;
   if (profile.must_change_password) return <PasswordChangeGate profile={profile} onComplete={refresh} />;
+  if (profile.is_beta_tester) return <BetaSandboxApp profile={profile} onLogout={async () => { await signOut(); setProfile(null); }} />;
   return (
     <Shell
       profile={profile}

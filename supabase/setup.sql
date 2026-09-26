@@ -9,7 +9,7 @@ create table if not exists public.departments (id uuid primary key default gen_r
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text not null default '', role public.app_role not null default 'COLLABORATEUR', roles public.app_role[] not null default array['COLLABORATEUR']::public.app_role[], department_id uuid references public.departments(id),
-  avatar_url text, phone text, active boolean not null default true, must_change_password boolean not null default true,
+  avatar_url text, phone text, active boolean not null default true, must_change_password boolean not null default true, is_beta_tester boolean not null default false,
   notification_preferences jsonb not null default '{"IN_APP":true,"EMAIL":true,"SMS":false}'::jsonb, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
 );
 create table if not exists public.app_settings (id uuid primary key default gen_random_uuid(), key text not null unique, value jsonb not null, updated_by uuid references public.profiles(id), updated_at timestamptz not null default now());

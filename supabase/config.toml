@@ -12,3 +12,6 @@ verify_jwt = false
 
 [functions.campaign-dispatch]
 verify_jwt = false
+
+[functions.create-beta-tester]
+verify_jwt = false

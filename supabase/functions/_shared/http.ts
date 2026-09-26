@@ -41,6 +41,8 @@ export async function authenticated(request: Request) {
   const admin = adminClient();
   const { data, error } = await admin.auth.getUser(token);
   if (error || !data.user) throw new Response(JSON.stringify({ error: "Session invalide" }), { status: 401, headers: { ...corsHeaders(request), "content-type": "application/json" } });
+  const { data: profile } = await admin.from("profiles").select("is_beta_tester").eq("id", data.user.id).maybeSingle();
+  if (profile?.is_beta_tester) throw new Response(JSON.stringify({ error: "Action réelle désactivée dans le bac à sable bêta" }), { status: 403, headers: { ...corsHeaders(request), "content-type": "application/json" } });
   return { admin, user: data.user };
 }
 
