@@ -30,6 +30,7 @@ import {
   Send,
   Settings2,
   ShieldCheck,
+  Sparkles,
   Sun,
   Trash2,
   Upload,
@@ -81,6 +82,8 @@ import {
   deleteProject,
   deleteService,
   deleteTask,
+  executeNextBestAction,
+  generateAgencyIntelligence,
   getAccessControl,
   getCalendarConnection,
   getClientWorkspace,
@@ -122,10 +125,12 @@ import {
   updateProject,
   updateService,
   updateTask,
+  updateNextBestAction,
 } from "./services/repository";
 import type {
   AccessControl,
   ActivityLog,
+  AgencyBriefing,
   CalendarConnection,
   CallList,
   CallListContact,
@@ -139,6 +144,7 @@ import type {
   Expense,
   Invoice,
   InvoiceItem,
+  NextBestAction,
   Payment,
   Profile,
   Project,
@@ -469,7 +475,7 @@ function Danger({
   );
 }
 
-function Dashboard({ profile }: { profile: Profile }) {
+function Dashboard({ profile, onNavigate }: { profile: Profile; onNavigate:(page:Page,clientId?:string|null)=>void }) {
   const [c, setC] = useState<Client[]>([]),
     [p, setP] = useState<Project[]>([]),
     [i, setI] = useState<Invoice[]>([]),
@@ -479,7 +485,12 @@ function Dashboard({ profile }: { profile: Profile }) {
     [suppliers, setSuppliers] = useState<Supplier[]>([]),
     [team, setTeam] = useState<Profile[]>([]),
     [sessions, setSessions] = useState<UserSession[]>([]),
-    [loading, setLoading] = useState(true);
+    [loading, setLoading] = useState(true),
+    [briefing,setBriefing]=useState<AgencyBriefing|null>(null),
+    [nextActions,setNextActions]=useState<NextBestAction[]>([]),
+    [intelligenceBusy,setIntelligenceBusy]=useState(false),
+    [intelligenceError,setIntelligenceError]=useState('');
+  const loadIntelligence=async()=>{setIntelligenceBusy(true);setIntelligenceError('');try{const result=await generateAgencyIntelligence();setBriefing(result.briefing);setNextActions(result.actions)}catch(error){setIntelligenceError(error instanceof Error?error.message:'Briefing indisponible')}finally{setIntelligenceBusy(false)}};
   useEffect(() => {
     Promise.all([
       listClients(),
@@ -502,6 +513,7 @@ function Dashboard({ profile }: { profile: Profile }) {
       setTeam(j);
       setSessions(k);
     }).finally(()=>setLoading(false));
+    const roles=profile.roles?.length?profile.roles:[profile.role];if(roles.some(role=>['SUPER_ADMIN','ADMIN','MANAGER'].includes(role)))void loadIntelligence();
   }, []);
   const billed = i.reduce((sum, row) => sum + Number(row.total || 0), 0);
   const collected = payments.reduce((sum, row) => sum + Number(row.amount || 0), 0);
@@ -538,6 +550,13 @@ function Dashboard({ profile }: { profile: Profile }) {
         <div className="command-copy"><span className="eyebrow"><i/> CENTRE DE COMMANDE EN TEMPS RÉEL</span><h1>Bonjour, {profile.full_name.split(" ")[0]}.</h1><p>Une vision instantanée de la finance, des opérations, des clients et de l’équipe.</p><div className="live-chip"><i/> Données synchronisées avec Supabase</div></div>
         <div className="command-orbit"><div className="orbit-ring ring-a"/><div className="orbit-ring ring-b"/><div className="orbit-core"><strong>{money(collected-spent)}</strong><span>trésorerie nette</span></div></div>
       </motion.section>
+      <section className="agency-intelligence">
+        <motion.article className="panel agency-briefing" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}}>
+          <div className="agency-ai-head"><div className="ai-orb compact"><Sparkles/></div><div><span className="eyebrow"><i/> DIRECTEUR IA</span><h2>{briefing?.greeting||'Votre briefing stratégique'}</h2></div><button className="ghost-action" disabled={intelligenceBusy} onClick={()=>void loadIntelligence()}>{intelligenceBusy?'Analyse…':'Actualiser'}</button></div>
+          {intelligenceError?<div className="error-banner">{intelligenceError}</div>:<><p className="briefing-summary">{briefing?.summary||'Analyse des opérations en cours…'}</p><div className="briefing-signals"><div><strong>Opportunités</strong>{(briefing?.opportunities||[]).map((item,index)=><span key={index}>↗ {item}</span>)}</div><div><strong>Points de vigilance</strong>{(briefing?.watchouts||[]).map((item,index)=><span key={index}>• {item}</span>)}</div></div></>}
+        </motion.article>
+        <motion.article className="panel next-actions" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} transition={{delay:.08}}><div className="command-panel-head"><div><span className="eyebrow"><i/> NEXT BEST ACTION</span><h2>Les décisions recommandées</h2></div><b>{nextActions.length}</b></div><div className="next-action-list">{nextActions.length?nextActions.map(action=><div key={action.id} className={`next-action priority-${action.priority.toLowerCase()}`}><span className="action-priority">{action.priority}</span><div><strong>{action.title}</strong><small>{action.reason}</small></div><div className="next-action-buttons"><button className="primary-btn compact" onClick={async()=>{await executeNextBestAction(action);setNextActions(rows=>rows.filter(row=>row.id!==action.id));onNavigate(action.target_page as Page,action.client_id)}}>{action.action_type==='COMPLETE_TASK'?'Confirmer terminée':'Ouvrir'}</button><button className="icon-btn" title="Ignorer" onClick={async()=>{await updateNextBestAction(action.id,'IGNOREE');setNextActions(rows=>rows.filter(row=>row.id!==action.id))}}><X/></button></div></div>):<p className="muted">Aucune action urgente. Actualisez le briefing lorsque les données changent.</p>}</div></motion.article>
+      </section>
       <section className="command-metrics">{metrics.map((metric,index)=><motion.article className={`command-metric tone-${metric.tone}`} key={metric.label} initial={{opacity:0,y:18}} animate={{opacity:1,y:0}} transition={{delay:.04*index,duration:.35}} whileHover={{y:-4}}><div className="metric-icon"><metric.icon/></div><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.copy}</small><div className="metric-scan"/></motion.article>)}</section>
       <section className="command-panels">
         <motion.article className="panel finance-radar" initial={{opacity:0,x:-16}} animate={{opacity:1,x:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> FINANCE</span><h2>Flux des 6 derniers mois</h2></div><span className="pulse-label">● LIVE</span></div><div className="future-chart">{monthSeries.map(row=><div className="future-month" key={row.label}><div className="future-bars"><i style={{height:`${Math.max(4,row.revenue/chartMax*100)}%`}}/><b style={{height:`${Math.max(4,row.cost/chartMax*100)}%`}}/></div><span>{row.label}</span></div>)}</div><div className="chart-key"><span><i/>Facturation</span><span><i/>Dépenses</span></div></motion.article>
@@ -2996,7 +3015,7 @@ function Shell({
               exit={{ opacity: 0 }}
             >
               {page === "Dashboard" ? (
-                <Dashboard profile={profile} />
+                <Dashboard profile={profile} onNavigate={navigate} />
               ) : page === "Clients" ? (
                 <ClientsPage rights={rightsFor('clients')} onNavigate={(next,clientId)=>navigate(next,clientId)} />
               ) : page === "Projets" ? (
@@ -3022,7 +3041,7 @@ function Shell({
               ) : page === "Communication" ? (
                 <CommunicationHub onBack={()=>navigate("Dashboard")} />
               ) : page === "Équipe" ? (
-                <TeamAccessPage admin={admin} />
+                <TeamAccessPage admin={admin} superAdmin={roles.includes("SUPER_ADMIN")} />
               ) : page === "RH" ? (
                 <HRPage />
               ) : page === "Rapports" ? (
