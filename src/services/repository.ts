@@ -6,7 +6,19 @@ const fail=(error:{message:string}|null)=>{if(error)throw new Error(error.messag
 const queryCache=new Map<string,{until:number,value:unknown}>()
 async function cached<T>(key:string,loader:()=>Promise<T>,ttl=45_000):Promise<T>{const hit=queryCache.get(key);if(hit&&hit.until>Date.now())return hit.value as T;const pending=loader();queryCache.set(key,{until:Date.now()+ttl,value:pending});try{const value=await pending;queryCache.set(key,{until:Date.now()+ttl,value});return value}catch(error){queryCache.delete(key);throw error}}
 const invalidate=(...keys:string[])=>keys.forEach(key=>queryCache.delete(key))
-async function invokeEdge<T>(name:string,body?:Record<string,unknown>):Promise<T>{const client=db();const {data,error}=await client.functions.invoke(name,{body});if(error){let message=error.message;const context=(error as {context?:Response}).context;if(context)try{const detail=await context.clone().json() as {error?:string};message=detail.error||message}catch{/* réponse non JSON */}throw new Error(message)}return data as T}
+async function invokeEdge<T>(name:string,body?:Record<string,unknown>,retryNetwork=false):Promise<T>{
+  const client=db();
+  for(let attempt=0;attempt<(retryNetwork?2:1);attempt+=1){
+    const {data,error}=await client.functions.invoke(name,{body});
+    if(!error)return data as T;
+    let message=error.message;
+    const context=(error as {context?:Response}).context;
+    if(context)try{const detail=await context.clone().json() as {error?:string};message=detail.error||message}catch{/* réponse non JSON */}
+    const transient=!context&&/failed to send|fetch|network|connexion/i.test(message);
+    if(!transient||attempt===1)throw new Error(transient?'Connexion instable : impossible de joindre le briefing. Réessayez dans quelques secondes.':message);
+  }
+  throw new Error('Briefing indisponible');
+}
 
 export async function signIn(email:string,password:string){const client=db();const {data,error}=await client.auth.signInWithPassword({email,password});fail(error);if(!data.user)return data;const {data:profile, error:profileError}=await client.from('profiles').select('active,access_expires_at').eq('id',data.user.id).single();if(profileError){await client.auth.signOut();throw new Error('Profil utilisateur introuvable.')}if(!profile.active){await client.auth.signOut();throw new Error('Ce compte est suspendu. Contactez le Super Admin.')}if(profile.access_expires_at&&new Date(profile.access_expires_at).getTime()<=Date.now()){await client.auth.signOut();throw new Error('La période d’essai de ce compte est terminée. Contactez SmartSell pour poursuivre.')}return data}
 export async function signOut(){const {error}=await db().auth.signOut();fail(error)}
@@ -92,7 +104,7 @@ export async function listQuotes():Promise<Quote[]>{const {data,error}=await db(
 export async function createQuote(input:{client_id:string;project_id?:string;valid_until:string;currency:string;discount:number;items:InvoiceItem[]}):Promise<Quote>{const {data,error}=await db().rpc('create_quote_with_items',{p_client_id:input.client_id,p_project_id:input.project_id||null,p_valid_until:input.valid_until,p_currency:input.currency,p_discount:input.discount,p_items:input.items});fail(error);if(!data)throw new Error('Création du devis impossible');const {data:quote,error:readError}=await db().from('quotes').select('*,clients(name,email,address),projects(name),quote_items(*)').eq('id',data).single();fail(readError);return quote as Quote}
 export async function deleteQuote(id:string){const {error}=await db().from('quotes').delete().eq('id',id);fail(error)}
 export async function askAiAssistant(prompt:string,context:string){const body=await invokeEdge<{answer:string}>('ai-assistant',{prompt,context});return body.answer}
-export async function generateAgencyIntelligence(){return invokeEdge<{briefing:AgencyBriefing;actions:NextBestAction[]}>('agency-intelligence',{})}
+export async function generateAgencyIntelligence(){return invokeEdge<{briefing:AgencyBriefing;actions:NextBestAction[]}>('agency-intelligence',{},true)}
 export async function generateDigitalTwin(input?:{name?:string;client_delay_days?:number;new_contract_value?:number;expense_change_percent?:number}){return invokeEdge<DigitalTwinSnapshot>('growth-intelligence',{mode:'digital_twin',...input})}
 export async function generateCommercialRadar(){return invokeEdge<CommercialRadar>('growth-intelligence',{mode:'commercial_radar'})}
 export async function generateCampaignPlan(input:{name:string;objective:string;audience:string;offer?:string;channels:string[];tone:string;budget:number;currency?:string}){return invokeEdge<{draft:CampaignAiDraft}>('growth-intelligence',{mode:'campaign_plan',...input})}

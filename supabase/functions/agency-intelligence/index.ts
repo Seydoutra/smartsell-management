@@ -47,16 +47,20 @@ Deno.serve(async (request) => {
     let narrative = deterministic;
     const apiKey = Deno.env.get("OPENAI_API_KEY");
     if (apiKey) {
-      const aiResponse = await fetch("https://api.openai.com/v1/responses", { method:"POST", headers:{"content-type":"application/json",authorization:`Bearer ${apiKey}`}, body:JSON.stringify({
-        model:Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna", reasoning:{effort:"low"}, max_output_tokens:700,
-        instructions:"Tu es le directeur opérationnel IA de SmartSell, une agence à Conakry. Produis un briefing factuel, bref, professionnel et en français. Ne crée aucun chiffre absent. Ne prétends exécuter aucune action.",
-        input:`Nom: ${profile.full_name}\nDate: ${today}\nIndicateurs JSON: ${JSON.stringify(metrics)}\nFactures en retard: ${overdueInvoices.slice(0,5).map(row=>`${row.number}:${row.total}`).join(", ")||"aucune"}\nTâches en retard: ${overdueTasks.slice(0,5).map(row=>row.title).join(", ")||"aucune"}`,
-        text:{format:{type:"json_schema",name:"agency_briefing",strict:true,schema:{type:"object",additionalProperties:false,properties:{greeting:{type:"string"},summary:{type:"string"},opportunities:{type:"array",items:{type:"string"}},watchouts:{type:"array",items:{type:"string"}}},required:["greeting","summary","opportunities","watchouts"]}}}
-      }) });
-      if (aiResponse.ok) {
-        const body = await aiResponse.json() as { output_text?:string; output?:Array<{content?:Array<{type?:string;text?:string}>}> };
-        const text = body.output_text || body.output?.flatMap(item=>item.content||[]).find(item=>item.type==="output_text")?.text;
-        if (text) try { narrative = JSON.parse(text); } catch { /* le briefing déterministe reste disponible */ }
+      try {
+        const aiResponse = await fetch("https://api.openai.com/v1/responses", { method:"POST", headers:{"content-type":"application/json",authorization:`Bearer ${apiKey}`}, body:JSON.stringify({
+          model:Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna", reasoning:{effort:"low"}, max_output_tokens:700,
+          instructions:"Tu es le directeur opérationnel IA de SmartSell, une agence à Conakry. Produis un briefing factuel, bref, professionnel et en français. Ne crée aucun chiffre absent. Ne prétends exécuter aucune action.",
+          input:`Nom: ${profile.full_name}\nDate: ${today}\nIndicateurs JSON: ${JSON.stringify(metrics)}\nFactures en retard: ${overdueInvoices.slice(0,5).map(row=>`${row.number}:${row.total}`).join(", ")||"aucune"}\nTâches en retard: ${overdueTasks.slice(0,5).map(row=>row.title).join(", ")||"aucune"}`,
+          text:{format:{type:"json_schema",name:"agency_briefing",strict:true,schema:{type:"object",additionalProperties:false,properties:{greeting:{type:"string"},summary:{type:"string"},opportunities:{type:"array",items:{type:"string"}},watchouts:{type:"array",items:{type:"string"}}},required:["greeting","summary","opportunities","watchouts"]}}}
+        }) });
+        if (aiResponse.ok) {
+          const body = await aiResponse.json() as { output_text?:string; output?:Array<{content?:Array<{type?:string;text?:string}>}> };
+          const text = body.output_text || body.output?.flatMap(item=>item.content||[]).find(item=>item.type==="output_text")?.text;
+          if (text) try { narrative = JSON.parse(text); } catch { /* le briefing déterministe reste disponible */ }
+        }
+      } catch (error) {
+        console.warn("OpenAI indisponible, briefing déterministe utilisé", error);
       }
     }
 
