@@ -18,4 +18,5 @@ export type EmployeeRecord = { profile_id:string; job_title:string|null; contrac
 export type LeaveRequest = { id:string; profile_id:string; starts_on:string; ends_on:string; kind?:string|null; reason:string|null; status:string; created_at:string; profiles?:{full_name:string}|null }
 export type Quote = { id:string; number:string; client_id:string; project_id:string|null; issue_date:string; valid_until:string|null; status:string; currency:string; discount:number; tax:number; total:number; clients?:{name:string;email:string|null;address:string|null}|null; projects?:{name:string}|null; quote_items?:InvoiceItem[] }
 export type PortalAccess = { profile_id:string; client_id:string; can_view_finance:boolean; can_comment:boolean; active:boolean; profiles?:{full_name:string}|null; clients?:{name:string}|null }
+export type ClientPortalWorkspace = { access:PortalAccess; client:Client; projects:Project[]; editorial:EditorialItem[]; invoices:Invoice[] }
 export type CalendarConnection = { profile_id:string; provider:string; calendar_email:string|null; connected:boolean; sync_enabled:boolean; calendar_id?:string|null; updated_at:string }

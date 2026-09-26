@@ -1,4 +1,4 @@
-export type Role = 'SUPER_ADMIN'|'ADMIN'|'MANAGER'|'CHEF_DE_PROJET'|'COMMERCIAL'|'COMMUNITY_MANAGER'|'GRAPHISTE'|'VIDEASTE'|'PHOTOGRAPHE'|'DEVELOPPEUR'|'COMPTABLE'|'COLLABORATEUR'
+export type Role = 'SUPER_ADMIN'|'ADMIN'|'MANAGER'|'CHEF_DE_PROJET'|'COMMERCIAL'|'COMMUNITY_MANAGER'|'GRAPHISTE'|'VIDEASTE'|'PHOTOGRAPHE'|'DEVELOPPEUR'|'COMPTABLE'|'COLLABORATEUR'|'CLIENT'
 export type Permission = 'users.manage'|'settings.manage'|'finance.read'|'finance.write'|'crm.write'|'projects.write'|'communication.send'|'calls.initiate'|'exports.run'|'audit.read'
 
 const rules: Record<Role, Permission[]> = {
@@ -7,10 +7,10 @@ const rules: Record<Role, Permission[]> = {
   MANAGER:['finance.read','crm.write','projects.write','communication.send','calls.initiate','exports.run'],
   CHEF_DE_PROJET:['projects.write','exports.run'], COMMERCIAL:['crm.write','communication.send','calls.initiate'],
   COMMUNITY_MANAGER:['projects.write','communication.send'], GRAPHISTE:['projects.write'], VIDEASTE:['projects.write'],
-  PHOTOGRAPHE:['projects.write'], DEVELOPPEUR:['projects.write'], COMPTABLE:['finance.read','finance.write'], COLLABORATEUR:[],
+  PHOTOGRAPHE:['projects.write'], DEVELOPPEUR:['projects.write'], COMPTABLE:['finance.read','finance.write'], COLLABORATEUR:[], CLIENT:[],
 }
 
-export const rolePriority: Role[] = ['SUPER_ADMIN','ADMIN','MANAGER','CHEF_DE_PROJET','COMMERCIAL','COMMUNITY_MANAGER','COMPTABLE','DEVELOPPEUR','GRAPHISTE','VIDEASTE','PHOTOGRAPHE','COLLABORATEUR']
+export const rolePriority: Role[] = ['SUPER_ADMIN','ADMIN','MANAGER','CHEF_DE_PROJET','COMMERCIAL','COMMUNITY_MANAGER','COMPTABLE','DEVELOPPEUR','GRAPHISTE','VIDEASTE','PHOTOGRAPHE','COLLABORATEUR','CLIENT']
 
 export const primaryRole = (roles: Role[]): Role => rolePriority.find(role => roles.includes(role)) || 'COLLABORATEUR'
 
@@ -27,7 +27,7 @@ export const defaultLimits: Record<Role,UserLimits> = {
   COMMUNITY_MANAGER:{smsPerDay:50,emailsPerDay:100,callsPerDay:5,exportRows:1000,approvalAmount:0},
   GRAPHISTE:{smsPerDay:0,emailsPerDay:20,callsPerDay:0,exportRows:250,approvalAmount:0}, VIDEASTE:{smsPerDay:0,emailsPerDay:20,callsPerDay:0,exportRows:250,approvalAmount:0},
   PHOTOGRAPHE:{smsPerDay:0,emailsPerDay:20,callsPerDay:0,exportRows:250,approvalAmount:0}, DEVELOPPEUR:{smsPerDay:0,emailsPerDay:20,callsPerDay:0,exportRows:1000,approvalAmount:0},
-  COMPTABLE:{smsPerDay:20,emailsPerDay:100,callsPerDay:5,exportRows:5000,approvalAmount:25_000_000}, COLLABORATEUR:{smsPerDay:0,emailsPerDay:10,callsPerDay:0,exportRows:100,approvalAmount:0},
+  COMPTABLE:{smsPerDay:20,emailsPerDay:100,callsPerDay:5,exportRows:5000,approvalAmount:25_000_000}, COLLABORATEUR:{smsPerDay:0,emailsPerDay:10,callsPerDay:0,exportRows:100,approvalAmount:0}, CLIENT:{smsPerDay:0,emailsPerDay:0,callsPerDay:0,exportRows:0,approvalAmount:0},
 }
 
 export const limitsForRoles = (roles: Role[]): UserLimits => roles.reduce((limits, role) => ({

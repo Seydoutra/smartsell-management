@@ -1,3 +1,5 @@
+import { sendNimbaSms } from "./nimba.ts";
+
 type WelcomeInput = {
   name: string;
   email: string;
@@ -7,9 +9,12 @@ type WelcomeInput = {
 };
 
 export type DeliveryResult = {
-  channel: "EMAIL" | "WHATSAPP";
+  channel: "EMAIL" | "SMS";
   status: "SENT" | "SKIPPED" | "FAILED";
   detail?: string;
+  providerMessageId?: string;
+  messageCost?: number;
+  currency?: string;
 };
 
 const cleanPhone = (value?: string | null) => {
@@ -36,24 +41,12 @@ export async function sendWelcomeEmail(input: WelcomeInput): Promise<DeliveryRes
   return { channel: "EMAIL", status: "SENT" };
 }
 
-export async function sendWelcomeWhatsApp(input: WelcomeInput): Promise<DeliveryResult> {
-  const token = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
-  const phoneNumberId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
-  const template = Deno.env.get("WHATSAPP_WELCOME_TEMPLATE") || "smartsell_welcome";
-  const language = Deno.env.get("WHATSAPP_TEMPLATE_LANGUAGE") || "fr";
+export async function sendWelcomeSms(input: WelcomeInput): Promise<DeliveryResult> {
   const phone = cleanPhone(input.phone);
-  if (!phone) return { channel: "WHATSAPP", status: "SKIPPED", detail: "Numéro WhatsApp absent" };
-  if (!token || !phoneNumberId) return { channel: "WHATSAPP", status: "SKIPPED", detail: "WhatsApp Cloud API non configurée" };
-  const response = await fetch(`https://graph.facebook.com/v23.0/${phoneNumberId}/messages`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      messaging_product: "whatsapp", to: phone, type: "template",
-      template: { name: template, language: { code: language }, components: [{ type: "body", parameters: [input.name, input.email, input.temporaryPassword, input.loginUrl].map((text) => ({ type: "text", text })) }] },
-    }),
-  });
-  if (!response.ok) return { channel: "WHATSAPP", status: "FAILED", detail: `Erreur fournisseur (${response.status})` };
-  return { channel: "WHATSAPP", status: "SENT" };
+  if (!phone) return { channel: "SMS", status: "SKIPPED", detail: "Numéro SMS absent" };
+  const message = `Bonjour ${input.name}, bienvenue sur SmartSell. Identifiant: ${input.email}. Mot de passe temporaire: ${input.temporaryPassword}. Connexion: ${input.loginUrl} Modifiez le mot de passe à la première connexion.`;
+  const provider = await sendNimbaSms([phone], message);
+  return { channel: "SMS", status: "SENT", providerMessageId: provider.uid || provider.id, messageCost: provider.message_cost, currency: provider.currency };
 }
 
 function escapeHtml(value: string) {

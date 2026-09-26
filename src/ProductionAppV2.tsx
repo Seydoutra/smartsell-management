@@ -50,6 +50,7 @@ import {
   AiAssistantPage,
   BillingV3,
   ClientPortalAdmin,
+  ClientPortalView,
   EditorialV3,
   HRPage,
   SuppliersPage,
@@ -144,6 +145,7 @@ type Page =
   | "Rapports"
   | "Portail client"
   | "Assistant IA";
+type CrudRights = { view: boolean; create: boolean; update: boolean; delete: boolean };
 const nav: [Page, typeof LayoutDashboard, Permission?][] = [
   ["Dashboard", LayoutDashboard],
   ["Clients", Users, "crm.write"],
@@ -191,6 +193,7 @@ function Login({ onSuccess }: { onSuccess: () => void }) {
     setError("");
     try {
       await signIn(email, password);
+      sessionStorage.setItem("smartsell-show-welcome", "1");
       onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Connexion impossible");
@@ -269,6 +272,38 @@ function Login({ onSuccess }: { onSuccess: () => void }) {
         </form>
       </section>
     </main>
+  );
+}
+
+function WelcomeSplash({ profile, onComplete }: { profile: Profile; onComplete: () => void }) {
+  useEffect(() => {
+    const timer = window.setTimeout(onComplete, 3600);
+    return () => window.clearTimeout(timer);
+  }, [onComplete]);
+  const hour = Number(new Intl.DateTimeFormat("fr-FR", {
+    hour: "2-digit",
+    hour12: false,
+    timeZone: "Africa/Conakry",
+  }).format(new Date()).replace(/\D/g, ""));
+  const greeting = hour < 12 ? "Bonjour" : hour < 18 ? "Salut" : "Bonsoir";
+  const displayName = profile.full_name.trim().split(/\s+/)[0] || "à vous";
+  return (
+    <motion.main
+      className="welcome-splash"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.55 }}
+    >
+      <motion.h1
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3, duration: 0.75 }}
+      >
+        {greeting}, {displayName}.<br />
+        <span>Bon retour.</span>
+      </motion.h1>
+    </motion.main>
   );
 }
 function Modal({
@@ -476,13 +511,13 @@ function ClientDetail({
   onClose,
   onChanged,
   onNavigate,
-  admin,
+  rights,
 }: {
   id: string;
   onClose: () => void;
   onChanged: () => void;
   onNavigate: (page: "Projets" | "Tâches" | "Facturation", clientId: string) => void;
-  admin: boolean;
+  rights: CrudRights;
 }) {
   const [data, setData] = useState<Awaited<
       ReturnType<typeof getClientWorkspace>
@@ -561,10 +596,10 @@ function ClientDetail({
               </p>
               <span className="status">{label(data.client.status)}</span>
             </div>
-            <button className="ghost-action" onClick={() => setEdit(true)}>
+            {rights.update && <button className="ghost-action" onClick={() => setEdit(true)}>
               <Pencil />
               Modifier
-            </button>
+            </button>}
           </div>
           <div className="detail-kpis">
             <button type="button" className="detail-kpi-link" onClick={()=>{onClose();onNavigate("Projets",id)}} aria-label={`Voir les ${data.projects.length} projets de ${data.client.name}`}><Stat name="Projets" value={data.projects.length} copy="Ouvrir les projets" /></button>
@@ -595,7 +630,7 @@ function ClientDetail({
               money(x.total, x.currency),
             ])}
           />
-          {admin && (
+          {rights.delete && (
             <div className="danger-zone">
               <Danger
                 onClick={async () => {
@@ -642,7 +677,7 @@ function DetailList({ title, rows }: { title: string; rows: string[][] }) {
   );
 }
 
-function ClientsPage({ admin, onNavigate }: { admin: boolean; onNavigate: (page: "Projets" | "Tâches" | "Facturation", clientId: string) => void }) {
+function ClientsPage({ rights, onNavigate }: { rights: CrudRights; onNavigate: (page: "Projets" | "Tâches" | "Facturation", clientId: string) => void }) {
   const [rows, setRows] = useState<Client[]>([]),
     [open, setOpen] = useState(false),
     [selected, setSelected] = useState<string | null>(null),
@@ -659,13 +694,13 @@ function ClientsPage({ admin, onNavigate }: { admin: boolean; onNavigate: (page:
       <Header
         title="Clients"
         copy="Fiches complètes, projets, tâches, factures et paiements reliés."
-        onAdd={() => setOpen(true)}
+        onAdd={rights.create ? () => setOpen(true) : undefined}
         add="Nouveau client"
       />
       <ErrorBar value={error} />
       <div className="records panel">
         {!rows.length ? (
-          <Empty name="client" onAdd={() => setOpen(true)} />
+          <Empty name="client" onAdd={rights.create ? () => setOpen(true) : undefined} />
         ) : (
           rows.map((r) => (
             <article
@@ -746,7 +781,7 @@ function ClientsPage({ admin, onNavigate }: { admin: boolean; onNavigate: (page:
             onClose={() => setSelected(null)}
             onChanged={load}
             onNavigate={onNavigate}
-            admin={admin}
+            rights={rights}
           />
         )}
       </AnimatePresence>
@@ -758,12 +793,12 @@ function ProjectDetail({
   id,
   onClose,
   onChanged,
-  admin,
+  rights,
 }: {
   id: string;
   onClose: () => void;
   onChanged: () => void;
-  admin: boolean;
+  rights: CrudRights;
 }) {
   const [data, setData] = useState<Awaited<
       ReturnType<typeof getProjectWorkspace>
@@ -800,6 +835,7 @@ function ProjectDetail({
         className="entity-form inline-editor"
         onSubmit={async (e) => {
           e.preventDefault();
+          if (!rights.update) return;
           const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<
             string,
             string
@@ -815,7 +851,7 @@ function ProjectDetail({
           onChanged();
         }}
       >
-        <div className="form-grid">
+        <fieldset disabled={!rights.update} className="permission-fieldset"><div className="form-grid">
           <Field label="Statut">
             <select name="status" defaultValue={data.project.status}>
               <option>PLANIFIE</option>
@@ -855,7 +891,7 @@ function ProjectDetail({
             />
           </Field>
         </div>
-        <button className="primary-btn compact">Mettre à jour le projet</button>
+        {rights.update && <button className="primary-btn compact">Mettre à jour le projet</button>}</fieldset>
       </form>
       <DetailList
         title="Tâches"
@@ -873,7 +909,7 @@ function ProjectDetail({
           money(x.total, x.currency),
         ])}
       />
-      {admin && (
+      {rights.delete && (
         <div className="danger-zone">
           <Danger
             onClick={async () => {
@@ -893,7 +929,7 @@ function ProjectDetail({
     </Modal>
   );
 }
-function ProjectsPage({ admin, clientFilter, onClearFilter }: { admin: boolean; clientFilter?: string | null; onClearFilter?: () => void }) {
+function ProjectsPage({ rights, clientFilter, onClearFilter }: { rights: CrudRights; clientFilter?: string | null; onClearFilter?: () => void }) {
   const [rows, setRows] = useState<Project[]>([]),
     [clients, setClients] = useState<Client[]>([]),
     [profiles, setProfiles] = useState<Profile[]>([]),
@@ -914,14 +950,14 @@ function ProjectsPage({ admin, clientFilter, onClearFilter }: { admin: boolean; 
       <Header
         title="Projets"
         copy="Suivi détaillé, équipe, progression, tâches et facturation."
-        onAdd={openCreator}
+        onAdd={rights.create ? openCreator : undefined}
         add="Nouveau projet"
       />
       {clientFilter && <div className="filter-banner"><span>Affichage des projets du client sélectionné.</span><button type="button" onClick={onClearFilter}>Afficher tous les projets</button></div>}
       <ErrorBar value={error} />
       <div className="records panel">
         {!displayedRows.length ? (
-          <Empty name="projet" onAdd={openCreator} />
+          <Empty name="projet" onAdd={rights.create ? openCreator : undefined} />
         ) : (
           displayedRows.map((r) => (
             <article
@@ -1018,7 +1054,7 @@ function ProjectsPage({ admin, clientFilter, onClearFilter }: { admin: boolean; 
             id={selected}
             onClose={() => setSelected(null)}
             onChanged={load}
-            admin={admin}
+            rights={rights}
           />
         )}
       </AnimatePresence>
@@ -1027,12 +1063,12 @@ function ProjectsPage({ admin, clientFilter, onClearFilter }: { admin: boolean; 
 }
 
 function TasksPage({
-  admin,
+  rights,
   planning = false,
   clientFilter,
   onClearFilter,
 }: {
-  admin: boolean;
+  rights: CrudRights;
   planning?: boolean;
   clientFilter?: string | null;
   onClearFilter?: () => void;
@@ -1077,7 +1113,7 @@ function TasksPage({
             ? "Échéances, rappels personnalisés et ajout dans Google Agenda."
             : "Affectation, statut, priorité et alertes multicanales."
         }
-        onAdd={openCreator}
+        onAdd={rights.create ? openCreator : undefined}
         add="Nouvelle tâche"
       />
       {clientFilter && <div className="filter-banner"><span>Affichage des tâches du client sélectionné.</span><button type="button" onClick={onClearFilter}>Afficher toutes les tâches</button></div>}
@@ -1121,7 +1157,7 @@ function TasksPage({
       <ErrorBar value={error} />
       <div className="records panel">
         {!displayedRows.length ? (
-          <Empty name="tâche" onAdd={openCreator} />
+          <Empty name="tâche" onAdd={rights.create ? openCreator : undefined} />
         ) : (
           displayedRows.map((r) => (
             <article
@@ -1286,6 +1322,7 @@ function TasksPage({
               className="entity-form"
               onSubmit={async (e) => {
                 e.preventDefault();
+                if (!rights.update) return;
                 const f = Object.fromEntries(
                   new FormData(e.currentTarget),
                 ) as Record<string, string>;
@@ -1301,7 +1338,7 @@ function TasksPage({
                 load();
               }}
             >
-              <div className="form-grid">
+              <fieldset disabled={!rights.update} className="permission-fieldset"><div className="form-grid">
                 <Field label="Titre">
                   <input name="title" defaultValue={selected.title} />
                 </Field>
@@ -1347,7 +1384,7 @@ function TasksPage({
                     defaultValue={selected.description || ""}
                   />
                 </Field>
-              </div>
+              </div></fieldset>
               <div className="form-actions">
                 <a
                   className="ghost-action"
@@ -1357,8 +1394,8 @@ function TasksPage({
                   <CalendarDays />
                   Google Agenda
                 </a>
-                <button className="primary-btn compact">Enregistrer</button>
-                {admin && (
+                {rights.update && <button className="primary-btn compact">Enregistrer</button>}
+                {rights.delete && (
                   <Danger
                     onClick={async () => {
                       if (confirm("Supprimer cette tâche ?")) {
@@ -2916,10 +2953,19 @@ function Shell({
     alert('Dans Chrome ou Edge, ouvrez le menu du navigateur puis choisissez « Installer SmartSell Apps ». Sur iPhone/iPad : Partager → Sur l’écran d’accueil.');
   };
   const roles = (profile.roles?.length ? profile.roles : [profile.role]) as Role[],
-    role = profile.role as Role,
     admin = roles.some((item) => ["SUPER_ADMIN", "ADMIN"].includes(item));
+  if (roles.includes("CLIENT")) return <ClientPortalView onLogout={onLogout} />;
+  const actionAllowed = (key: string) => roles.includes("SUPER_ADMIN") || !access?.denied_permissions?.includes(key);
+  const rightsFor = (scope: string): CrudRights => ({
+    view: actionAllowed(`${scope}.view`),
+    create: actionAllowed(`${scope}.create`),
+    update: actionAllowed(`${scope}.update`),
+    delete: actionAllowed(`${scope}.delete`),
+  });
+  const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'suppliers.view',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Portail client':'portal.view'};
   const visible = (n: [Page, typeof LayoutDashboard, Permission?]) =>
     (!n[2] || can(roles, n[2])) &&
+    (!viewKeys[n[0]] || actionAllowed(viewKeys[n[0]]!)) &&
     (!access?.allowed_modules?.length ||
       access.allowed_modules.includes(n[0]) ||
       roles.includes("SUPER_ADMIN"));
@@ -2995,13 +3041,13 @@ function Shell({
               {page === "Dashboard" ? (
                 <Dashboard profile={profile} />
               ) : page === "Clients" ? (
-                <ClientsPage admin={admin} onNavigate={(next,clientId)=>navigate(next,clientId)} />
+                <ClientsPage rights={rightsFor('clients')} onNavigate={(next,clientId)=>navigate(next,clientId)} />
               ) : page === "Projets" ? (
-                <ProjectsPage admin={admin} clientFilter={clientFilter} onClearFilter={()=>navigate("Projets")} />
+                <ProjectsPage rights={rightsFor('projects')} clientFilter={clientFilter} onClearFilter={()=>navigate("Projets")} />
               ) : page === "Tâches" ? (
-                <TasksPage admin={admin} clientFilter={clientFilter} onClearFilter={()=>navigate("Tâches")} />
+                <TasksPage rights={rightsFor('tasks')} clientFilter={clientFilter} onClearFilter={()=>navigate("Tâches")} />
               ) : page === "Planning" ? (
-                <TasksPage admin={admin} planning />
+                <TasksPage rights={{view:actionAllowed('planning.view'),create:actionAllowed('planning.create'),update:actionAllowed('planning.update'),delete:actionAllowed('tasks.delete')}} planning />
               ) : page === "Éditorial" ? (
                 <EditorialV3 />
               ) : page === "Services" ? (
@@ -3009,7 +3055,7 @@ function Shell({
               ) : page === "Fournisseurs" ? (
                 <SuppliersPage admin={admin} />
               ) : page === "Facturation" ? (
-                <BillingV3 admin={admin} clientFilter={clientFilter} onClearFilter={()=>navigate("Facturation")} />
+                <BillingV3 admin={actionAllowed('invoices.delete')} canCreate={actionAllowed('invoices.create')} canUpdate={actionAllowed('invoices.update')} canSend={actionAllowed('invoices.send')} clientFilter={clientFilter} onClearFilter={()=>navigate("Facturation")} />
               ) : page === "Documents" ? (
                 <DocumentsPage />
               ) : page === "Comptabilité" ? (
@@ -3038,11 +3084,17 @@ function Shell({
 }
 export default function ProductionAppV2() {
   const [loading, setLoading] = useState(true),
-    [profile, setProfile] = useState<Profile | null>(null);
+    [profile, setProfile] = useState<Profile | null>(null),
+    [showWelcome, setShowWelcome] = useState(false);
   const refresh = async () => {
     try {
       const session = await currentSession();
-      setProfile(session ? await getProfile() : null);
+      const nextProfile = session ? await getProfile() : null;
+      setProfile(nextProfile);
+      if (nextProfile && sessionStorage.getItem("smartsell-show-welcome") === "1") {
+        sessionStorage.removeItem("smartsell-show-welcome");
+        setShowWelcome(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -3060,6 +3112,7 @@ export default function ProductionAppV2() {
       </div>
     );
   if (!profile) return <Login onSuccess={refresh} />;
+  if (showWelcome) return <WelcomeSplash profile={profile} onComplete={() => setShowWelcome(false)} />;
   if (profile.must_change_password) return <PasswordChangeGate profile={profile} onComplete={refresh} />;
   return (
     <Shell
@@ -3101,7 +3154,7 @@ function PasswordChangeGate({ profile, onComplete }: { profile: Profile; onCompl
       }}>
         <div className="eyebrow"><i /> CHANGEMENT OBLIGATOIRE</div>
         <h2>Bienvenue, {profile.full_name.split(" ")[0]}.</h2>
-        <p className="muted">Le mot de passe reçu par e-mail ou WhatsApp est temporaire. Choisissez maintenant votre mot de passe personnel.</p>
+        <p className="muted">Le mot de passe reçu par e-mail ou SMS est temporaire. Choisissez maintenant votre mot de passe personnel.</p>
         <label>Nouveau mot de passe<input name="password" type="password" minLength={10} autoComplete="new-password" required /><small>10 caractères minimum, avec majuscule, minuscule et chiffre.</small></label>
         <label>Confirmer le mot de passe<input name="confirmation" type="password" minLength={10} autoComplete="new-password" required /></label>
         {error && <p className="form-error">{error}</p>}
