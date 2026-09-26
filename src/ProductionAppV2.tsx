@@ -136,6 +136,7 @@ import {
   updateEquipment,
   updateProfile,
   updateProject,
+  updateProspect,
   updateService,
   updateTask,
   updateNextBestAction,
@@ -151,6 +152,7 @@ import type {
   Campaign,
   Client,
   CommercialDocument,
+  CommercialRadar,
   ContactGroup,
   EditorialItem,
   Equipment,
@@ -805,12 +807,15 @@ function DetailList({ title, rows }: { title: string; rows: string[][] }) {
 
 function ClientsPage({ rights, onNavigate }: { rights: CrudRights; onNavigate: (page: "Projets" | "Tâches" | "Facturation", clientId: string) => void }) {
   const [rows, setRows] = useState<Client[]>([]),
+    [prospects,setProspects]=useState<Prospect[]>([]),
+    [radar,setRadar]=useState<CommercialRadar|null>(null),
+    [workspace,setWorkspace]=useState<'CLIENTS'|'PIPELINE'>('CLIENTS'),
     [open, setOpen] = useState(false),
     [selected, setSelected] = useState<string | null>(null),
     [error, setError] = useState("");
   const load = () =>
-    listClients()
-      .then(setRows)
+    Promise.all([listClients(),listProspects()])
+      .then(([clients,leads])=>{setRows(clients);setProspects(leads)})
       .catch((e) => setError(e.message));
   useEffect(() => {
     void load();
@@ -824,6 +829,9 @@ function ClientsPage({ rights, onNavigate }: { rights: CrudRights; onNavigate: (
         add="Nouveau client"
       />
       <ErrorBar value={error} />
+      <div className="crm-workspace-tabs"><button className={workspace==='CLIENTS'?'active':''} onClick={()=>setWorkspace('CLIENTS')}><Users/>Clients & comptes</button><button className={workspace==='PIPELINE'?'active':''} onClick={()=>setWorkspace('PIPELINE')}><Target/>Pipeline commercial IA</button></div>
+      {workspace==='PIPELINE'&&<section className="crm-command panel"><div className="crm-command-head"><div><span className="eyebrow"><i/> CRM AUGMENTÉ</span><h2>Chaque opportunité, avec la prochaine action déjà suggérée.</h2><p>Le radar IA analyse le stade, les relances, les signaux de contact et les consentements pour prioriser le pipeline.</p></div><button className="primary-btn compact" disabled={!prospects.length} onClick={async()=>{try{setRadar(await (await import('./services/repository')).generateCommercialRadar())}catch(e){setError(e instanceof Error?e.message:'Analyse IA indisponible')}}}><Sparkles/>Analyser le pipeline</button></div>{radar&&<div className="crm-ai-summary"><b>{radar.summary.hot_prospects} prospect(s) chaud(s)</b><span>{radar.summary.healthy} client(s) sains · {radar.summary.watch} à surveiller · {radar.summary.critical} critiques</span></div>}<div className="crm-pipeline">{(['NOUVEAU','CONTACTE','QUALIFIE','PROPOSITION','NEGOCIATION','GAGNE'] as const).map(stage=><div className="crm-stage" key={stage}><header><strong>{stage.replace('QUALIFIE','QUALIFIÉ')}</strong><span>{prospects.filter(item=>item.stage===stage).length}</span></header>{prospects.filter(item=>item.stage===stage).map(item=>{const score=radar?.prospects.find(row=>row.prospect_id===item.id);return <article key={item.id}><strong>{item.company}</strong><small>{item.contact_name||'Contact non renseigné'}</small>{score&&<em>{score.score}/100 · {score.recommended_action}</em>}<select disabled={!rights.update} value={item.stage} onChange={async event=>{try{const next=await updateProspect(item.id,{stage:event.target.value} as Partial<Prospect>);setProspects(current=>current.map(row=>row.id===next.id?next:row))}catch(e){setError(e instanceof Error?e.message:'Mise à jour impossible')}}}><option>NOUVEAU</option><option>CONTACTE</option><option>QUALIFIE</option><option>PROPOSITION</option><option>NEGOCIATION</option><option>GAGNE</option><option>PERDU</option></select></article>})}</div>)}</div></section>}
+      {workspace==='CLIENTS'&&<>
       <div className="records panel">
         {!rows.length ? (
           <Empty name="client" onAdd={rights.create ? () => setOpen(true) : undefined} />
@@ -911,6 +919,7 @@ function ClientsPage({ rights, onNavigate }: { rights: CrudRights; onNavigate: (
           />
         )}
       </AnimatePresence>
+      </>}
     </>
   );
 }
