@@ -4,6 +4,7 @@ import {
   Activity,
   ArrowLeft,
   Bell,
+  Bot,
   BookOpenCheck,
   Boxes,
   BriefcaseBusiness,
@@ -63,6 +64,7 @@ import {
   TeamAccessPage,
 } from "./AdvancedModulesV3";
 import { CampaignStudioPage, CommercialRadarPage, DigitalTwinPage } from "./InnovationsV4";
+import { AutopilotPage } from "./AutopilotV5";
 import {
   connectGoogleCalendar,
   createCampaign,
@@ -179,6 +181,7 @@ type Page =
   | "Jumeau numérique"
   | "Radar commercial"
   | "Studio campagnes IA"
+  | "Autopilot IA"
   | "Portail client"
   | "Assistant IA";
 type CrudRights = { view: boolean; create: boolean; update: boolean; delete: boolean };
@@ -202,6 +205,7 @@ const nav: [Page, typeof LayoutDashboard, Permission?][] = [
   ["Jumeau numérique", Gauge, "finance.read"],
   ["Radar commercial", Target, "crm.write"],
   ["Studio campagnes IA", Megaphone, "communication.send"],
+  ["Autopilot IA", Bot],
   ["Portail client", ShieldCheck, "users.manage"],
   ["Assistant IA", MessageSquareText],
 ];
@@ -2953,7 +2957,7 @@ function Shell({
     update: actionAllowed(`${scope}.update`),
     delete: actionAllowed(`${scope}.delete`),
   });
-  const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'suppliers.view',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Portail client':'portal.view','Jumeau numérique':'accounting.view','Radar commercial':'clients.view','Studio campagnes IA':'communication.view'};
+  const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'suppliers.view',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Portail client':'portal.view','Jumeau numérique':'accounting.view','Radar commercial':'clients.view','Studio campagnes IA':'communication.view','Autopilot IA':'Dashboard'};
   const visible = (n: [Page, typeof LayoutDashboard, Permission?]) =>
     (!n[2] || can(roles, n[2])) &&
     (!viewKeys[n[0]] || actionAllowed(viewKeys[n[0]]!)) &&
@@ -3067,6 +3071,8 @@ function Shell({
                 <CommercialRadarPage />
               ) : page === "Studio campagnes IA" ? (
                 <CampaignStudioPage onOpenCampaigns={()=>navigate("Communication")} />
+              ) : page === "Autopilot IA" ? (
+                <AutopilotPage onNavigate={target=>navigate(target as Page)} />
               ) : page === "Portail client" ? (
                 <ClientPortalAdmin />
               ) : (

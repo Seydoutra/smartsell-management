@@ -15,7 +15,7 @@ import type { AccessControl, Client, CreativeApproval, EditorialItem, EmployeeRe
 const money=(value:number,currency='GNF')=>new Intl.NumberFormat('fr-FR',{style:'currency',currency,maximumFractionDigits:currency==='GNF'?0:2}).format(Number(value||0))
 const fmt=(date?:string|null)=>date?new Date(date).toLocaleDateString('fr-FR'):'—'
 const human=(value?:string|null)=>(value||'—').replaceAll('_',' ')
-const modules=['Dashboard','Clients','Projets','Tâches','Planning','Éditorial','Services','Fournisseurs','Facturation','Documents','Comptabilité','Matériel','Communication','Équipe','RH','Rapports','Jumeau numérique','Radar commercial','Studio campagnes IA','Portail client','Assistant IA']
+const modules=['Dashboard','Clients','Projets','Tâches','Planning','Éditorial','Services','Fournisseurs','Facturation','Documents','Comptabilité','Matériel','Communication','Équipe','RH','Rapports','Jumeau numérique','Radar commercial','Studio campagnes IA','Autopilot IA','Portail client','Assistant IA']
 const permissionGroups=[
   {module:'Clients',actions:[['clients.view','Voir les fiches'],['clients.create','Créer'],['clients.update','Modifier'],['clients.delete','Supprimer']]},
   {module:'Projets',actions:[['projects.view','Voir'],['projects.create','Créer'],['projects.update','Modifier'],['projects.delete','Supprimer']]},
