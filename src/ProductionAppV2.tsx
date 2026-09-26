@@ -2896,7 +2896,7 @@ function Shell({
     [clientFilter, setClientFilter] = useState<string | null>(clientFromHash),
     [access, setAccess] = useState<AccessControl | null>(null),
     [accessLoaded, setAccessLoaded] = useState(false),
-    [openGroups,setOpenGroups]=useState<string[]>(['Pilotage']),
+    [openGroups,setOpenGroups]=useState<string[]>(['Pilotage','Production & clients','Communication']),
     [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null),
     [installed, setInstalled] = useState(() => window.matchMedia('(display-mode: standalone)').matches);
   const navigate = (next: Page, clientId: string | null = null) => {
@@ -3041,7 +3041,7 @@ function Shell({
               ) : currentPage === "Matériel" ? (
                 <EquipmentPage rights={rightsFor('equipment')} />
               ) : currentPage === "Communication" ? (
-                <CommunicationHub onBack={()=>navigate("Dashboard")} />
+                <CommunicationHub onBack={()=>navigate("Dashboard")} onOpenIntegrations={()=>navigate("Intégrations")} />
               ) : currentPage === "Intégrations" ? (
                 <IntegrationsPage rights={rightsFor('communication')} />
               ) : currentPage === "Équipe" ? (
