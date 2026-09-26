@@ -10,6 +10,7 @@ import { demoData, DemoRecord } from './lib/demoData'
 import { endSession, getDemoActivity, pulseSession, startSession, trackActivity } from './services/activityTracker'
 import { isDemoMode } from './services/supabase'
 import ProductionApp from './ProductionAppV2'
+import LandingPage from './LandingPage'
 
 type Theme = 'light' | 'dark'
 type Page = 'Dashboard' | 'Prospects' | 'Clients' | 'Projets' | 'Tâches' | 'Planning' | 'Production' | 'Éditorial' | 'Finance' | 'Matériel' | 'Équipe' | 'Documents' | 'Communication' | 'Administration' | 'Paramètres'
@@ -205,4 +206,13 @@ function DemoApp(){
   return <AnimatePresence mode="wait">{loggedIn?<motion.div key="app" initial={{opacity:0}} animate={{opacity:1}}><Shell onLogout={logout}/></motion.div>:<motion.div key="login" initial={{opacity:0}} animate={{opacity:1}}><Login onLogin={login}/></motion.div>}</AnimatePresence>
 }
 
-export default function App(){return isDemoMode?<DemoApp/>:<ProductionApp/>}
+export default function App(){
+  const [showApp,setShowApp]=useState(()=>window.location.hash==='#app')
+  useEffect(()=>{
+    const sync=()=>setShowApp(window.location.hash==='#app')
+    window.addEventListener('hashchange',sync)
+    return()=>window.removeEventListener('hashchange',sync)
+  },[])
+  const openApp=()=>{window.location.hash='app';setShowApp(true);window.scrollTo({top:0})}
+  return showApp?(isDemoMode?<DemoApp/>:<ProductionApp/>):<LandingPage onOpenApp={openApp}/>
+}
