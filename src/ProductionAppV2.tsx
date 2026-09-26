@@ -3018,7 +3018,7 @@ function Shell({
           </div>
         </header>
         <main>
-          {!online&&<div className="offline-banner" role="status"><strong>Mode hors connexion</strong><span>Les écrans déjà chargés restent disponibles. La synchronisation reprend au retour du réseau.</span></div>}
+          {!online&&<div className="offline-banner" role="status"><strong>Mode hors connexion</strong><span>Les écrans déjà chargés restent disponibles. Attendez le retour du réseau avant d’enregistrer une modification.</span></div>}
           <AnimatePresence mode="wait">
             <motion.div
               key={currentPage}
