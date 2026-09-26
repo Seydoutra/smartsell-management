@@ -2662,7 +2662,7 @@ function TeamPage({ admin }: { admin: boolean }) {
                     email: f.email,
                     password: f.password,
                     name: f.name,
-                    role: f.role,
+                    roles: [f.role],
                   });
                   setOpen(false);
                   load();
@@ -2915,13 +2915,14 @@ function Shell({
     if (installPrompt) { await installPrompt.prompt(); const choice = await installPrompt.userChoice; if (choice.outcome === 'accepted') setInstallPrompt(null); return; }
     alert('Dans Chrome ou Edge, ouvrez le menu du navigateur puis choisissez « Installer SmartSell Apps ». Sur iPhone/iPad : Partager → Sur l’écran d’accueil.');
   };
-  const role = profile.role as Role,
-    admin = ["SUPER_ADMIN", "ADMIN"].includes(role);
+  const roles = (profile.roles?.length ? profile.roles : [profile.role]) as Role[],
+    role = profile.role as Role,
+    admin = roles.some((item) => ["SUPER_ADMIN", "ADMIN"].includes(item));
   const visible = (n: [Page, typeof LayoutDashboard, Permission?]) =>
-    (!n[2] || can(role, n[2])) &&
+    (!n[2] || can(roles, n[2])) &&
     (!access?.allowed_modules?.length ||
       access.allowed_modules.includes(n[0]) ||
-      role === "SUPER_ADMIN");
+      roles.includes("SUPER_ADMIN"));
   return (
     <div className="app-shell production-shell v2-shell">
       <aside className={mobile ? "mobile-open" : ""}>
@@ -2950,7 +2951,7 @@ function Shell({
           </div>
           <div>
             <strong>{profile.full_name}</strong>
-            <small>{label(profile.role)}</small>
+            <small>{roles.map(label).join(" · ")}</small>
           </div>
           <button
             onClick={() => {

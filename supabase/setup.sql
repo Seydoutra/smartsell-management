@@ -8,7 +8,7 @@ do $$ begin create type public.communication_status as enum ('DRAFT','QUEUED','S
 create table if not exists public.departments (id uuid primary key default gen_random_uuid(), name text not null unique, created_at timestamptz not null default now());
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
-  full_name text not null default '', role public.app_role not null default 'COLLABORATEUR', department_id uuid references public.departments(id),
+  full_name text not null default '', role public.app_role not null default 'COLLABORATEUR', roles public.app_role[] not null default array['COLLABORATEUR']::public.app_role[], department_id uuid references public.departments(id),
   avatar_url text, phone text, active boolean not null default true, must_change_password boolean not null default true,
   notification_preferences jsonb not null default '{"IN_APP":true,"EMAIL":true,"SMS":false}'::jsonb, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
 );
@@ -78,9 +78,10 @@ create index if not exists idx_editorial_client_publish on public.editorial_item
 create index if not exists idx_equipment_bookings_dates on public.equipment_bookings(equipment_id,starts_at,ends_at);
 create index if not exists idx_notifications_profile on public.notifications(profile_id,read_at,created_at desc);
 
-create or replace function public.current_role() returns public.app_role language sql stable security definer set search_path=public as $$ select role from public.profiles where id=auth.uid() $$;
-create or replace function public.is_admin() returns boolean language sql stable security definer set search_path=public as $$ select coalesce(public.current_role() in ('SUPER_ADMIN','ADMIN'),false) $$;
-create or replace function public.handle_new_user() returns trigger language plpgsql security definer set search_path=public as $$ begin insert into public.profiles(id,full_name) values(new.id,coalesce(new.raw_user_meta_data->>'name','')) on conflict(id) do nothing; return new; end $$;
+create or replace function public.has_role(required_role public.app_role) returns boolean language sql stable security definer set search_path=public as $$ select coalesce(required_role = any(roles), role = required_role, false) from public.profiles where id=auth.uid() $$;
+create or replace function public.current_role() returns public.app_role language sql stable security definer set search_path=public as $$ select coalesce((select candidate from unnest(array['SUPER_ADMIN','ADMIN','MANAGER','CHEF_DE_PROJET','COMMERCIAL','COMMUNITY_MANAGER','COMPTABLE','DEVELOPPEUR','GRAPHISTE','VIDEASTE','PHOTOGRAPHE','COLLABORATEUR']::public.app_role[]) candidate where candidate = any(coalesce(roles,array[role])) limit 1), role) from public.profiles where id=auth.uid() $$;
+create or replace function public.is_admin() returns boolean language sql stable security definer set search_path=public as $$ select coalesce(public.has_role('SUPER_ADMIN') or public.has_role('ADMIN'),false) $$;
+create or replace function public.handle_new_user() returns trigger language plpgsql security definer set search_path=public as $$ begin insert into public.profiles(id,full_name,roles) values(new.id,coalesce(new.raw_user_meta_data->>'name',''),array['COLLABORATEUR']::public.app_role[]) on conflict(id) do nothing; return new; end $$;
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users for each row execute procedure public.handle_new_user();
 

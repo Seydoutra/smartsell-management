@@ -10,7 +10,12 @@ const rules: Record<Role, Permission[]> = {
   PHOTOGRAPHE:['projects.write'], DEVELOPPEUR:['projects.write'], COMPTABLE:['finance.read','finance.write'], COLLABORATEUR:[],
 }
 
-export const can = (role: Role, permission: Permission) => rules[role].includes(permission)
+export const rolePriority: Role[] = ['SUPER_ADMIN','ADMIN','MANAGER','CHEF_DE_PROJET','COMMERCIAL','COMMUNITY_MANAGER','COMPTABLE','DEVELOPPEUR','GRAPHISTE','VIDEASTE','PHOTOGRAPHE','COLLABORATEUR']
+
+export const primaryRole = (roles: Role[]): Role => rolePriority.find(role => roles.includes(role)) || 'COLLABORATEUR'
+
+export const can = (roleOrRoles: Role | Role[], permission: Permission) =>
+  (Array.isArray(roleOrRoles) ? roleOrRoles : [roleOrRoles]).some(role => rules[role]?.includes(permission))
 
 export type UserLimits = { smsPerDay:number; emailsPerDay:number; callsPerDay:number; exportRows:number; approvalAmount:number }
 export const defaultLimits: Record<Role,UserLimits> = {
@@ -24,5 +29,13 @@ export const defaultLimits: Record<Role,UserLimits> = {
   PHOTOGRAPHE:{smsPerDay:0,emailsPerDay:20,callsPerDay:0,exportRows:250,approvalAmount:0}, DEVELOPPEUR:{smsPerDay:0,emailsPerDay:20,callsPerDay:0,exportRows:1000,approvalAmount:0},
   COMPTABLE:{smsPerDay:20,emailsPerDay:100,callsPerDay:5,exportRows:5000,approvalAmount:25_000_000}, COLLABORATEUR:{smsPerDay:0,emailsPerDay:10,callsPerDay:0,exportRows:100,approvalAmount:0},
 }
+
+export const limitsForRoles = (roles: Role[]): UserLimits => roles.reduce((limits, role) => ({
+  smsPerDay: Math.max(limits.smsPerDay, defaultLimits[role]?.smsPerDay || 0),
+  emailsPerDay: Math.max(limits.emailsPerDay, defaultLimits[role]?.emailsPerDay || 0),
+  callsPerDay: Math.max(limits.callsPerDay, defaultLimits[role]?.callsPerDay || 0),
+  exportRows: Math.max(limits.exportRows, defaultLimits[role]?.exportRows || 0),
+  approvalAmount: Math.max(limits.approvalAmount, defaultLimits[role]?.approvalAmount || 0),
+}), defaultLimits.COLLABORATEUR)
 
 export const withinLimit = (used:number, limit:number, requested=1) => requested>0 && used+requested<=limit
