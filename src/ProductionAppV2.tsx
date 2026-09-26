@@ -16,9 +16,11 @@ import {
   FileCheck2,
   FileSpreadsheet,
   FileText,
+  Gauge,
   LayoutDashboard,
   LogOut,
   Mail,
+  Megaphone,
   Menu,
   MessageSquareText,
   Moon,
@@ -33,6 +35,7 @@ import {
   Sparkles,
   Sun,
   Trash2,
+  Target,
   Upload,
   Users,
   WalletCards,
@@ -59,6 +62,7 @@ import {
   SuppliersPage,
   TeamAccessPage,
 } from "./AdvancedModulesV3";
+import { CampaignStudioPage, CommercialRadarPage, DigitalTwinPage } from "./InnovationsV4";
 import {
   connectGoogleCalendar,
   createCampaign,
@@ -172,6 +176,9 @@ type Page =
   | "Équipe"
   | "RH"
   | "Rapports"
+  | "Jumeau numérique"
+  | "Radar commercial"
+  | "Studio campagnes IA"
   | "Portail client"
   | "Assistant IA";
 type CrudRights = { view: boolean; create: boolean; update: boolean; delete: boolean };
@@ -192,6 +199,9 @@ const nav: [Page, typeof LayoutDashboard, Permission?][] = [
   ["Équipe", Users, "users.manage"],
   ["RH", BriefcaseBusiness, "users.manage"],
   ["Rapports", Activity, "audit.read"],
+  ["Jumeau numérique", Gauge, "finance.read"],
+  ["Radar commercial", Target, "crm.write"],
+  ["Studio campagnes IA", Megaphone, "communication.send"],
   ["Portail client", ShieldCheck, "users.manage"],
   ["Assistant IA", MessageSquareText],
 ];
@@ -556,6 +566,11 @@ function Dashboard({ profile, onNavigate }: { profile: Profile; onNavigate:(page
           {intelligenceError?<div className="error-banner">{intelligenceError}</div>:<><p className="briefing-summary">{briefing?.summary||'Analyse des opérations en cours…'}</p><div className="briefing-signals"><div><strong>Opportunités</strong>{(briefing?.opportunities||[]).map((item,index)=><span key={index}>↗ {item}</span>)}</div><div><strong>Points de vigilance</strong>{(briefing?.watchouts||[]).map((item,index)=><span key={index}>• {item}</span>)}</div></div></>}
         </motion.article>
         <motion.article className="panel next-actions" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} transition={{delay:.08}}><div className="command-panel-head"><div><span className="eyebrow"><i/> NEXT BEST ACTION</span><h2>Les décisions recommandées</h2></div><b>{nextActions.length}</b></div><div className="next-action-list">{nextActions.length?nextActions.map(action=><div key={action.id} className={`next-action priority-${action.priority.toLowerCase()}`}><span className="action-priority">{action.priority}</span><div><strong>{action.title}</strong><small>{action.reason}</small></div><div className="next-action-buttons"><button className="primary-btn compact" onClick={async()=>{await executeNextBestAction(action);setNextActions(rows=>rows.filter(row=>row.id!==action.id));onNavigate(action.target_page as Page,action.client_id)}}>{action.action_type==='COMPLETE_TASK'?'Confirmer terminée':'Ouvrir'}</button><button className="icon-btn" title="Ignorer" onClick={async()=>{await updateNextBestAction(action.id,'IGNOREE');setNextActions(rows=>rows.filter(row=>row.id!==action.id))}}><X/></button></div></div>):<p className="muted">Aucune action urgente. Actualisez le briefing lorsque les données changent.</p>}</div></motion.article>
+      </section>
+      <section className="innovation-launchpad">
+        <button onClick={()=>onNavigate("Jumeau numérique")}><Gauge/><span><small>PRÉVOIR</small><strong>Jumeau numérique</strong><em>Simuler trésorerie, marge et capacité.</em></span><ChevronRight/></button>
+        <button onClick={()=>onNavigate("Radar commercial")}><Target/><span><small>DÉTECTER</small><strong>Radar commercial</strong><em>Prioriser clients et prospects.</em></span><ChevronRight/></button>
+        <button onClick={()=>onNavigate("Studio campagnes IA")}><Megaphone/><span><small>ACCÉLÉRER</small><strong>Studio campagnes IA</strong><em>Concevoir, valider puis diffuser.</em></span><ChevronRight/></button>
       </section>
       <section className="command-metrics">{metrics.map((metric,index)=><motion.article className={`command-metric tone-${metric.tone}`} key={metric.label} initial={{opacity:0,y:18}} animate={{opacity:1,y:0}} transition={{delay:.04*index,duration:.35}} whileHover={{y:-4}}><div className="metric-icon"><metric.icon/></div><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.copy}</small><div className="metric-scan"/></motion.article>)}</section>
       <section className="command-panels">
@@ -2938,7 +2953,7 @@ function Shell({
     update: actionAllowed(`${scope}.update`),
     delete: actionAllowed(`${scope}.delete`),
   });
-  const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'suppliers.view',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Portail client':'portal.view'};
+  const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'suppliers.view',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Portail client':'portal.view','Jumeau numérique':'accounting.view','Radar commercial':'clients.view','Studio campagnes IA':'communication.view'};
   const visible = (n: [Page, typeof LayoutDashboard, Permission?]) =>
     (!n[2] || can(roles, n[2])) &&
     (!viewKeys[n[0]] || actionAllowed(viewKeys[n[0]]!)) &&
@@ -3046,6 +3061,12 @@ function Shell({
                 <HRPage />
               ) : page === "Rapports" ? (
                 <ReportsPage />
+              ) : page === "Jumeau numérique" ? (
+                <DigitalTwinPage />
+              ) : page === "Radar commercial" ? (
+                <CommercialRadarPage />
+              ) : page === "Studio campagnes IA" ? (
+                <CampaignStudioPage onOpenCampaigns={()=>navigate("Communication")} />
               ) : page === "Portail client" ? (
                 <ClientPortalAdmin />
               ) : (
