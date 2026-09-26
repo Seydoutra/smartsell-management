@@ -13,7 +13,7 @@ Deno.serve(async (request) => {
       const { data: connection } = await admin.from("calendar_connections").select("*").eq("profile_id", task.assignee_id).eq("connected", true).eq("sync_enabled", true).maybeSingle();
       if (!connection) continue;
       const accessToken = await getGoogleAccessToken(connection);
-      const eventId = await createGoogleEvent(accessToken, connection.calendar_id || "primary", { title: task.title, description: task.description, start: task.due_at, reminderMinutes: Number(task.reminder_minutes || 30) });
+      const eventId = await createGoogleEvent(accessToken, connection.calendar_id || "primary", { title: task.title, description: `${task.description || "Tâche SmartSell"}\n\nCette tâche dispose aussi de trois rappels SMS intelligents SmartSell.`, start: task.due_at, reminderMinutes: Number(task.reminder_minutes || 30) });
       await admin.from("tasks").update({ google_event_id: eventId, calendar_synced_at: new Date().toISOString() }).eq("id", task.id);
       synced++;
     } catch (error) {

@@ -9,7 +9,7 @@ Deno.serve(async (request) => {
   try {
     const { admin, user } = await authenticated(request);
     const clientId = Deno.env.get("GOOGLE_CLIENT_ID"), redirectUri = Deno.env.get("GOOGLE_REDIRECT_URI");
-    if (!clientId || !redirectUri) return json(request, { error: "Google Agenda n’est pas encore configuré" }, 503);
+    if (!clientId || !redirectUri) return json(request, { error: "La connexion Google Agenda doit être activée une seule fois par le super administrateur. Les identifiants OAuth Google manquent encore dans Supabase." }, 503);
     const state = base64Url(crypto.getRandomValues(new Uint8Array(32)));
     const stateHash = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(state))));
     const { error } = await admin.from("calendar_oauth_states").insert({ state_hash: stateHash, profile_id: user.id, expires_at: new Date(Date.now() + 10 * 60_000).toISOString() });

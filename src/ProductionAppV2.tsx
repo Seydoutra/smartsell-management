@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { CSSProperties, FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Activity,
@@ -91,6 +91,7 @@ import {
   listProfiles,
   listProjects,
   listServices,
+  listSuppliers,
   listTasks,
   listUserSessions,
   onAuthChange,
@@ -122,6 +123,7 @@ import type {
   Profile,
   Project,
   Service,
+  Supplier,
   Task,
   UserSession,
 } from "./types/models";
@@ -450,59 +452,79 @@ function Dashboard({ profile }: { profile: Profile }) {
   const [c, setC] = useState<Client[]>([]),
     [p, setP] = useState<Project[]>([]),
     [i, setI] = useState<Invoice[]>([]),
-    [t, setT] = useState<Task[]>([]);
+    [t, setT] = useState<Task[]>([]),
+    [payments, setPayments] = useState<Payment[]>([]),
+    [expenses, setExpenses] = useState<Expense[]>([]),
+    [suppliers, setSuppliers] = useState<Supplier[]>([]),
+    [team, setTeam] = useState<Profile[]>([]),
+    [sessions, setSessions] = useState<UserSession[]>([]),
+    [loading, setLoading] = useState(true);
   useEffect(() => {
     Promise.all([
       listClients(),
       listProjects(),
       listInvoices(),
       listTasks(),
-    ]).then(([a, b, d, e]) => {
+      listPayments(),
+      listExpenses(),
+      listSuppliers(),
+      listProfiles(),
+      listUserSessions(),
+    ]).then(([a, b, d, e, f, g, h, j, k]) => {
       setC(a);
       setP(b);
       setI(d);
       setT(e);
-    });
+      setPayments(f);
+      setExpenses(g);
+      setSuppliers(h);
+      setTeam(j);
+      setSessions(k);
+    }).finally(()=>setLoading(false));
   }, []);
+  const billed = i.reduce((sum, row) => sum + Number(row.total || 0), 0);
+  const collected = payments.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const spent = expenses.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const receivables = Math.max(0, billed - collected);
+  const openTasks = t.filter((row) => row.status !== "TERMINE");
+  const completion = t.length ? Math.round((t.filter((row) => row.status === "TERMINE").length / t.length) * 100) : 0;
+  const overdue = i.filter((row) => row.status !== "PAYEE" && row.due_date && new Date(row.due_date) < new Date());
+  const activeProjects = p.filter((row) => !["TERMINE", "ANNULE"].includes(row.status));
+  const onlineIds = new Set(sessions.filter((row) => !row.signed_out_at && Date.now() - new Date(row.last_seen_at).getTime() < 15 * 60_000).map((row) => row.profile_id));
+  const monthSeries = useMemo(() => Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(); date.setDate(1); date.setMonth(date.getMonth() - (5 - index));
+    const month = date.getMonth(), year = date.getFullYear();
+    const revenue = i.filter((row) => { const value = new Date(row.issue_date); return value.getMonth() === month && value.getFullYear() === year; }).reduce((sum, row) => sum + Number(row.total || 0), 0);
+    const cost = expenses.filter((row) => { const value = new Date(row.spent_on); return value.getMonth() === month && value.getFullYear() === year; }).reduce((sum, row) => sum + Number(row.amount || 0), 0);
+    return { label: new Intl.DateTimeFormat("fr-FR", { month: "short" }).format(date), revenue, cost };
+  }), [i, expenses]);
+  const chartMax = Math.max(1, ...monthSeries.flatMap((row) => [row.revenue, row.cost]));
+  const topClients = useMemo(() => c.map((client) => ({ client, total: i.filter((row) => row.client_id === client.id).reduce((sum, row) => sum + Number(row.total || 0), 0) })).sort((a, b) => b.total - a.total).slice(0, 4), [c, i]);
+  const metrics = [
+    { label: "Facturé", value: money(billed), copy: `${i.length} facture(s)`, icon: ReceiptText, tone: "purple" },
+    { label: "Encaissé", value: money(collected), copy: `${payments.length} paiement(s)`, icon: WalletCards, tone: "green" },
+    { label: "À recevoir", value: money(receivables), copy: `${overdue.length} facture(s) en retard`, icon: CircleDollarSign, tone: "yellow" },
+    { label: "Dépenses", value: money(spent), copy: `Solde ${money(collected - spent)}`, icon: Activity, tone: "red" },
+    { label: "Clients", value: c.length, copy: `${c.filter((row) => row.status === "ACTIVE").length} actifs`, icon: Users, tone: "blue" },
+    { label: "Projets", value: activeProjects.length, copy: `${p.length} au total`, icon: BriefcaseBusiness, tone: "purple" },
+    { label: "Tâches", value: openTasks.length, copy: `${completion}% terminées`, icon: ClipboardList, tone: "green" },
+    { label: "Fournisseurs", value: suppliers.length, copy: `${suppliers.filter((row) => row.status === "ACTIVE").length} actifs`, icon: Boxes, tone: "yellow" },
+  ];
   return (
-    <>
-      <Header
-        title={`Bonjour, ${profile.full_name.split(" ")[0]}.`}
-        copy="L’activité réelle de Smartsell, synchronisée avec Supabase."
-      />
-      <section className="production-kpis">
-        <Stat
-          featured
-          name="Chiffre d’affaires"
-          value={money(i.reduce((s, x) => s + Number(x.total), 0))}
-          copy={`${i.length} facture(s)`}
-        />
-        <Stat name="Clients" value={c.length} copy="Portefeuille actif" />
-        <Stat
-          name="Projets"
-          value={p.length}
-          copy={`${p.filter((x) => x.status !== "TERMINE").length} en cours`}
-        />
-        <Stat
-          name="Tâches"
-          value={t.length}
-          copy={`${t.filter((x) => x.status !== "TERMINE").length} à traiter`}
-        />
+    <div className={`command-dashboard ${loading ? "is-loading" : ""}`}>
+      <motion.section className="command-hero" initial={{opacity:0,y:14}} animate={{opacity:1,y:0}} transition={{duration:.45}}>
+        <div className="command-grid"/><div className="command-glow glow-one"/><div className="command-glow glow-two"/>
+        <div className="command-copy"><span className="eyebrow"><i/> CENTRE DE COMMANDE EN TEMPS RÉEL</span><h1>Bonjour, {profile.full_name.split(" ")[0]}.</h1><p>Une vision instantanée de la finance, des opérations, des clients et de l’équipe.</p><div className="live-chip"><i/> Données synchronisées avec Supabase</div></div>
+        <div className="command-orbit"><div className="orbit-ring ring-a"/><div className="orbit-ring ring-b"/><div className="orbit-core"><strong>{money(collected-spent)}</strong><span>trésorerie nette</span></div></div>
+      </motion.section>
+      <section className="command-metrics">{metrics.map((metric,index)=><motion.article className={`command-metric tone-${metric.tone}`} key={metric.label} initial={{opacity:0,y:18}} animate={{opacity:1,y:0}} transition={{delay:.04*index,duration:.35}} whileHover={{y:-4}}><div className="metric-icon"><metric.icon/></div><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.copy}</small><div className="metric-scan"/></motion.article>)}</section>
+      <section className="command-panels">
+        <motion.article className="panel finance-radar" initial={{opacity:0,x:-16}} animate={{opacity:1,x:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> FINANCE</span><h2>Flux des 6 derniers mois</h2></div><span className="pulse-label">● LIVE</span></div><div className="future-chart">{monthSeries.map(row=><div className="future-month" key={row.label}><div className="future-bars"><i style={{height:`${Math.max(4,row.revenue/chartMax*100)}%`}}/><b style={{height:`${Math.max(4,row.cost/chartMax*100)}%`}}/></div><span>{row.label}</span></div>)}</div><div className="chart-key"><span><i/>Facturation</span><span><i/>Dépenses</span></div></motion.article>
+        <motion.article className="panel operations-ring" initial={{opacity:0,x:16}} animate={{opacity:1,x:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> EXÉCUTION</span><h2>Avancement opérationnel</h2></div></div><div className="progress-orb" style={{"--progress":`${completion*3.6}deg`} as CSSProperties}><div><strong>{completion}%</strong><span>tâches terminées</span></div></div><div className="operation-stats"><span><b>{openTasks.length}</b> ouvertes</span><span><b>{t.filter(row=>row.priority==="URGENTE"&&row.status!=="TERMINE").length}</b> urgentes</span><span><b>{activeProjects.length}</b> projets actifs</span></div></motion.article>
+        <motion.article className="panel client-intelligence" initial={{opacity:0,y:16}} animate={{opacity:1,y:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> CLIENTS</span><h2>Portefeuille principal</h2></div><span>{c.length} comptes</span></div><div className="rank-list">{topClients.length?topClients.map((row,index)=><div key={row.client.id}><span>{String(index+1).padStart(2,"0")}</span><div><strong>{row.client.name}</strong><small>{row.client.sector||"Secteur non renseigné"}</small></div><b>{money(row.total)}</b></div>):<p className="muted">Les revenus par client apparaîtront ici.</p>}</div></motion.article>
+        <motion.article className="panel team-radar" initial={{opacity:0,y:16}} animate={{opacity:1,y:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> ÉQUIPE</span><h2>Présence et capacité</h2></div><span>{onlineIds.size} en ligne</span></div><div className="team-cloud">{team.slice(0,8).map((member,index)=><motion.div key={member.id} animate={{y:[0,-3,0]}} transition={{duration:2.8+index*.15,repeat:Infinity,delay:index*.12}} className={onlineIds.has(member.id)?"online":""}><b>{member.full_name.slice(0,2).toUpperCase()}</b><span>{member.full_name.split(" ")[0]}</span></motion.div>)}</div><div className="team-summary"><span><b>{team.filter(row=>row.active).length}</b> collaborateurs actifs</span><span><b>{suppliers.length}</b> fournisseurs référencés</span></div></motion.article>
       </section>
-      <section className="panel dashboard-actions">
-        <div>
-          <span className="eyebrow">
-            <i /> PILOTAGE
-          </span>
-          <h2>Tout devient actionnable</h2>
-          <p>
-            Ouvrez un client, un projet ou une tâche pour consulter les
-            relations, modifier le statut et agir selon vos droits.
-          </p>
-        </div>
-        <CheckCircle2 />
-      </section>
-    </>
+    </div>
   );
 }
 
@@ -1095,6 +1117,18 @@ function TasksPage({
       void getCalendarConnection()
         .then(setCalendarConnection)
         .catch((e) => setError(e.message));
+      const params = new URLSearchParams(location.search);
+      const state = params.get("calendar");
+      if (state === "connected") {
+        setError("");
+        void getCalendarConnection().then(setCalendarConnection);
+      } else if (state) {
+        setError(state === "invalid_state" ? "La demande Google a expiré. Cliquez à nouveau sur Connecter Google Agenda." : "La connexion Google Agenda n’a pas abouti. Vérifiez le compte Google choisi puis réessayez.");
+      }
+      if (state) {
+        params.delete("calendar");
+        history.replaceState({}, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
+      }
     }
   }, [planning]);
   const calendar = (t: Task) => {
@@ -1127,7 +1161,7 @@ function TasksPage({
             <p>
               {calendarConnection?.connected
                 ? `Connecté à ${calendarConnection.calendar_email || "Google Agenda"}. Les tâches assignées sont synchronisées automatiquement.`
-                : "Connectez votre propre agenda pour recevoir les tâches assignées avec leur rappel personnalisé."}
+                : "Chaque collaborateur connecte une seule fois son propre compte Google. Ses tâches assignées apparaissent ensuite automatiquement dans son agenda."}
             </p>
           </div>
           {calendarConnection?.connected ? (
@@ -1154,6 +1188,7 @@ function TasksPage({
           )}
         </section>
       )}
+      {planning && <div className="smart-reminder-note"><Bell/><div><strong>3 rappels SMS intelligents</strong><span>Ils sont répartis à 50 %, 80 % et 95 % du délai disponible. Le lien du SMS permet de confirmer la tâche et d’arrêter immédiatement les rappels suivants.</span></div></div>}
       <ErrorBar value={error} />
       <div className="records panel">
         {!displayedRows.length ? (
@@ -1177,7 +1212,7 @@ function TasksPage({
               </div>
               <span className="status">{label(r.status)}</span>
               <span className="record-meta">
-                {fmt(r.due_at)} · rappel {r.reminder_minutes || 30} min
+                {fmt(r.due_at)} · 3 rappels automatiques
               </span>
               <b className="record-amount">
                 {planning ? (
@@ -1293,18 +1328,12 @@ function TasksPage({
                         name="notification_channels"
                         type="checkbox"
                         value="SMS"
+                        defaultChecked
                       />{" "}
                       SMS
                     </label>
-                    <label>
-                      <input
-                        name="notification_channels"
-                        type="checkbox"
-                        value="WHATSAPP"
-                      />{" "}
-                      WhatsApp
-                    </label>
                   </div>
+                  <small>Le SMS est envoyé au numéro enregistré dans le profil du collaborateur. Trois messages différents seront programmés automatiquement.</small>
                 </Field>
                 <Field label="Description" wide>
                   <textarea name="description" />

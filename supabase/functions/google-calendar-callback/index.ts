@@ -13,7 +13,9 @@ Deno.serve(async (request) => {
     const { data: record } = await admin.from("calendar_oauth_states").select("profile_id").eq("state_hash", stateHash).gt("expires_at", new Date().toISOString()).maybeSingle();
     if (!record) return Response.redirect(`${appUrl}?calendar=invalid_state`, 302);
     const tokens = await exchangeGoogleCode(code), access = await encryptToken(tokens.access_token!), refresh = tokens.refresh_token ? await encryptToken(tokens.refresh_token) : null;
-    const { error } = await admin.from("calendar_connections").upsert({ profile_id: record.profile_id, provider: "GOOGLE", connected: true, sync_enabled: true, encrypted_access_token: access.value, encrypted_refresh_token: refresh?.value || null, access_token_iv: access.iv, access_token_tag: access.tag, refresh_token_iv: refresh?.iv || null, refresh_token_tag: refresh?.tag || null, token_expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(), scope: tokens.scope || null, calendar_id: "primary", updated_at: new Date().toISOString() });
+    const userInfoResponse = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", { headers: { authorization: `Bearer ${tokens.access_token}` } });
+    const userInfo = userInfoResponse.ok ? await userInfoResponse.json() as { email?: string } : {};
+    const { error } = await admin.from("calendar_connections").upsert({ profile_id: record.profile_id, provider: "GOOGLE", calendar_email: userInfo.email || null, connected: true, sync_enabled: true, encrypted_access_token: access.value, encrypted_refresh_token: refresh?.value || null, access_token_iv: access.iv, access_token_tag: access.tag, refresh_token_iv: refresh?.iv || null, refresh_token_tag: refresh?.tag || null, token_expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(), scope: tokens.scope || null, calendar_id: "primary", updated_at: new Date().toISOString() });
     if (error) throw error;
     await admin.from("calendar_oauth_states").delete().eq("state_hash", stateHash);
     return Response.redirect(`${appUrl}?calendar=connected`, 302);

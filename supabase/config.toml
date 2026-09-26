@@ -6,3 +6,6 @@ verify_jwt = false
 
 [functions.task-reminders]
 verify_jwt = false
+
+[functions.task-reminder-action]
+verify_jwt = false
