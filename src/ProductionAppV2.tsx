@@ -2,6 +2,7 @@ import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Activity,
+  ArrowLeft,
   Bell,
   BookOpenCheck,
   Boxes,
@@ -12,6 +13,7 @@ import {
   CircleDollarSign,
   ClipboardList,
   FileCheck2,
+  FileSpreadsheet,
   FileText,
   LayoutDashboard,
   LogOut,
@@ -29,11 +31,13 @@ import {
   ShieldCheck,
   Sun,
   Trash2,
+  Upload,
   Users,
   WalletCards,
   X,
 } from "lucide-react";
 import { companyProfile } from "./lib/companyProfile";
+import { contactsFromCsv, contactsFromFile, googleSheetCsvUrl, ImportedContact } from "./lib/contactImport";
 import { can, Permission, Role } from "./lib/permissions";
 import {
   endSession,
@@ -158,6 +162,12 @@ const nav: [Page, typeof LayoutDashboard, Permission?][] = [
   ["Portail client", ShieldCheck, "users.manage"],
   ["Assistant IA", MessageSquareText],
 ];
+const pageNames = new Set<Page>(nav.map(([name]) => name));
+const pageFromHash = (): Page => {
+  const value = decodeURIComponent(location.hash.replace(/^#\/?/, "").split("?")[0] || "Dashboard") as Page;
+  return pageNames.has(value) ? value : "Dashboard";
+};
+const clientFromHash = () => new URLSearchParams(location.hash.split("?")[1] || "").get("client");
 const money = (v: number, c = "GNF") =>
   new Intl.NumberFormat("fr-FR", {
     style: "currency",
@@ -321,11 +331,13 @@ function Header({
   copy,
   onAdd,
   add = "Créer",
+  children,
 }: {
   title: string;
   copy: string;
   onAdd?: () => void;
   add?: string;
+  children?: ReactNode;
 }) {
   return (
     <div className="module-head">
@@ -336,12 +348,12 @@ function Header({
         <h1>{title}</h1>
         <p>{copy}</p>
       </div>
-      {onAdd && (
-        <button className="primary-btn compact" onClick={onAdd}>
-          <Plus />
-          {add}
-        </button>
-      )}
+      <div className="head-actions">{children}{onAdd && (
+          <button className="primary-btn compact" onClick={onAdd}>
+            <Plus />
+            {add}
+          </button>
+        )}</div>
     </div>
   );
 }
@@ -461,11 +473,13 @@ function ClientDetail({
   id,
   onClose,
   onChanged,
+  onNavigate,
   admin,
 }: {
   id: string;
   onClose: () => void;
   onChanged: () => void;
+  onNavigate: (page: "Projets" | "Tâches" | "Facturation", clientId: string) => void;
   admin: boolean;
 }) {
   const [data, setData] = useState<Awaited<
@@ -551,23 +565,9 @@ function ClientDetail({
             </button>
           </div>
           <div className="detail-kpis">
-            <Stat
-              name="Projets"
-              value={data.projects.length}
-              copy="liés au client"
-            />
-            <Stat
-              name="Tâches"
-              value={data.tasks.length}
-              copy="toutes périodes"
-            />
-            <Stat
-              name="Facturé"
-              value={money(
-                data.invoices.reduce((s, x) => s + Number(x.total), 0),
-              )}
-              copy={`Payé ${money(paid)}`}
-            />
+            <button type="button" className="detail-kpi-link" onClick={()=>{onClose();onNavigate("Projets",id)}} aria-label={`Voir les ${data.projects.length} projets de ${data.client.name}`}><Stat name="Projets" value={data.projects.length} copy="Ouvrir les projets" /></button>
+            <button type="button" className="detail-kpi-link" onClick={()=>{onClose();onNavigate("Tâches",id)}} aria-label={`Voir les ${data.tasks.length} tâches de ${data.client.name}`}><Stat name="Tâches" value={data.tasks.length} copy="Ouvrir les tâches" /></button>
+            <button type="button" className="detail-kpi-link" onClick={()=>{onClose();onNavigate("Facturation",id)}} aria-label={`Voir les factures de ${data.client.name}`}><Stat name="Facturé" value={money(data.invoices.reduce((s, x) => s + Number(x.total), 0))} copy={`Payé ${money(paid)} · Ouvrir`} /></button>
           </div>
           <DetailList
             title="Projets"
@@ -640,7 +640,7 @@ function DetailList({ title, rows }: { title: string; rows: string[][] }) {
   );
 }
 
-function ClientsPage({ admin }: { admin: boolean }) {
+function ClientsPage({ admin, onNavigate }: { admin: boolean; onNavigate: (page: "Projets" | "Tâches" | "Facturation", clientId: string) => void }) {
   const [rows, setRows] = useState<Client[]>([]),
     [open, setOpen] = useState(false),
     [selected, setSelected] = useState<string | null>(null),
@@ -743,6 +743,7 @@ function ClientsPage({ admin }: { admin: boolean }) {
             id={selected}
             onClose={() => setSelected(null)}
             onChanged={load}
+            onNavigate={onNavigate}
             admin={admin}
           />
         )}
@@ -890,7 +891,7 @@ function ProjectDetail({
     </Modal>
   );
 }
-function ProjectsPage({ admin }: { admin: boolean }) {
+function ProjectsPage({ admin, clientFilter, onClearFilter }: { admin: boolean; clientFilter?: string | null; onClearFilter?: () => void }) {
   const [rows, setRows] = useState<Project[]>([]),
     [clients, setClients] = useState<Client[]>([]),
     [profiles, setProfiles] = useState<Profile[]>([]),
@@ -905,6 +906,7 @@ function ProjectsPage({ admin }: { admin: boolean }) {
   useEffect(() => {
     void load();
   }, []);
+  const displayedRows = clientFilter ? rows.filter((row) => row.client_id === clientFilter) : rows;
   return (
     <>
       <Header
@@ -913,12 +915,13 @@ function ProjectsPage({ admin }: { admin: boolean }) {
         onAdd={openCreator}
         add="Nouveau projet"
       />
+      {clientFilter && <div className="filter-banner"><span>Affichage des projets du client sélectionné.</span><button type="button" onClick={onClearFilter}>Afficher tous les projets</button></div>}
       <ErrorBar value={error} />
       <div className="records panel">
-        {!rows.length ? (
+        {!displayedRows.length ? (
           <Empty name="projet" onAdd={openCreator} />
         ) : (
-          rows.map((r) => (
+          displayedRows.map((r) => (
             <article
               className="clickable-row"
               key={r.id}
@@ -1024,9 +1027,13 @@ function ProjectsPage({ admin }: { admin: boolean }) {
 function TasksPage({
   admin,
   planning = false,
+  clientFilter,
+  onClearFilter,
 }: {
   admin: boolean;
   planning?: boolean;
+  clientFilter?: string | null;
+  onClearFilter?: () => void;
 }) {
   const [rows, setRows] = useState<Task[]>([]),
     [projects, setProjects] = useState<Project[]>([]),
@@ -1058,6 +1065,7 @@ function TasksPage({
     const g = (d: Date) => d.toISOString().replace(/[-:]|\.\d{3}/g, "");
     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(t.title)}&dates=${g(start)}/${g(end)}&details=${encodeURIComponent(t.description || "Tâche Smartsell")}`;
   };
+  const displayedRows = clientFilter ? rows.filter((row) => row.projects?.client_id === clientFilter) : rows;
   return (
     <>
       <Header
@@ -1070,6 +1078,7 @@ function TasksPage({
         onAdd={openCreator}
         add="Nouvelle tâche"
       />
+      {clientFilter && <div className="filter-banner"><span>Affichage des tâches du client sélectionné.</span><button type="button" onClick={onClearFilter}>Afficher toutes les tâches</button></div>}
       {planning && (
         <section className="panel calendar-connection">
           <div className="channel-icon">
@@ -1109,10 +1118,10 @@ function TasksPage({
       )}
       <ErrorBar value={error} />
       <div className="records panel">
-        {!rows.length ? (
+        {!displayedRows.length ? (
           <Empty name="tâche" onAdd={openCreator} />
         ) : (
-          rows.map((r) => (
+          displayedRows.map((r) => (
             <article
               className="clickable-row"
               key={r.id}
@@ -2438,18 +2447,62 @@ function EquipmentPage() {
   );
 }
 
-function CommunicationPage() {
+function CommunicationPage({ onBack }: { onBack: () => void }) {
   const [channel, setChannel] = useState<"SMS" | "EMAIL">("SMS"),
     [to, setTo] = useState(""),
     [message, setMessage] = useState(""),
     [result, setResult] = useState(""),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [contacts, setContacts] = useState<ImportedContact[]>([]),
+    [selectedContacts, setSelectedContacts] = useState<string[]>([]),
+    [sheetUrl, setSheetUrl] = useState(""),
+    [importBusy, setImportBusy] = useState(false);
+  const availableContacts = contacts.filter((contact) => channel === "SMS" ? contact.phone : contact.email);
+  const mergeContacts = (next: ImportedContact[]) => {
+    setContacts((current) => {
+      const merged = [...current];
+      next.forEach((contact) => {
+        if (!merged.some((item) => (contact.phone && item.phone === contact.phone) || (contact.email && item.email === contact.email))) merged.push(contact);
+      });
+      return merged;
+    });
+    setResult(`${next.length} contact(s) importé(s). Sélectionnez les destinataires à ajouter.`);
+  };
+  const importFile = async (file: File) => {
+    setImportBusy(true); setResult("");
+    try { mergeContacts(await contactsFromFile(file)); }
+    catch (error) { setResult(error instanceof Error ? error.message : "Import impossible"); }
+    finally { setImportBusy(false); }
+  };
+  const importGoogleSheet = async () => {
+    setImportBusy(true); setResult("");
+    try {
+      const response = await fetch(googleSheetCsvUrl(sheetUrl));
+      if (!response.ok) throw new Error("Le Google Sheet doit être partagé en lecture ou publié sur le Web.");
+      mergeContacts(contactsFromCsv(await response.text()));
+    } catch (error) { setResult(error instanceof Error ? error.message : "Import Google Sheets impossible"); }
+    finally { setImportBusy(false); }
+  };
+  const addSelectedRecipients = () => {
+    const recipients = contacts.filter((contact) => selectedContacts.includes(contact.id)).map((contact) => channel === "SMS" ? contact.phone : contact.email).filter(Boolean);
+    const existing = to.split(/[;,\n]/).map((value) => value.trim()).filter(Boolean);
+    setTo(Array.from(new Set([...existing, ...recipients])).join("\n"));
+    setResult(`${recipients.length} destinataire(s) ajouté(s) au message.`);
+  };
   return (
     <>
       <Header
         title="Communication"
-        copy="Envoi de SMS et d’e-mails depuis la plateforme, avec limites et mode test sécurisé."
-      />
+        copy="Importez vos contacts, sélectionnez les destinataires, puis envoyez vos SMS ou e-mails."
+      ><button type="button" className="ghost-action" onClick={onBack}><ArrowLeft/>Retour</button></Header>
+      <section className="panel contact-import-panel">
+        <div className="contact-import-head"><div><span className="eyebrow"><i/> CARNET DE CONTACTS</span><h2>Importer des destinataires</h2><p>Colonnes reconnues : Nom complet, Téléphone, E-mail, Entreprise et Tags.</p></div><div className="template-actions"><a className="ghost-action" href={`${import.meta.env.BASE_URL}templates/Modele-import-contacts-Smartsell.xlsx`} download><FileSpreadsheet/>Modèle Excel</a><a className="ghost-action" href={`${import.meta.env.BASE_URL}templates/modele-contacts-smartsell.csv`} download>Modèle CSV</a></div></div>
+        <div className="contact-import-tools">
+          <label className="upload-card"><Upload/><span>{importBusy ? "Import en cours…" : "Importer CSV ou Excel"}</span><small>.csv ou .xlsx</small><input type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={importBusy} onChange={(event)=>{const file=event.target.files?.[0];if(file)void importFile(file);event.currentTarget.value=""}}/></label>
+          <div className="google-sheet-import"><FileSpreadsheet/><div><strong>Google Sheets</strong><small>Collez le lien d’une feuille partagée en lecture.</small></div><input value={sheetUrl} onChange={(event)=>setSheetUrl(event.target.value)} placeholder="https://docs.google.com/spreadsheets/d/…"/><button type="button" className="primary-btn compact" disabled={!sheetUrl||importBusy} onClick={()=>void importGoogleSheet()}>Importer</button></div>
+        </div>
+        {contacts.length>0&&<div className="contact-picker"><div className="contact-picker-toolbar"><strong>{contacts.length} contact(s) importé(s)</strong><div><button type="button" className="ghost-action" onClick={()=>setSelectedContacts(availableContacts.map(contact=>contact.id))}>Tout sélectionner ({availableContacts.length})</button><button type="button" className="primary-btn compact" disabled={!selectedContacts.length} onClick={addSelectedRecipients}>Ajouter aux destinataires</button></div></div><div className="contact-table"><div className="contact-row contact-header"><span></span><span>Nom</span><span>Téléphone</span><span>E-mail</span><span>Entreprise</span></div>{contacts.map(contact=>{const usable=channel==="SMS"?Boolean(contact.phone):Boolean(contact.email);return <label className={`contact-row ${usable?"":"disabled"}`} key={contact.id}><input type="checkbox" disabled={!usable} checked={selectedContacts.includes(contact.id)} onChange={(event)=>setSelectedContacts(event.target.checked?[...selectedContacts,contact.id]:selectedContacts.filter(id=>id!==contact.id))}/><span>{contact.name||"Sans nom"}</span><span>{contact.phone||"—"}</span><span>{contact.email||"—"}</span><span>{contact.company||"—"}</span></label>})}</div></div>}
+      </section>
       <div className="communication-layout">
         <form
           className="panel communication-compose"
@@ -2480,7 +2533,7 @@ function CommunicationPage() {
             <button
               type="button"
               className={channel === "SMS" ? "active" : ""}
-              onClick={() => setChannel("SMS")}
+              onClick={() => { setChannel("SMS"); setSelectedContacts([]); }}
             >
               <MessageSquareText />
               SMS
@@ -2488,7 +2541,7 @@ function CommunicationPage() {
             <button
               type="button"
               className={channel === "EMAIL" ? "active" : ""}
-              onClick={() => setChannel("EMAIL")}
+              onClick={() => { setChannel("EMAIL"); setSelectedContacts([]); }}
             >
               <Mail />
               Email
@@ -2809,14 +2862,29 @@ function Shell({
   profile: Profile;
   onLogout: () => void;
 }) {
-  const [page, setPage] = useState<Page>("Dashboard"),
+  const [page, setPage] = useState<Page>(pageFromHash),
     [theme, setTheme] = useState<"light" | "dark">(
       () =>
         (localStorage.getItem("smartsell-theme") as "light" | "dark") ||
         "light",
     ),
     [mobile, setMobile] = useState(false),
+    [clientFilter, setClientFilter] = useState<string | null>(clientFromHash),
     [access, setAccess] = useState<AccessControl | null>(null);
+  const navigate = (next: Page, clientId: string | null = null) => {
+    const hash = `#/${encodeURIComponent(next)}${clientId ? `?client=${encodeURIComponent(clientId)}` : ""}`;
+    history.pushState({}, "", hash);
+    setPage(next);
+    setClientFilter(clientId);
+    setMobile(false);
+  };
+  useEffect(() => {
+    if (!location.hash) history.replaceState({}, "", `#/${encodeURIComponent("Dashboard")}`);
+    const sync = () => { setPage(pageFromHash()); setClientFilter(clientFromHash()); };
+    window.addEventListener("popstate", sync);
+    window.addEventListener("hashchange", sync);
+    return () => { window.removeEventListener("popstate", sync); window.removeEventListener("hashchange", sync); };
+  }, []);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("smartsell-theme", theme);
@@ -2852,10 +2920,7 @@ function Shell({
             <button
               key={name}
               className={page === name ? "active" : ""}
-              onClick={() => {
-                setPage(name);
-                setMobile(false);
-              }}
+              onClick={() => navigate(name)}
             >
               <Icon />
               <span>{name}</span>
@@ -2911,11 +2976,11 @@ function Shell({
               {page === "Dashboard" ? (
                 <Dashboard profile={profile} />
               ) : page === "Clients" ? (
-                <ClientsPage admin={admin} />
+                <ClientsPage admin={admin} onNavigate={(next,clientId)=>navigate(next,clientId)} />
               ) : page === "Projets" ? (
-                <ProjectsPage admin={admin} />
+                <ProjectsPage admin={admin} clientFilter={clientFilter} onClearFilter={()=>navigate("Projets")} />
               ) : page === "Tâches" ? (
-                <TasksPage admin={admin} />
+                <TasksPage admin={admin} clientFilter={clientFilter} onClearFilter={()=>navigate("Tâches")} />
               ) : page === "Planning" ? (
                 <TasksPage admin={admin} planning />
               ) : page === "Éditorial" ? (
@@ -2925,7 +2990,7 @@ function Shell({
               ) : page === "Fournisseurs" ? (
                 <SuppliersPage admin={admin} />
               ) : page === "Facturation" ? (
-                <BillingV3 admin={admin} />
+                <BillingV3 admin={admin} clientFilter={clientFilter} onClearFilter={()=>navigate("Facturation")} />
               ) : page === "Documents" ? (
                 <DocumentsPage />
               ) : page === "Comptabilité" ? (
@@ -2933,9 +2998,9 @@ function Shell({
               ) : page === "Matériel" ? (
                 <EquipmentPage />
               ) : page === "Communication" ? (
-                <CommunicationPage />
+                <CommunicationPage onBack={()=>navigate("Dashboard")} />
               ) : page === "Équipe" ? (
-                <TeamAccessPage />
+                <TeamAccessPage admin={admin} />
               ) : page === "RH" ? (
                 <HRPage />
               ) : page === "Rapports" ? (
