@@ -117,6 +117,8 @@ import {
   listProfiles,
   listProspects,
   listProjects,
+  listSocialIntegrations,
+  saveSocialIntegration,
   listServices,
   listSuppliers,
   listTasks,
@@ -168,6 +170,7 @@ import type {
   Prospect,
   Service,
   Supplier,
+  SocialIntegration,
   Task,
   UserSession,
 } from "./types/models";
@@ -194,6 +197,7 @@ type Page =
   | "Studio campagnes IA"
   | "Autopilot IA"
   | "Portail client"
+  | "Intégrations"
   | "Assistant IA";
 type CrudRights = { view: boolean; create: boolean; update: boolean; delete: boolean };
 const nav: [Page, typeof LayoutDashboard, Permission?][] = [
@@ -210,6 +214,7 @@ const nav: [Page, typeof LayoutDashboard, Permission?][] = [
   ["Comptabilité", CircleDollarSign, "finance.read"],
   ["Matériel", Package, "projects.write"],
   ["Communication", Mail, "communication.send"],
+  ["Intégrations", Settings2],
   ["Équipe", Users, "users.manage"],
   ["RH", BriefcaseBusiness, "users.manage"],
   ["Rapports", Activity, "audit.read"],
@@ -224,7 +229,7 @@ const navGroups:{label:string;pages:Page[]}[]=[
   {label:'Pilotage',pages:['Dashboard']},
   {label:'Production & clients',pages:['Clients','Projets','Tâches','Planning','Éditorial']},
   {label:'Finance & achats',pages:['Services','Fournisseurs','Facturation','Documents','Comptabilité','Matériel']},
-  {label:'Communication',pages:['Communication']},
+  {label:'Communication',pages:['Communication','Intégrations']},
   {label:'Administration',pages:['Équipe','RH','Rapports','Portail client']},
   {label:'Intelligence artificielle',pages:['Jumeau numérique','Radar commercial','Studio campagnes IA','Autopilot IA','Assistant IA']},
 ];
@@ -803,6 +808,15 @@ function DetailList({ title, rows }: { title: string; rows: string[][] }) {
       )}
     </section>
   );
+}
+
+function IntegrationsPage({rights}:{rights:CrudRights}){
+  const providers:[SocialIntegration['provider'],string,string][]=[['FACEBOOK','Facebook','Pages et campagnes'],['INSTAGRAM','Instagram','Portée, engagement et contenus'],['LINKEDIN','LinkedIn','Pages entreprise et leads'],['X','X / Twitter','Impressions et interactions'],['TIKTOK','TikTok','Vues, portée et vidéos'],['YOUTUBE','YouTube','Vues, abonnés et watch time'],['CANVA','Canva','Créations et modèles partagés']];
+  const [rows,setRows]=useState<SocialIntegration[]>([]),[clients,setClients]=useState<Client[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[selected,setSelected]=useState<SocialIntegration['provider']|null>(null);
+  const load=()=>Promise.all([listSocialIntegrations(),listClients()]).then(([integrations,clientRows])=>{setRows(integrations);setClients(clientRows)}).catch(e=>setError(e instanceof Error?e.message:'Les intégrations ne sont pas encore activées dans Supabase.'));
+  useEffect(()=>{void load()},[]);
+  const save=async(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();if(!selected||!rights.update)return;setBusy(true);try{const f=new FormData(event.currentTarget);await saveSocialIntegration({id:rows.find(row=>row.provider===selected)?.id,provider:selected,client_id:String(f.get('client_id')||'')||null,account_name:String(f.get('account_name')||''),account_url:String(f.get('account_url')||''),status:'CONNECTE',last_synced_at:new Date().toISOString()});setSelected(null);await load()}catch(e){setError(e instanceof Error?e.message:'Enregistrement impossible')}finally{setBusy(false)}};
+  return <><Header title="Intégrations" copy="Connectez les réseaux de vos clients, centralisez leurs statistiques et préparez les décisions assistées par IA."/><ErrorBar value={error}/><section className="integration-intro panel"><div><span className="eyebrow"><i/> CONNECTEURS ÉVOLUTIFS</span><h2>Un hub unique pour les données sociales.</h2><p>Chaque connecteur sera isolé, révoquable et rattaché au bon client. Les métriques alimenteront ensuite les rapports, le calendrier éditorial et le radar commercial.</p></div><div className="integration-flow"><span>Connexion OAuth</span><b>→</b><span>Synchronisation</span><b>→</b><span>Rapport IA</span></div></section><div className="integration-grid">{providers.map(([provider,name,description])=>{const row=rows.find(item=>item.provider===provider);return <article className="integration-card panel" key={provider}><div className={`integration-logo integration-${provider.toLowerCase()}`}>{provider.slice(0,1)}</div><div><h3>{name}</h3><p>{description}</p></div><span className={`status ${row?.status==='CONNECTE'?'':'danger'}`}>{row?.status==='CONNECTE'?'Connecté':'À configurer'}</span><div className="integration-metrics"><b>{row?.metrics?.followers||0}</b><span>abonnés suivis</span><b>{row?.metrics?.engagement_rate||0}%</b><span>engagement</span></div><button className="ghost-action" disabled={!rights.update} onClick={()=>setSelected(provider)}>{row?'Modifier la connexion':'Configurer'}</button></article>})}</div><AnimatePresence>{selected&&<Modal title={`Configurer ${selected}`} onClose={()=>setSelected(null)}><form className="entity-form" onSubmit={save}><Field label="Client concerné"><select name="client_id" defaultValue={rows.find(row=>row.provider===selected)?.client_id||''}><option value="">Tous les comptes</option>{clients.map(client=><option key={client.id} value={client.id}>{client.name}</option>)}</select></Field><Field label="Nom du compte"><input name="account_name" defaultValue={rows.find(row=>row.provider===selected)?.account_name||''} placeholder="Ex. SmartSell Conakry" required/></Field><Field label="URL publique"><input name="account_url" type="url" defaultValue={rows.find(row=>row.provider===selected)?.account_url||''} placeholder="https://…"/></Field><p className="muted">La connexion OAuth sécurisée et la synchronisation des statistiques seront branchées par connecteur. Aucun mot de passe ni jeton ne doit être saisi ici.</p><button className="primary-btn compact" disabled={busy}>Enregistrer la connexion</button></form></Modal>}</AnimatePresence></>;
 }
 
 function ClientsPage({ rights, onNavigate }: { rights: CrudRights; onNavigate: (page: "Projets" | "Tâches" | "Facturation", clientId: string) => void }) {
@@ -2932,7 +2946,7 @@ function Shell({
     update: actionAllowed(`${scope}.update`),
     delete: actionAllowed(`${scope}.delete`),
   });
-  const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'suppliers.view',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Portail client':'portal.view','Jumeau numérique':'accounting.view','Radar commercial':'clients.view','Studio campagnes IA':'communication.view'};
+  const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'suppliers.view',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Intégrations:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Portail client':'portal.view','Jumeau numérique':'accounting.view','Radar commercial':'clients.view','Studio campagnes IA':'communication.view'};
   const visible = (n: [Page, typeof LayoutDashboard, Permission?]) => n[0]==='Dashboard'||(
     (!viewKeys[n[0]] || actionAllowed(viewKeys[n[0]]!)) &&
     isModuleAllowed(roles,access,accessLoaded,n[0]));
@@ -3025,6 +3039,8 @@ function Shell({
                 <EquipmentPage rights={rightsFor('equipment')} />
               ) : currentPage === "Communication" ? (
                 <CommunicationHub onBack={()=>navigate("Dashboard")} />
+              ) : currentPage === "Intégrations" ? (
+                <IntegrationsPage rights={rightsFor('communication')} />
               ) : currentPage === "Équipe" ? (
                 <TeamAccessPage admin={admin} superAdmin={roles.includes("SUPER_ADMIN")} />
               ) : currentPage === "RH" ? (
