@@ -10,7 +10,11 @@ async function invokeEdge<T>(name:string,body?:Record<string,unknown>):Promise<T
 
 export async function signIn(email:string,password:string){const {data,error}=await db().auth.signInWithPassword({email,password});fail(error);return data}
 export async function signOut(){const {error}=await db().auth.signOut();fail(error)}
-export async function requestPasswordReset(email:string){const {error}=await db().auth.resetPasswordForEmail(email,{redirectTo:`${location.origin}/`});fail(error)}
+export async function requestPasswordReset(email:string){
+  const appUrl=new URL(import.meta.env.BASE_URL,location.origin).href;
+  const {error}=await db().auth.resetPasswordForEmail(email,{redirectTo:appUrl});
+  fail(error)
+}
 export async function currentSession(){return (await db().auth.getSession()).data.session}
 export function onAuthChange(callback:()=>void){return db().auth.onAuthStateChange(callback).data.subscription}
 export async function getProfile():Promise<Profile>{const {data:{user}}=await db().auth.getUser();if(!user)throw new Error('Session expirée');const {data,error}=await db().from('profiles').select('*').eq('id',user.id).single();fail(error);return data as Profile}
