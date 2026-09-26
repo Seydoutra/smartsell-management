@@ -1,5 +1,6 @@
 import { authenticated, edgeError, handleOptions, json } from "../_shared/http.ts";
 import { sendNimbaSms } from "../_shared/nimba.ts";
+import { sendResendEmail } from "../_shared/email.ts";
 
 const defaultDailyLimits: Record<string, { SMS: number; EMAIL: number }> = {
   SUPER_ADMIN: { SMS: Number.POSITIVE_INFINITY, EMAIL: Number.POSITIVE_INFINITY },
@@ -17,7 +18,7 @@ Deno.serve(async (request) => {
   if (request.method !== "POST") return json(request, { error: "Méthode non autorisée" }, 405);
   try {
     const { admin, user } = await authenticated(request);
-    const body = await request.json() as { channel: "SMS" | "EMAIL"; recipients: string[]; message: string };
+    const body = await request.json() as { channel: "SMS" | "EMAIL"; recipients: string[]; message: string; subject?: string };
     if (!["SMS", "EMAIL"].includes(body.channel) || !body.message?.trim() || !Array.isArray(body.recipients)) return json(request, { error: "Message invalide" }, 400);
     const testMode = Deno.env.get("COMMUNICATION_TEST_MODE") === "true";
     const campaignLimit = Number(Deno.env.get(body.channel === "SMS" ? "MAX_SMS_PER_CAMPAIGN" : "MAX_EMAILS_PER_CAMPAIGN") || 250);
@@ -39,8 +40,11 @@ Deno.serve(async (request) => {
     if (!recipients.length) return json(request, { error: "Aucun destinataire de test configuré" }, 400);
     let provider: { uid?: string; id?: string; status?: string; message_cost?: number; currency?: string } | null = null;
     if (body.channel === "SMS") provider = await sendNimbaSms(recipients, body.message.trim());
-    else throw new Error("Le fournisseur e-mail n’est pas encore configuré");
-    await admin.from("communication_logs").insert(recipients.map((recipient) => ({ channel: body.channel, recipient, status: testMode ? "QUEUED" : "SENT", provider_message_id: provider?.uid || provider?.id || null, sms_cost: provider?.message_cost || null, sms_currency: provider?.currency || null, sent_by: user.id, metadata: { test_mode: testMode, provider: "NIMBA" } })));
+    else {
+      const deliveries = await sendResendEmail(recipients, body.subject?.trim() || "Message de SmartSell", body.message.trim());
+      provider = { id: deliveries[0]?.id, status: "SENT" };
+    }
+    await admin.from("communication_logs").insert(recipients.map((recipient) => ({ channel: body.channel, recipient, status: testMode ? "QUEUED" : "SENT", provider_message_id: provider?.uid || provider?.id || null, sms_cost: provider?.message_cost || null, sms_currency: provider?.currency || null, sent_by: user.id, metadata: { test_mode: testMode, provider: body.channel === "SMS" ? "NIMBA" : "RESEND" } })));
     return json(request, { status: testMode ? "QUEUED" : "SENT", testMode, recipientCount: recipients.length, providerStatus: provider?.status || null });
   } catch (error) { return edgeError(request, error); }
 });

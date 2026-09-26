@@ -58,6 +58,7 @@ import {
 } from "./AdvancedModulesV3";
 import {
   connectGoogleCalendar,
+  createCampaign,
   completePasswordChange,
   createClient,
   createCommercialDocument,
@@ -66,6 +67,7 @@ import {
   createExpense,
   createInvoice,
   createProject,
+  createProspect,
   createService,
   createTask,
   createTeamMember,
@@ -80,7 +82,10 @@ import {
   getClientWorkspace,
   getProfile,
   getProjectWorkspace,
+  finishCall,
   listActivityLogs,
+  listCallLogs,
+  listCampaigns,
   listClients,
   listCommercialDocuments,
   listEditorialItems,
@@ -89,6 +94,7 @@ import {
   listInvoices,
   listPayments,
   listProfiles,
+  listProspects,
   listProjects,
   listServices,
   listSuppliers,
@@ -100,6 +106,7 @@ import {
   sendCommunication,
   signIn,
   signOut,
+  startCall,
   updateClient,
   updateCommercialDocument,
   updateEditorialItem,
@@ -112,6 +119,8 @@ import type {
   AccessControl,
   ActivityLog,
   CalendarConnection,
+  CallLog,
+  Campaign,
   Client,
   CommercialDocument,
   EditorialItem,
@@ -122,6 +131,7 @@ import type {
   Payment,
   Profile,
   Project,
+  Prospect,
   Service,
   Supplier,
   Task,
@@ -2516,206 +2526,39 @@ function EquipmentPage() {
 }
 
 function CommunicationPage({ onBack }: { onBack: () => void }) {
-  const [channel, setChannel] = useState<"SMS" | "EMAIL">("SMS"),
-    [to, setTo] = useState(""),
-    [message, setMessage] = useState(""),
-    [result, setResult] = useState(""),
-    [busy, setBusy] = useState(false),
-    [contacts, setContacts] = useState<ImportedContact[]>([]),
-    [selectedContacts, setSelectedContacts] = useState<string[]>([]),
-    [sheetUrl, setSheetUrl] = useState(""),
-    [importBusy, setImportBusy] = useState(false);
-  type PhoneContact = { name?: string[]; tel?: string[]; email?: string[] };
-  type ContactsManager = {
-    getProperties: () => Promise<string[]>;
-    select: (properties: string[], options: { multiple: boolean }) => Promise<PhoneContact[]>;
-  };
-  const contactsManager = (navigator as Navigator & { contacts?: ContactsManager }).contacts;
-  const phoneDirectoryAvailable = Boolean(contactsManager && window.isSecureContext);
-  const availableContacts = contacts.filter((contact) => channel === "SMS" ? contact.phone : contact.email);
-  const mergeContacts = (next: ImportedContact[]) => {
-    setContacts((current) => {
-      const merged = [...current];
-      next.forEach((contact) => {
-        if (!merged.some((item) => (contact.phone && item.phone === contact.phone) || (contact.email && item.email === contact.email))) merged.push(contact);
-      });
-      return merged;
-    });
-    setResult(`${next.length} contact(s) importé(s). Sélectionnez les destinataires à ajouter.`);
-  };
-  const importFile = async (file: File) => {
-    setImportBusy(true); setResult("");
-    try { mergeContacts(await contactsFromFile(file)); }
-    catch (error) { setResult(error instanceof Error ? error.message : "Import impossible"); }
-    finally { setImportBusy(false); }
-  };
-  const importGoogleSheet = async () => {
-    setImportBusy(true); setResult("");
-    try {
-      const response = await fetch(googleSheetCsvUrl(sheetUrl));
-      if (!response.ok) throw new Error("Le Google Sheet doit être partagé en lecture ou publié sur le Web.");
-      mergeContacts(contactsFromCsv(await response.text()));
-    } catch (error) { setResult(error instanceof Error ? error.message : "Import Google Sheets impossible"); }
-    finally { setImportBusy(false); }
-  };
-  const importPhoneDirectory = async () => {
-    if (!contactsManager || !window.isSecureContext) {
-      setResult("Le répertoire direct n’est pas disponible dans ce navigateur. Ouvrez SmartSell avec Chrome sur Android, ou utilisez l’import CSV/Excel.");
-      return;
-    }
-    setImportBusy(true); setResult("");
-    try {
-      const supported = await contactsManager.getProperties();
-      const properties = ["name", "tel", "email"].filter((property) => supported.includes(property));
-      const selected = await contactsManager.select(properties, { multiple: true });
-      const imported = selected.flatMap((contact, contactIndex) => {
-        const name = contact.name?.[0] || "Contact téléphone";
-        const phones = (contact.tel || []).map((phone) => phone.trim()).filter(Boolean);
-        const emails = (contact.email || []).map((email) => email.trim().toLowerCase()).filter(Boolean);
-        const count = Math.max(phones.length, emails.length, 1);
-        return Array.from({ length: count }, (_, index): ImportedContact => ({
-          id: `phone-${Date.now()}-${contactIndex}-${index}`,
-          name,
-          phone: phones[index] || (index === 0 ? phones[0] || "" : ""),
-          email: emails[index] || (index === 0 ? emails[0] || "" : ""),
-          company: "Répertoire téléphone",
-          tags: "Téléphone",
-        })).filter((contact) => contact.phone || contact.email);
-      });
-      const recipients = imported
-        .map((contact) => channel === "SMS" ? contact.phone : contact.email)
-        .filter(Boolean);
-      if (!recipients.length) {
-        setResult(channel === "SMS" ? "Les contacts choisis ne contiennent aucun numéro de téléphone." : "Les contacts choisis ne contiennent aucune adresse e-mail.");
-        return;
-      }
-      mergeContacts(imported);
-      const existing = to.split(/[;,\n]/).map((value) => value.trim()).filter(Boolean);
-      setTo(Array.from(new Set([...existing, ...recipients])).join("\n"));
-      setResult(`${recipients.length} destinataire(s) du téléphone ajouté(s) au message.`);
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") setResult("Sélection du répertoire annulée.");
-      else setResult(error instanceof Error ? error.message : "Impossible d’ouvrir le répertoire du téléphone.");
-    } finally { setImportBusy(false); }
-  };
-  const addSelectedRecipients = () => {
-    const recipients = contacts.filter((contact) => selectedContacts.includes(contact.id)).map((contact) => channel === "SMS" ? contact.phone : contact.email).filter(Boolean);
-    const existing = to.split(/[;,\n]/).map((value) => value.trim()).filter(Boolean);
-    setTo(Array.from(new Set([...existing, ...recipients])).join("\n"));
-    setResult(`${recipients.length} destinataire(s) ajouté(s) au message.`);
-  };
-  return (
-    <>
-      <Header
-        title="Communication"
-        copy="Importez vos contacts, sélectionnez les destinataires, puis envoyez vos SMS ou e-mails."
-      ><button type="button" className="ghost-action" onClick={onBack}><ArrowLeft/>Retour</button></Header>
-      <section className="panel contact-import-panel">
-        <div className="contact-import-head"><div><span className="eyebrow"><i/> CARNET DE CONTACTS</span><h2>Importer des destinataires</h2><p>Colonnes reconnues : Nom complet, Téléphone, E-mail, Entreprise et Tags.</p></div><div className="template-actions"><a className="ghost-action" href={`${import.meta.env.BASE_URL}templates/Modele-import-contacts-Smartsell.xlsx`} download><FileSpreadsheet/>Modèle Excel</a><a className="ghost-action" href={`${import.meta.env.BASE_URL}templates/modele-contacts-smartsell.csv`} download>Modèle CSV</a></div></div>
-        <div className="phone-directory-row">
-          <button type="button" className="phone-directory-button" disabled={importBusy} onClick={()=>void importPhoneDirectory()}>
-            <Users/><span><strong>Répertoire du téléphone</strong><small>Choisir directement un ou plusieurs contacts</small></span><ChevronRight/>
-          </button>
-          <small className={phoneDirectoryAvailable ? "directory-ready" : "directory-fallback"}>{phoneDirectoryAvailable ? "Disponible sur cet appareil" : "Selon le navigateur · Chrome Android recommandé"}</small>
-        </div>
-        <div className="contact-import-tools">
-          <label className="upload-card"><Upload/><span>{importBusy ? "Import en cours…" : "Importer CSV ou Excel"}</span><small>.csv ou .xlsx</small><input type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={importBusy} onChange={(event)=>{const file=event.target.files?.[0];if(file)void importFile(file);event.currentTarget.value=""}}/></label>
-          <div className="google-sheet-import"><FileSpreadsheet/><div><strong>Google Sheets</strong><small>Collez le lien d’une feuille partagée en lecture.</small></div><input value={sheetUrl} onChange={(event)=>setSheetUrl(event.target.value)} placeholder="https://docs.google.com/spreadsheets/d/…"/><button type="button" className="primary-btn compact" disabled={!sheetUrl||importBusy} onClick={()=>void importGoogleSheet()}>Importer</button></div>
-        </div>
-        {contacts.length>0&&<div className="contact-picker"><div className="contact-picker-toolbar"><strong>{contacts.length} contact(s) importé(s)</strong><div><button type="button" className="ghost-action" onClick={()=>setSelectedContacts(availableContacts.map(contact=>contact.id))}>Tout sélectionner ({availableContacts.length})</button><button type="button" className="primary-btn compact" disabled={!selectedContacts.length} onClick={addSelectedRecipients}>Ajouter aux destinataires</button></div></div><div className="contact-table"><div className="contact-row contact-header"><span></span><span>Nom</span><span>Téléphone</span><span>E-mail</span><span>Entreprise</span></div>{contacts.map(contact=>{const usable=channel==="SMS"?Boolean(contact.phone):Boolean(contact.email);return <label className={`contact-row ${usable?"":"disabled"}`} key={contact.id}><input type="checkbox" disabled={!usable} checked={selectedContacts.includes(contact.id)} onChange={(event)=>setSelectedContacts(event.target.checked?[...selectedContacts,contact.id]:selectedContacts.filter(id=>id!==contact.id))}/><span>{contact.name||"Sans nom"}</span><span>{contact.phone||"—"}</span><span>{contact.email||"—"}</span><span>{contact.company||"—"}</span></label>})}</div></div>}
-      </section>
-      <div className="communication-layout">
-        <form
-          className="panel communication-compose"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setBusy(true);
-            setResult("");
-            try {
-              const r = await sendCommunication({
-                channel,
-                recipients: to
-                  .split(/[;,\n]/)
-                  .map((x) => x.trim())
-                  .filter(Boolean),
-                message,
-              });
-              setResult(
-                r.testMode
-                  ? `Mode test : ${r.recipientCount} SMS dirigé(s) vers le numéro de test configuré.`
-                  : `Envoi accepté par Nimba SMS · ${r.recipientCount} destinataire(s)${r.providerStatus ? ` · statut ${r.providerStatus}` : ""}.`,
-              );
-            } catch (x) {
-              setResult(x instanceof Error ? x.message : "Envoi impossible");
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          <div className="channel-tabs">
-            <button
-              type="button"
-              className={channel === "SMS" ? "active" : ""}
-              onClick={() => { setChannel("SMS"); setSelectedContacts([]); }}
-            >
-              <MessageSquareText />
-              SMS
-            </button>
-            <button
-              type="button"
-              className={channel === "EMAIL" ? "active" : ""}
-              onClick={() => { setChannel("EMAIL"); setSelectedContacts([]); }}
-            >
-              <Mail />
-              Email
-            </button>
-          </div>
-          <label>
-            Destinataires
-            <textarea
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              placeholder={
-                channel === "SMS"
-                  ? "+224 620 00 00 00"
-                  : "client@entreprise.com"
-              }
-              required
-            />
-          </label>
-          <label>
-            Message
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              rows={7}
-              required
-            />
-          </label>
-          <button className="primary-btn compact" disabled={busy}>
-            <Send />
-            {busy ? "Envoi…" : "Envoyer"}
-          </button>
-          {result && <p className="result-note">{result}</p>}
-        </form>
-        <aside className="panel communication-help">
-          <Phone />
-          <h2>Appels</h2>
-          <p>
-            Le connecteur d’appels est prêt côté serveur. Il sera activé dès que
-            les identifiants du fournisseur téléphonique seront ajoutés dans
-            Supabase.
-          </p>
-          <span className="status">Connecteur API prêt</span>
-          <h3>Sécurité</h3>
-          <p>
-            Les campagnes respectent les plafonds par utilisateur et restent en
-            mode test tant que les fournisseurs SMS/e-mail ne sont pas activés.
-          </p>
-        </aside>
-      </div>
-    </>
-  );
+  const [tool,setTool]=useState<'MESSAGE'|'CAMPAIGNS'|'CALLS'>('MESSAGE'),[channel,setChannel]=useState<'SMS'|'EMAIL'>('SMS'),[to,setTo]=useState(''),[subject,setSubject]=useState(''),[message,setMessage]=useState(''),[result,setResult]=useState(''),[busy,setBusy]=useState(false),[contacts,setContacts]=useState<ImportedContact[]>([]),[selectedContacts,setSelectedContacts]=useState<string[]>([]),[sheetUrl,setSheetUrl]=useState(''),[importBusy,setImportBusy]=useState(false),[campaigns,setCampaigns]=useState<Campaign[]>([]),[prospects,setProspects]=useState<Prospect[]>([]),[clients,setClients]=useState<Client[]>([]),[calls,setCalls]=useState<CallLog[]>([]),[campaignOpen,setCampaignOpen]=useState(false),[prospectOpen,setProspectOpen]=useState(false),[activeCall,setActiveCall]=useState<{log:CallLog;name:string}|null>(null);
+  type PhoneContact={name?:string[];tel?:string[];email?:string[]};type ContactsManager={getProperties:()=>Promise<string[]>;select:(properties:string[],options:{multiple:boolean})=>Promise<PhoneContact[]>};
+  const contactsManager=(navigator as Navigator&{contacts?:ContactsManager}).contacts,phoneDirectoryAvailable=Boolean(contactsManager&&window.isSecureContext),availableContacts=contacts.filter(contact=>channel==='SMS'?contact.phone:contact.email);
+  const reloadOperations=()=>Promise.all([listCampaigns(),listProspects(),listClients(),listCallLogs()]).then(([nextCampaigns,nextProspects,nextClients,nextCalls])=>{setCampaigns(nextCampaigns);setProspects(nextProspects);setClients(nextClients);setCalls(nextCalls)}).catch(error=>setResult(error instanceof Error?error.message:'Chargement impossible'));
+  useEffect(()=>{void reloadOperations()},[]);
+  const mergeContacts=(next:ImportedContact[])=>{setContacts(current=>{const merged=[...current];next.forEach(contact=>{if(!merged.some(item=>(contact.phone&&item.phone===contact.phone)||(contact.email&&item.email===contact.email)))merged.push(contact)});return merged});setResult(`${next.length} contact(s) importé(s). Sélectionnez les destinataires à ajouter.`)};
+  const importFile=async(file:File)=>{setImportBusy(true);setResult('');try{mergeContacts(await contactsFromFile(file))}catch(error){setResult(error instanceof Error?error.message:'Import impossible')}finally{setImportBusy(false)}};
+  const importGoogleSheet=async()=>{setImportBusy(true);setResult('');try{const response=await fetch(googleSheetCsvUrl(sheetUrl));if(!response.ok)throw new Error('Le Google Sheet doit être partagé en lecture ou publié sur le Web.');mergeContacts(contactsFromCsv(await response.text()))}catch(error){setResult(error instanceof Error?error.message:'Import Google Sheets impossible')}finally{setImportBusy(false)}};
+  const importPhoneDirectory=async()=>{if(!contactsManager||!window.isSecureContext){setResult('Ce navigateur ne permet pas aux applications Web d’ouvrir Contacts. Utilisez Chrome sur Android, puis touchez à nouveau l’icône du répertoire.');return}setImportBusy(true);setResult('');try{const supported=await contactsManager.getProperties(),properties=['name','tel','email'].filter(property=>supported.includes(property)),selected=await contactsManager.select(properties,{multiple:true}),imported=selected.flatMap((contact,contactIndex)=>{const name=contact.name?.[0]||'Contact téléphone',phones=(contact.tel||[]).map(value=>value.trim()).filter(Boolean),emails=(contact.email||[]).map(value=>value.trim().toLowerCase()).filter(Boolean),count=Math.max(phones.length,emails.length,1);return Array.from({length:count},(_,index):ImportedContact=>({id:`phone-${Date.now()}-${contactIndex}-${index}`,name,phone:phones[index]||'',email:emails[index]||'',company:'Répertoire téléphone',tags:'Téléphone'})).filter(contact=>contact.phone||contact.email)}),recipients=imported.map(contact=>channel==='SMS'?contact.phone:contact.email).filter(Boolean);if(!recipients.length){setResult(channel==='SMS'?'Les contacts choisis ne contiennent aucun numéro.':'Les contacts choisis ne contiennent aucun e-mail.');return}mergeContacts(imported);const existing=to.split(/[;,\n]/).map(value=>value.trim()).filter(Boolean);setTo(Array.from(new Set([...existing,...recipients])).join('\n'));setResult(`${recipients.length} destinataire(s) ajouté(s) depuis Contacts.`)}catch(error){setResult(error instanceof DOMException&&error.name==='AbortError'?'Sélection annulée.':error instanceof Error?error.message:'Impossible d’ouvrir Contacts.')}finally{setImportBusy(false)}};
+  const addSelectedRecipients=()=>{const recipients=contacts.filter(contact=>selectedContacts.includes(contact.id)).map(contact=>channel==='SMS'?contact.phone:contact.email).filter(Boolean),existing=to.split(/[;,\n]/).map(value=>value.trim()).filter(Boolean);setTo(Array.from(new Set([...existing,...recipients])).join('\n'));setResult(`${recipients.length} destinataire(s) ajouté(s).`)};
+  const callContact=async(contact:{type:'PROSPECT'|'CLIENT';id:string;name:string;phone:string})=>{try{const log=await startCall({contact_type:contact.type,contact_id:contact.id,phone:contact.phone});setActiveCall({log,name:contact.name});window.location.href=`tel:${contact.phone.replace(/\s/g,'')}`}catch(error){setResult(error instanceof Error?error.message:'Appel impossible')}};
+  const campaignStatus=(campaign:Campaign)=>campaign.status==='QUEUED'&&campaign.scheduled_at&&new Date(campaign.scheduled_at)>new Date()?'PLANIFIÉE':campaign.status;
+  return <>
+    <Header title="Communication" copy="Messages directs, campagnes marketing planifiées et centre d’appels commercial."><button type="button" className="ghost-action" onClick={onBack}><ArrowLeft/>Retour</button></Header>
+    <div className="communication-mode-tabs"><button className={tool==='MESSAGE'?'active':''} onClick={()=>setTool('MESSAGE')}><MessageSquareText/>Message rapide</button><button className={tool==='CAMPAIGNS'?'active':''} onClick={()=>setTool('CAMPAIGNS')}><Send/>Campagnes</button><button className={tool==='CALLS'?'active':''} onClick={()=>setTool('CALLS')}><Phone/>Call center</button></div>
+    {tool!=='CALLS'&&<section className="panel contact-import-panel">
+      <div className="contact-import-head"><div><span className="eyebrow"><i/> BASE DE CONTACTS</span><h2>Importer des destinataires</h2><p>CSV, Excel ou Google Sheets — Nom, Téléphone, E-mail, Entreprise et Tags.</p></div><div className="template-actions"><a className="ghost-action" href={`${import.meta.env.BASE_URL}templates/Modele-import-contacts-Smartsell.xlsx`} download><FileSpreadsheet/>Modèle Excel</a><a className="ghost-action" href={`${import.meta.env.BASE_URL}templates/modele-contacts-smartsell.csv`} download>Modèle CSV</a></div></div>
+      <div className="contact-import-tools"><label className="upload-card"><Upload/><span>{importBusy?'Import en cours…':'Importer CSV ou Excel'}</span><small>.csv ou .xlsx</small><input type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={importBusy} onChange={event=>{const file=event.target.files?.[0];if(file)void importFile(file);event.currentTarget.value='' }}/></label><div className="google-sheet-import"><FileSpreadsheet/><div><strong>Google Sheets</strong><small>Feuille partagée en lecture.</small></div><input value={sheetUrl} onChange={event=>setSheetUrl(event.target.value)} placeholder="https://docs.google.com/spreadsheets/d/…"/><button type="button" className="primary-btn compact" disabled={!sheetUrl||importBusy} onClick={()=>void importGoogleSheet()}>Importer</button></div></div>
+      {contacts.length>0&&<div className="contact-picker"><div className="contact-picker-toolbar"><strong>{contacts.length} contact(s) importé(s)</strong><div><button type="button" className="ghost-action" onClick={()=>setSelectedContacts(availableContacts.map(contact=>contact.id))}>Tout sélectionner ({availableContacts.length})</button><button type="button" className="primary-btn compact" disabled={!selectedContacts.length} onClick={addSelectedRecipients}>Ajouter aux destinataires</button></div></div><div className="contact-table"><div className="contact-row contact-header"><span></span><span>Nom</span><span>Téléphone</span><span>E-mail</span><span>Entreprise</span></div>{contacts.map(contact=>{const usable=channel==='SMS'?Boolean(contact.phone):Boolean(contact.email);return <label className={`contact-row ${usable?'':'disabled'}`} key={contact.id}><input type="checkbox" disabled={!usable} checked={selectedContacts.includes(contact.id)} onChange={event=>setSelectedContacts(event.target.checked?[...selectedContacts,contact.id]:selectedContacts.filter(id=>id!==contact.id))}/><span>{contact.name||'Sans nom'}</span><span>{contact.phone||'—'}</span><span>{contact.email||'—'}</span><span>{contact.company||'—'}</span></label>})}</div></div>}
+    </section>}
+    {tool==='MESSAGE'&&<div className="communication-layout"><form className="panel communication-compose" onSubmit={async event=>{event.preventDefault();setBusy(true);setResult('');try{const response=await sendCommunication({channel,recipients:to.split(/[;,\n]/).map(value=>value.trim()).filter(Boolean),message,subject});setResult(`Envoi accepté · ${response.recipientCount} destinataire(s)${response.providerStatus?` · ${response.providerStatus}`:''}.`)}catch(error){setResult(error instanceof Error?error.message:'Envoi impossible')}finally{setBusy(false)}}}>
+      <div className="channel-tabs"><button type="button" className={channel==='SMS'?'active':''} onClick={()=>{setChannel('SMS');setSelectedContacts([])}}><MessageSquareText/>SMS</button><button type="button" className={channel==='EMAIL'?'active':''} onClick={()=>{setChannel('EMAIL');setSelectedContacts([])}}><Mail/>Email</button></div>
+      <label>Destinataires<div className="recipient-input"><textarea value={to} onChange={event=>setTo(event.target.value)} placeholder={channel==='SMS'?'+224 620 00 00 00':'client@entreprise.com'} required/>{channel==='SMS'&&<button type="button" className="directory-icon" aria-label="Ouvrir le répertoire du téléphone" title={phoneDirectoryAvailable?'Ouvrir Contacts':'Chrome Android requis'} onClick={()=>void importPhoneDirectory()}><Users/></button>}</div></label>
+      {channel==='EMAIL'&&<label>Objet<input value={subject} onChange={event=>setSubject(event.target.value)} required/></label>}
+      <label>Message<textarea value={message} onChange={event=>setMessage(event.target.value)} rows={7} required/></label><button className="primary-btn compact" disabled={busy}><Send/>{busy?'Envoi…':'Envoyer'}</button>{result&&<p className="result-note">{result}</p>}
+    </form><aside className="panel communication-help"><Phone/><h2>Prospection multicanale</h2><p>Utilisez le répertoire dans le champ Destinataires, préparez une campagne ou ouvrez le Call center pour traiter les prospects un par un.</p><span className="status">SMS Nimba actif</span><h3>Confidentialité</h3><p>SmartSell ne reçoit que les contacts sélectionnés volontairement dans le sélecteur natif du téléphone.</p></aside></div>}
+    {tool==='CAMPAIGNS'&&<section className="campaign-workspace"><div className="campaign-toolbar panel"><div><span className="eyebrow"><i/> MARKETING</span><h2>Campagnes SMS & e-mail</h2><p>Préparez l’audience, programmez l’heure et suivez l’état de diffusion.</p></div><button className="primary-btn compact" onClick={()=>setCampaignOpen(true)}><Plus/>Nouvelle campagne</button></div><div className="campaign-stats"><div className="panel"><b>{campaigns.length}</b><span>Campagnes</span></div><div className="panel"><b>{campaigns.filter(item=>campaignStatus(item)==='PLANIFIÉE').length}</b><span>Planifiées</span></div><div className="panel"><b>{campaigns.filter(item=>item.status==='SENT').length}</b><span>Envoyées</span></div><div className="panel"><b>{campaigns.reduce((sum,item)=>sum+Number(item.recipient_count||0),0)}</b><span>Destinataires</span></div></div><div className="records panel">{campaigns.length?campaigns.map(item=><article key={item.id}><div className="record-main"><span className="record-avatar">{item.channel==='SMS'?'SM':'EM'}</span><div><strong>{item.name}</strong><small>{item.channel} · {item.recipient_count} destinataire(s)</small></div></div><span className="status">{campaignStatus(item)}</span><span className="record-meta">{item.scheduled_at?new Date(item.scheduled_at).toLocaleString('fr-FR'):'Sans programmation'}</span><b className="record-amount">{item.status==='FAILED'?'À vérifier':'Suivi actif'}</b></article>):<div className="empty-state">Aucune campagne. Créez votre première diffusion marketing.</div>}</div></section>}
+    {tool==='CALLS'&&<section className="call-center"><div className="call-center-hero panel"><div><span className="eyebrow"><i/> LIVE SALES DESK</span><h2>Centre d’appels commercial</h2><p>File de prospection, appel direct, qualification et compte rendu.</p></div><button className="primary-btn compact" onClick={()=>setProspectOpen(true)}><Plus/>Nouveau prospect</button><div className="call-pulse"><Phone/><span>Prêt à appeler</span></div></div><div className="call-center-grid"><div className="panel call-queue"><h3>File de prospection</h3>{[...prospects.map(item=>({type:'PROSPECT' as const,id:item.id,name:item.contact_name||item.company,company:item.company,phone:item.phone||'',email:item.email||'',stage:item.stage})),...clients.map(item=>({type:'CLIENT' as const,id:item.id,name:item.name,company:item.legal_name||item.name,phone:item.phone||'',email:item.email||'',stage:'CLIENT'}))].filter(item=>item.phone).map(item=><div className="call-row" key={`${item.type}-${item.id}`}><span className="call-avatar">{item.name.slice(0,2).toUpperCase()}</span><div><strong>{item.name}</strong><small>{item.company} · {item.stage}</small><em>{item.phone}{item.email?` · ${item.email}`:''}</em></div><button onClick={()=>void callContact(item)}><Phone/>Appeler</button></div>)}</div><aside className="panel call-history"><h3>Derniers appels</h3>{calls.length?calls.slice(0,12).map(call=><div key={call.id}><span>{call.phone}</span><b>{call.outcome||call.status}</b><small>{new Date(call.created_at).toLocaleString('fr-FR')}</small></div>):<p>Aucun appel enregistré.</p>}</aside></div></section>}
+    {campaignOpen&&<Modal title="Nouvelle campagne marketing" onClose={()=>setCampaignOpen(false)}><form className="entity-form" onSubmit={async event=>{event.preventDefault();const form=new FormData(event.currentTarget),action=((event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement)?.value||'schedule',recipients=String(form.get('recipients')||'').split(/[;,\n]/).map(value=>value.trim()).filter(Boolean);setBusy(true);try{await createCampaign({name:String(form.get('name')),channel:String(form.get('channel')) as 'SMS'|'EMAIL',subject:String(form.get('subject')||''),message:String(form.get('message')),recipients,scheduled_at:String(form.get('scheduled_at')||'')||null,send_now:action==='now'});setCampaignOpen(false);setResult(action==='now'?'Campagne lancée.':'Campagne planifiée.');await reloadOperations()}catch(error){setResult(error instanceof Error?error.message:'Création impossible')}finally{setBusy(false)}}}><div className="form-grid"><Field label="Nom"><input name="name" required/></Field><Field label="Canal"><select name="channel" defaultValue={channel} onChange={event=>setChannel(event.target.value as 'SMS'|'EMAIL')}><option value="SMS">SMS</option><option value="EMAIL">E-mail</option></select></Field>{channel==='EMAIL'&&<Field label="Objet" wide><input name="subject" required/></Field>}<Field label="Destinataires" wide><div className="campaign-audience-actions"><button type="button" onClick={()=>{const values=clients.map(item=>channel==='SMS'?item.phone:item.email).filter(Boolean).join('\n');const field=document.querySelector<HTMLTextAreaElement>('textarea[name="recipients"]');if(field)field.value=values}}>Tous les clients</button><button type="button" onClick={()=>{const values=prospects.filter(item=>item.marketing_opt_in).map(item=>channel==='SMS'?item.phone:item.email).filter(Boolean).join('\n');const field=document.querySelector<HTMLTextAreaElement>('textarea[name="recipients"]');if(field)field.value=values}}>Prospects consentants</button></div><textarea name="recipients" defaultValue={to} rows={5} required placeholder="Un destinataire par ligne"/></Field><Field label="Message" wide><textarea name="message" rows={7} required/></Field><Field label="Date et heure d’envoi" wide><input name="scheduled_at" type="datetime-local" defaultValue={new Date(Date.now()+3600000).toISOString().slice(0,16)}/></Field></div><div className="form-actions"><button className="ghost-action" type="submit" value="schedule" disabled={busy}><CalendarDays/>Planifier</button><button className="primary-btn compact" type="submit" value="now" disabled={busy}><Send/>Envoyer maintenant</button></div></form></Modal>}
+    {prospectOpen&&<Modal title="Ajouter un prospect" onClose={()=>setProspectOpen(false)}><form className="entity-form" onSubmit={async event=>{event.preventDefault();const values=Object.fromEntries(new FormData(event.currentTarget));try{await createProspect({...values,sms_opt_in:Boolean(values.sms_opt_in),email_opt_in:true,marketing_opt_in:Boolean(values.marketing_opt_in)} as Partial<Prospect>);setProspectOpen(false);await reloadOperations()}catch(error){setResult(error instanceof Error?error.message:'Création impossible')}}}><div className="form-grid"><Field label="Entreprise"><input name="company" required/></Field><Field label="Contact"><input name="contact_name"/></Field><Field label="Téléphone"><input name="phone" type="tel" required/></Field><Field label="E-mail"><input name="email" type="email"/></Field><Field label="Besoin" wide><textarea name="need"/></Field><Field label="Source"><input name="source" defaultValue="Prospection commerciale"/></Field><Field label="Consentement" wide><div className="check-options"><label><input type="checkbox" name="sms_opt_in"/>SMS autorisé</label><label><input type="checkbox" name="marketing_opt_in"/>Marketing autorisé</label></div></Field></div><button className="primary-btn compact">Ajouter à la file</button></form></Modal>}
+    {activeCall&&<Modal title={`Compte rendu · ${activeCall.name}`} onClose={()=>setActiveCall(null)}><form className="entity-form" onSubmit={async event=>{event.preventDefault();const form=new FormData(event.currentTarget);try{await finishCall(activeCall.log.id,{status:'COMPLETED',outcome:String(form.get('outcome')),notes:String(form.get('notes')),duration_seconds:Number(form.get('duration_seconds')||0)});setActiveCall(null);await reloadOperations()}catch(error){setResult(error instanceof Error?error.message:'Enregistrement impossible')}}}><div className="call-live"><span className="call-live-icon"><Phone/></span><div><strong>{activeCall.log.phone}</strong><small>L’appel a été ouvert dans le téléphone. Enregistrez ensuite son résultat.</small></div></div><div className="form-grid"><Field label="Résultat"><select name="outcome"><option>INTÉRESSÉ</option><option>À RELANCER</option><option>RENDEZ-VOUS PRIS</option><option>INJOIGNABLE</option><option>NON INTÉRESSÉ</option><option>MAUVAIS NUMÉRO</option></select></Field><Field label="Durée (secondes)"><input name="duration_seconds" type="number" min="0" defaultValue="0"/></Field><Field label="Notes" wide><textarea name="notes" rows={5}/></Field></div><button className="primary-btn compact"><CheckCircle2/>Terminer et enregistrer</button></form></Modal>}
+    {result&&tool!=='MESSAGE'&&<p className="result-note standalone-result">{result}</p>}
+  </>;
 }
 
 function TeamPage({ admin }: { admin: boolean }) {

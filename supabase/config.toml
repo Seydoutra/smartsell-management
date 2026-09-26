@@ -9,3 +9,6 @@ verify_jwt = false
 
 [functions.task-reminder-action]
 verify_jwt = false
+
+[functions.campaign-dispatch]
+verify_jwt = false
