@@ -2974,7 +2974,7 @@ function Shell({
           <small>SMARTSELL APPS V3</small>
           {navGroups.map(group=>{const items=nav.filter(item=>group.pages.includes(item[0])&&visible(item));if(!items.length)return null;const active=items.some(item=>item[0]===currentPage),expanded=openGroups.includes(group.label)||active;return <section className={`nav-group ${expanded?'expanded':''}`} key={group.label}>
             <button className="nav-group-toggle" onClick={()=>setOpenGroups(groups=>groups.includes(group.label)?groups.filter(item=>item!==group.label):[...groups,group.label])}><span>{group.label}</span><ChevronRight/></button>
-            <AnimatePresence initial={false}>{expanded&&<motion.div className="nav-group-items" initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}} transition={{duration:.24,ease:'easeOut'}}>{items.map(([name,Icon])=><button key={name} className={currentPage===name?'active':''} onClick={()=>navigate(name)}><Icon/><span>{name}</span></button>)}</motion.div>}</AnimatePresence>
+            <AnimatePresence initial={false}>{expanded&&<motion.div className="nav-group-items" initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}} transition={{duration:.24,ease:'easeOut'}}>{items.map(([name,Icon])=><button key={name} className={currentPage===name?'active':''} onClick={()=>navigate(name)}><Icon/><span>{name==='Clients'?'CRM & clients':name}</span></button>)}</motion.div>}</AnimatePresence>
           </section>})}
         </nav>
         <div className="side-bottom">
