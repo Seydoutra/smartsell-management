@@ -12,6 +12,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   ClipboardList,
+  Download,
   FileCheck2,
   FileSpreadsheet,
   FileText,
@@ -56,6 +57,7 @@ import {
 } from "./AdvancedModulesV3";
 import {
   connectGoogleCalendar,
+  completePasswordChange,
   createClient,
   createCommercialDocument,
   createEditorialItem,
@@ -2520,7 +2522,9 @@ function CommunicationPage({ onBack }: { onBack: () => void }) {
                 message,
               });
               setResult(
-                `${r.testMode ? "Simulation" : "Envoi"} placé dans la file · ${r.recipientCount} destinataire(s).`,
+                r.testMode
+                  ? `Mode test : ${r.recipientCount} SMS dirigé(s) vers le numéro de test configuré.`
+                  : `Envoi accepté par Nimba SMS · ${r.recipientCount} destinataire(s)${r.providerStatus ? ` · statut ${r.providerStatus}` : ""}.`,
               );
             } catch (x) {
               setResult(x instanceof Error ? x.message : "Envoi impossible");
@@ -2870,7 +2874,9 @@ function Shell({
     ),
     [mobile, setMobile] = useState(false),
     [clientFilter, setClientFilter] = useState<string | null>(clientFromHash),
-    [access, setAccess] = useState<AccessControl | null>(null);
+    [access, setAccess] = useState<AccessControl | null>(null),
+    [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null),
+    [installed, setInstalled] = useState(() => window.matchMedia('(display-mode: standalone)').matches);
   const navigate = (next: Page, clientId: string | null = null) => {
     const hash = `#/${encodeURIComponent(next)}${clientId ? `?client=${encodeURIComponent(clientId)}` : ""}`;
     history.pushState({}, "", hash);
@@ -2898,6 +2904,17 @@ function Shell({
   useEffect(() => {
     trackActivity("Page consultée", page, `Consultation de ${page}`);
   }, [page]);
+  useEffect(() => {
+    const ready = (event: Event) => { event.preventDefault(); setInstallPrompt(event as BeforeInstallPromptEvent); };
+    const done = () => { setInstalled(true); setInstallPrompt(null); };
+    window.addEventListener('beforeinstallprompt', ready);
+    window.addEventListener('appinstalled', done);
+    return () => { window.removeEventListener('beforeinstallprompt', ready); window.removeEventListener('appinstalled', done); };
+  }, []);
+  const installApp = async () => {
+    if (installPrompt) { await installPrompt.prompt(); const choice = await installPrompt.userChoice; if (choice.outcome === 'accepted') setInstallPrompt(null); return; }
+    alert('Dans Chrome ou Edge, ouvrez le menu du navigateur puis choisissez « Installer SmartSell Apps ». Sur iPhone/iPad : Partager → Sur l’écran d’accueil.');
+  };
   const role = profile.role as Role,
     admin = ["SUPER_ADMIN", "ADMIN"].includes(role);
   const visible = (n: [Page, typeof LayoutDashboard, Permission?]) =>
@@ -2915,7 +2932,7 @@ function Shell({
           </button>
         </div>
         <nav>
-          <small>PRODUCTION V3</small>
+          <small>SMARTSELL APPS V3</small>
           {nav.filter(visible).map(([name, Icon]) => (
             <button
               key={name}
@@ -2951,9 +2968,10 @@ function Shell({
             <Menu />
           </button>
           <div className="production-badge">
-            PRODUCTION V3 <i />
+            SMARTSELL APPS V3 <i />
           </div>
           <div className="top-actions">
+            {!installed&&<button className="install-app-btn" onClick={()=>void installApp()} title="Installer SmartSell Apps sur cet appareil"><Download/><span>Installer l’application</span></button>}
             <button
               className="icon-btn"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -3041,6 +3059,7 @@ export default function ProductionAppV2() {
       </div>
     );
   if (!profile) return <Login onSuccess={refresh} />;
+  if (profile.must_change_password) return <PasswordChangeGate profile={profile} onComplete={refresh} />;
   return (
     <Shell
       profile={profile}
@@ -3050,4 +3069,43 @@ export default function ProductionAppV2() {
       }}
     />
   );
+}
+
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+};
+
+function PasswordChangeGate({ profile, onComplete }: { profile: Profile; onComplete: () => void }) {
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  return <main className="login-shell">
+    <section className="login-brand">
+      <img src={companyProfile.logo_light} className="login-logo" alt="SmartSell" />
+      <div className="brand-orbit"><span /></div>
+      <div className="login-manifesto"><p>Première connexion</p><h1>PROTÉGEZ.<br />VOTRE.<br /><em>COMPTE.</em></h1></div>
+    </section>
+    <section className="login-panel">
+      <form className="login-card" onSubmit={async (event) => {
+        event.preventDefault();
+        setError("");
+        const form = new FormData(event.currentTarget);
+        const password = String(form.get("password"));
+        const confirmation = String(form.get("confirmation"));
+        if (password !== confirmation) { setError("Les deux mots de passe ne correspondent pas."); return; }
+        setBusy(true);
+        try { await completePasswordChange(password); onComplete(); }
+        catch (reason) { setError(reason instanceof Error ? reason.message : "Modification impossible"); }
+        finally { setBusy(false); }
+      }}>
+        <div className="eyebrow"><i /> CHANGEMENT OBLIGATOIRE</div>
+        <h2>Bienvenue, {profile.full_name.split(" ")[0]}.</h2>
+        <p className="muted">Le mot de passe reçu par e-mail ou WhatsApp est temporaire. Choisissez maintenant votre mot de passe personnel.</p>
+        <label>Nouveau mot de passe<input name="password" type="password" minLength={10} autoComplete="new-password" required /><small>10 caractères minimum, avec majuscule, minuscule et chiffre.</small></label>
+        <label>Confirmer le mot de passe<input name="confirmation" type="password" minLength={10} autoComplete="new-password" required /></label>
+        {error && <p className="form-error">{error}</p>}
+        <button disabled={busy} className="primary-btn">{busy ? "Sécurisation…" : "Enregistrer et continuer"} <span>→</span></button>
+      </form>
+    </section>
+  </main>;
 }
