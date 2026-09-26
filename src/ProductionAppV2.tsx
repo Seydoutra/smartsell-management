@@ -2525,6 +2525,13 @@ function CommunicationPage({ onBack }: { onBack: () => void }) {
     [selectedContacts, setSelectedContacts] = useState<string[]>([]),
     [sheetUrl, setSheetUrl] = useState(""),
     [importBusy, setImportBusy] = useState(false);
+  type PhoneContact = { name?: string[]; tel?: string[]; email?: string[] };
+  type ContactsManager = {
+    getProperties: () => Promise<string[]>;
+    select: (properties: string[], options: { multiple: boolean }) => Promise<PhoneContact[]>;
+  };
+  const contactsManager = (navigator as Navigator & { contacts?: ContactsManager }).contacts;
+  const phoneDirectoryAvailable = Boolean(contactsManager && window.isSecureContext);
   const availableContacts = contacts.filter((contact) => channel === "SMS" ? contact.phone : contact.email);
   const mergeContacts = (next: ImportedContact[]) => {
     setContacts((current) => {
@@ -2551,6 +2558,46 @@ function CommunicationPage({ onBack }: { onBack: () => void }) {
     } catch (error) { setResult(error instanceof Error ? error.message : "Import Google Sheets impossible"); }
     finally { setImportBusy(false); }
   };
+  const importPhoneDirectory = async () => {
+    if (!contactsManager || !window.isSecureContext) {
+      setResult("Le répertoire direct n’est pas disponible dans ce navigateur. Ouvrez SmartSell avec Chrome sur Android, ou utilisez l’import CSV/Excel.");
+      return;
+    }
+    setImportBusy(true); setResult("");
+    try {
+      const supported = await contactsManager.getProperties();
+      const properties = ["name", "tel", "email"].filter((property) => supported.includes(property));
+      const selected = await contactsManager.select(properties, { multiple: true });
+      const imported = selected.flatMap((contact, contactIndex) => {
+        const name = contact.name?.[0] || "Contact téléphone";
+        const phones = (contact.tel || []).map((phone) => phone.trim()).filter(Boolean);
+        const emails = (contact.email || []).map((email) => email.trim().toLowerCase()).filter(Boolean);
+        const count = Math.max(phones.length, emails.length, 1);
+        return Array.from({ length: count }, (_, index): ImportedContact => ({
+          id: `phone-${Date.now()}-${contactIndex}-${index}`,
+          name,
+          phone: phones[index] || (index === 0 ? phones[0] || "" : ""),
+          email: emails[index] || (index === 0 ? emails[0] || "" : ""),
+          company: "Répertoire téléphone",
+          tags: "Téléphone",
+        })).filter((contact) => contact.phone || contact.email);
+      });
+      const recipients = imported
+        .map((contact) => channel === "SMS" ? contact.phone : contact.email)
+        .filter(Boolean);
+      if (!recipients.length) {
+        setResult(channel === "SMS" ? "Les contacts choisis ne contiennent aucun numéro de téléphone." : "Les contacts choisis ne contiennent aucune adresse e-mail.");
+        return;
+      }
+      mergeContacts(imported);
+      const existing = to.split(/[;,\n]/).map((value) => value.trim()).filter(Boolean);
+      setTo(Array.from(new Set([...existing, ...recipients])).join("\n"));
+      setResult(`${recipients.length} destinataire(s) du téléphone ajouté(s) au message.`);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") setResult("Sélection du répertoire annulée.");
+      else setResult(error instanceof Error ? error.message : "Impossible d’ouvrir le répertoire du téléphone.");
+    } finally { setImportBusy(false); }
+  };
   const addSelectedRecipients = () => {
     const recipients = contacts.filter((contact) => selectedContacts.includes(contact.id)).map((contact) => channel === "SMS" ? contact.phone : contact.email).filter(Boolean);
     const existing = to.split(/[;,\n]/).map((value) => value.trim()).filter(Boolean);
@@ -2565,6 +2612,12 @@ function CommunicationPage({ onBack }: { onBack: () => void }) {
       ><button type="button" className="ghost-action" onClick={onBack}><ArrowLeft/>Retour</button></Header>
       <section className="panel contact-import-panel">
         <div className="contact-import-head"><div><span className="eyebrow"><i/> CARNET DE CONTACTS</span><h2>Importer des destinataires</h2><p>Colonnes reconnues : Nom complet, Téléphone, E-mail, Entreprise et Tags.</p></div><div className="template-actions"><a className="ghost-action" href={`${import.meta.env.BASE_URL}templates/Modele-import-contacts-Smartsell.xlsx`} download><FileSpreadsheet/>Modèle Excel</a><a className="ghost-action" href={`${import.meta.env.BASE_URL}templates/modele-contacts-smartsell.csv`} download>Modèle CSV</a></div></div>
+        <div className="phone-directory-row">
+          <button type="button" className="phone-directory-button" disabled={importBusy} onClick={()=>void importPhoneDirectory()}>
+            <Users/><span><strong>Répertoire du téléphone</strong><small>Choisir directement un ou plusieurs contacts</small></span><ChevronRight/>
+          </button>
+          <small className={phoneDirectoryAvailable ? "directory-ready" : "directory-fallback"}>{phoneDirectoryAvailable ? "Disponible sur cet appareil" : "Selon le navigateur · Chrome Android recommandé"}</small>
+        </div>
         <div className="contact-import-tools">
           <label className="upload-card"><Upload/><span>{importBusy ? "Import en cours…" : "Importer CSV ou Excel"}</span><small>.csv ou .xlsx</small><input type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={importBusy} onChange={(event)=>{const file=event.target.files?.[0];if(file)void importFile(file);event.currentTarget.value=""}}/></label>
           <div className="google-sheet-import"><FileSpreadsheet/><div><strong>Google Sheets</strong><small>Collez le lien d’une feuille partagée en lecture.</small></div><input value={sheetUrl} onChange={(event)=>setSheetUrl(event.target.value)} placeholder="https://docs.google.com/spreadsheets/d/…"/><button type="button" className="primary-btn compact" disabled={!sheetUrl||importBusy} onClick={()=>void importGoogleSheet()}>Importer</button></div>
