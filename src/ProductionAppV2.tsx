@@ -1231,6 +1231,8 @@ function TasksPage({
     [calendarConnection, setCalendarConnection] =
       useState<CalendarConnection | null>(null),
     [calendarBusy, setCalendarBusy] = useState(false),
+    [view,setView]=useState<'LIST'|'KANBAN'>('LIST'),
+    [dragId,setDragId]=useState<string|null>(null),
     [error, setError] = useState("");
   const load = () => listTasks().then(setRows).catch((e) => setError(e.message));
   const loadReferences = () => {
@@ -1318,7 +1320,8 @@ function TasksPage({
       )}
       {planning && <div className="smart-reminder-note"><Bell/><div><strong>3 rappels SMS intelligents</strong><span>Ils sont répartis à 50 %, 80 % et 95 % du délai disponible. Le lien du SMS permet de confirmer la tâche et d’arrêter immédiatement les rappels suivants.</span></div></div>}
       <ErrorBar value={error} />
-      <div className="records panel">
+      {!planning&&<div className="kanban-toolbar"><button className={view==='LIST'?'active':''} onClick={()=>setView('LIST')}>Liste</button><button className={view==='KANBAN'?'active':''} onClick={()=>setView('KANBAN')}>Tableau Kanban</button><span>Déplacez une carte entre les colonnes pour mettre à jour son statut.</span></div>}
+      {view==='KANBAN'&&!planning?<section className="kanban-board">{(['A_FAIRE','EN_COURS','EN_ATTENTE','TERMINE'] as const).map(status=><div className="kanban-column" key={status} onDragOver={event=>event.preventDefault()} onDrop={async()=>{if(!dragId||!rights.update)return;try{await updateTask(dragId,{status});setDragId(null);await load()}catch(e){setError(e instanceof Error?e.message:'Déplacement impossible')}}}><header><strong>{label(status)}</strong><span>{displayedRows.filter(row=>row.status===status).length}</span></header>{displayedRows.filter(row=>row.status===status).map(task=><article className="kanban-card" key={task.id} draggable={rights.update} onDragStart={()=>setDragId(task.id)} onClick={()=>{setSelected(task);loadReferences()}}><strong>{task.title}</strong><small>{task.projects?.name||'Sans projet'}</small><small>{task.task_assignees?.map(member=>member.profiles?.full_name).filter(Boolean).join(', ')||task.profiles?.full_name||'Non assignée'}</small><footer><span className={`status ${task.priority==='URGENTE'?'danger':''}`}>{label(task.priority)}</span><time>{fmt(task.due_at)}</time></footer></article>)}</div>)}</section>:<div className="records panel">
         {!displayedRows.length ? (
           <Empty name="tâche" onAdd={rights.create ? openCreator : undefined} />
         ) : (
@@ -1359,7 +1362,7 @@ function TasksPage({
             </article>
           ))
         )}
-      </div>
+      </div>}
       <AnimatePresence>
         {open && (
           <Modal
