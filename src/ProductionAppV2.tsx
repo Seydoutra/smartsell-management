@@ -1090,6 +1090,8 @@ function ProjectsPage({ rights, clientFilter, onClearFilter }: { rights: CrudRig
     [profiles, setProfiles] = useState<Profile[]>([]),
     [open, setOpen] = useState(false),
     [selected, setSelected] = useState<string | null>(null),
+    [view, setView] = useState<'BOARD'|'LIST'>('BOARD'),
+    [dragId, setDragId] = useState<string | null>(null),
     [error, setError] = useState("");
   const load = () => listProjects().then(setRows).catch((e) => setError(e.message));
   const loadReferences = () => {
@@ -1110,10 +1112,15 @@ function ProjectsPage({ rights, clientFilter, onClearFilter }: { rights: CrudRig
         copy="Suivi détaillé, équipe, progression, tâches et facturation."
         onAdd={rights.create ? openCreator : undefined}
         add="Nouveau projet"
-      />
+      >
+        <div className="segmented">
+          <button className={view==='BOARD'?'active':''} onClick={()=>setView('BOARD')}>Tableau</button>
+          <button className={view==='LIST'?'active':''} onClick={()=>setView('LIST')}>Liste</button>
+        </div>
+      </Header>
       {clientFilter && <div className="filter-banner"><span>Affichage des projets du client sélectionné.</span><button type="button" onClick={onClearFilter}>Afficher tous les projets</button></div>}
       <ErrorBar value={error} />
-      <div className="records panel">
+      {view==='BOARD' ? <section className="kanban-board project-kanban-board">{(['PLANIFIE','EN_COURS','EN_ATTENTE','TERMINE'] as const).map(status=><div className="kanban-column" key={status} onDragOver={event=>event.preventDefault()} onDrop={async()=>{if(!dragId||!rights.update)return;try{await updateProject(dragId,{status});setDragId(null);await load()}catch(e){setError(e instanceof Error?e.message:'Déplacement impossible')}}}><header><strong>{label(status)}</strong><span>{displayedRows.filter(row=>row.status===status).length}</span></header>{displayedRows.filter(row=>row.status===status).map(project=><article className="kanban-card project-kanban-card" key={project.id} draggable={rights.update} onDragStart={()=>setDragId(project.id)} onClick={()=>{setSelected(project.id);loadReferences()}}><div className="record-main"><span className="record-avatar">PR</span><div><strong>{project.name}</strong><small>{project.clients?.name||'Sans client'}</small></div></div><small>{project.project_members?.map(member=>member.profiles?.full_name).filter(Boolean).join(', ')||project.profiles?.full_name||'Sans équipe'}</small><footer><span className="status">{label(project.priority)}</span><time>{project.progress}% · {fmt(project.ends_on)}</time></footer><i className="mini-progress"><b style={{width:`${project.progress}%`}}/></i></article>)}</div>)}</section> : <div className="records panel">
         {!displayedRows.length ? (
           <Empty name="projet" onAdd={rights.create ? openCreator : undefined} />
         ) : (
@@ -1146,7 +1153,7 @@ function ProjectsPage({ rights, clientFilter, onClearFilter }: { rights: CrudRig
             </article>
           ))
         )}
-      </div>
+      </div>}
       <AnimatePresence>
         {open && (
           <Modal title="Créer un projet" onClose={() => setOpen(false)}>
