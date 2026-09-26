@@ -4,6 +4,19 @@ import type { DeliveryResult } from "../_shared/welcome.ts";
 
 const roles = new Set(["ADMIN", "MANAGER", "CHEF_DE_PROJET", "COMMERCIAL", "COMMUNITY_MANAGER", "GRAPHISTE", "VIDEASTE", "PHOTOGRAPHE", "DEVELOPPEUR", "COMPTABLE", "COLLABORATEUR"]);
 const rolePriority = ["SUPER_ADMIN", "ADMIN", "MANAGER", "CHEF_DE_PROJET", "COMMERCIAL", "COMMUNITY_MANAGER", "COMPTABLE", "DEVELOPPEUR", "GRAPHISTE", "VIDEASTE", "PHOTOGRAPHE", "COLLABORATEUR"];
+const modulesByRole: Record<string,string[]> = {
+  ADMIN:["Clients","Projets","Tâches","Planning","Éditorial","Services","Fournisseurs","Facturation","Documents","Comptabilité","Matériel","Communication","Équipe","RH","Rapports","Portail client","Assistant IA"],
+  MANAGER:["Clients","Projets","Tâches","Planning","Éditorial","Services","Fournisseurs","Facturation","Documents","Comptabilité","Matériel","Communication","Rapports","Assistant IA"],
+  COMPTABLE:["Clients","Services","Fournisseurs","Facturation","Documents","Comptabilité","Rapports","Assistant IA"],
+  COMMERCIAL:["Clients","Projets","Tâches","Planning","Facturation","Communication","Radar commercial","Assistant IA"],
+  COMMUNITY_MANAGER:["Clients","Projets","Tâches","Planning","Éditorial","Communication","Assistant IA"],
+  CHEF_DE_PROJET:["Clients","Projets","Tâches","Planning","Éditorial","Matériel","Assistant IA"],
+  GRAPHISTE:["Projets","Tâches","Planning","Éditorial","Matériel","Assistant IA"],
+  VIDEASTE:["Projets","Tâches","Planning","Éditorial","Matériel","Assistant IA"],
+  PHOTOGRAPHE:["Projets","Tâches","Planning","Éditorial","Matériel","Assistant IA"],
+  DEVELOPPEUR:["Projets","Tâches","Planning","Assistant IA"],
+  COLLABORATEUR:["Projets","Tâches","Planning","Assistant IA"],
+};
 
 Deno.serve(async (request) => {
   const preflight = handleOptions(request); if (preflight) return preflight;
@@ -28,6 +41,12 @@ Deno.serve(async (request) => {
     if (profileError) {
       await admin.auth.admin.deleteUser(data.user.id);
       return json(request, { error: `Profil non créé : ${profileError.message}` }, 400);
+    }
+    const allowedModules = [...new Set(selectedRoles.flatMap((selectedRole) => modulesByRole[selectedRole] || []))];
+    const { error: accessError } = await admin.from("user_access_controls").upsert({ profile_id:data.user.id, allowed_modules:allowedModules, denied_permissions:[], can_initiate_calls:selectedRoles.includes("COMMERCIAL") || selectedRoles.includes("ADMIN"), max_sms_per_day:selectedRoles.includes("COMMERCIAL")?100:30, max_emails_per_day:selectedRoles.includes("COMPTABLE")?100:250, max_calls_per_day:selectedRoles.includes("COMMERCIAL")?40:15, max_export_rows:selectedRoles.includes("COMPTABLE")?5000:2000, max_approval_amount:selectedRoles.includes("COMPTABLE")?25000000:0, updated_by:user.id });
+    if (accessError) {
+      await admin.auth.admin.deleteUser(data.user.id);
+      return json(request, { error: `Droits non créés : ${accessError.message}` }, 400);
     }
     const loginUrl = Deno.env.get("APP_LOGIN_URL") || "https://seydoutra.github.io/smartsell-management/";
     const welcome = { name, email, phone: body.phone, temporaryPassword: body.password, loginUrl };

@@ -47,6 +47,7 @@ import BetaSandboxApp from "./BetaSandboxApp";
 import CommunicationHub from "./CommunicationHub";
 import { contactsFromCsv, contactsFromFile, googleSheetCsvUrl, ImportedContact } from "./lib/contactImport";
 import { can, Permission, Role } from "./lib/permissions";
+import { isActionAllowed, isModuleAllowed } from "./lib/access";
 import {
   endSession,
   pulseSession,
@@ -75,6 +76,7 @@ import {
   createCommercialDocument,
   createEditorialItem,
   createEquipment,
+  createEquipmentCategory,
   createExpense,
   createInvoice,
   createProject,
@@ -85,6 +87,7 @@ import {
   currentSession,
   deleteClient,
   deleteEditorialItem,
+  deleteEquipment,
   deleteProject,
   deleteService,
   deleteTask,
@@ -106,6 +109,8 @@ import {
   listCommercialDocuments,
   listEditorialItems,
   listEquipment,
+  listEquipmentCategories,
+  listEquipmentMovements,
   listExpenses,
   listInvoices,
   listPayments,
@@ -118,6 +123,7 @@ import {
   listUserSessions,
   onAuthChange,
   recordPayment,
+  recordEquipmentMovement,
   requestPasswordReset,
   sendCommunication,
   signIn,
@@ -127,6 +133,7 @@ import {
   updateCommercialDocument,
   updateEditorialItem,
   updateExpenseStatus,
+  updateEquipment,
   updateProfile,
   updateProject,
   updateService,
@@ -147,6 +154,8 @@ import type {
   ContactGroup,
   EditorialItem,
   Equipment,
+  EquipmentCategory,
+  EquipmentMovement,
   Expense,
   Invoice,
   InvoiceItem,
@@ -208,6 +217,14 @@ const nav: [Page, typeof LayoutDashboard, Permission?][] = [
   ["Autopilot IA", Bot],
   ["Portail client", ShieldCheck, "users.manage"],
   ["Assistant IA", MessageSquareText],
+];
+const navGroups:{label:string;pages:Page[]}[]=[
+  {label:'Pilotage',pages:['Dashboard']},
+  {label:'Production & clients',pages:['Clients','Projets','Tâches','Planning','Éditorial']},
+  {label:'Finance & achats',pages:['Services','Fournisseurs','Facturation','Documents','Comptabilité','Matériel']},
+  {label:'Communication',pages:['Communication']},
+  {label:'Administration',pages:['Équipe','RH','Rapports','Portail client']},
+  {label:'Intelligence artificielle',pages:['Jumeau numérique','Radar commercial','Studio campagnes IA','Autopilot IA','Assistant IA']},
 ];
 const pageNames = new Set<Page>(nav.map(([name]) => name));
 const pageFromHash = (): Page => {
@@ -406,6 +423,15 @@ function Field({
     </label>
   );
 }
+function ProfileChecklist({ profiles, name, selected=[] }: { profiles:Profile[]; name:string; selected?:string[] }) {
+  return <div className="check-options profile-checklist">
+    {profiles.filter(profile=>profile.active).map(profile=><label key={profile.id}>
+      <input type="checkbox" name={name} value={profile.id} defaultChecked={selected.includes(profile.id)}/>
+      <span>{profile.full_name}</span>
+    </label>)}
+    {!profiles.some(profile=>profile.active)&&<small>Aucun collaborateur actif disponible.</small>}
+  </div>;
+}
 function Header({
   title,
   copy,
@@ -489,7 +515,27 @@ function Danger({
   );
 }
 
-function Dashboard({ profile, onNavigate }: { profile: Profile; onNavigate:(page:Page,clientId?:string|null)=>void }) {
+function TrendCurve({rows,showRevenue,showCost}:{rows:Array<{label:string;revenue:number;cost:number}>;showRevenue:boolean;showCost:boolean}) {
+  const max=Math.max(1,...rows.flatMap(row=>[row.revenue,row.cost]));
+  const points=(key:'revenue'|'cost')=>rows.map((row,index)=>`${8+index*(84/Math.max(1,rows.length-1))},${88-(row[key]/max)*70}`).join(' ');
+  return <div className="trend-curve" aria-label="Évolution financière animée">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img">
+      <defs><linearGradient id="curveGlow" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#6a2b85"/><stop offset="1" stopColor="#b66bd2"/></linearGradient></defs>
+      {[22,44,66,88].map(value=><line key={value} x1="5" y1={value} x2="95" y2={value} className="curve-grid"/>)}
+      {showRevenue&&<motion.polyline points={points('revenue')} className="curve-line revenue" initial={{pathLength:0,opacity:0}} animate={{pathLength:1,opacity:1}} transition={{duration:1.4,ease:'easeOut'}}/>}
+      {showCost&&<motion.polyline points={points('cost')} className="curve-line cost" initial={{pathLength:0,opacity:0}} animate={{pathLength:1,opacity:1}} transition={{duration:1.4,delay:.18,ease:'easeOut'}}/>}
+    </svg>
+    <div className="curve-labels">{rows.map(row=><span key={row.label}>{row.label}</span>)}</div>
+  </div>;
+}
+
+function Dashboard({ profile, access, accessLoaded, onNavigate }: { profile: Profile; access:AccessControl|null; accessLoaded:boolean; onNavigate:(page:Page,clientId?:string|null)=>void }) {
+  const roles=(profile.roles?.length?profile.roles:[profile.role]) as Role[];
+  const allowed=(action:string)=>isActionAllowed(roles,access,accessLoaded,action);
+  const canClients=allowed('clients.view'), canProjects=allowed('projects.view'), canTasks=allowed('tasks.view'),
+    canInvoices=allowed('invoices.view'), canAccounting=allowed('accounting.view'), canSuppliers=allowed('suppliers.view'),
+    canTeam=allowed('team.view'), canFinance=canInvoices||canAccounting;
+  const canIntelligence=roles.some(role=>['SUPER_ADMIN','ADMIN','MANAGER'].includes(role))&&canClients&&canProjects&&canTasks&&canInvoices&&canAccounting;
   const [c, setC] = useState<Client[]>([]),
     [p, setP] = useState<Project[]>([]),
     [i, setI] = useState<Invoice[]>([]),
@@ -504,18 +550,18 @@ function Dashboard({ profile, onNavigate }: { profile: Profile; onNavigate:(page
     [nextActions,setNextActions]=useState<NextBestAction[]>([]),
     [intelligenceBusy,setIntelligenceBusy]=useState(false),
     [intelligenceError,setIntelligenceError]=useState('');
-  const loadIntelligence=async()=>{setIntelligenceBusy(true);setIntelligenceError('');try{const result=await generateAgencyIntelligence();setBriefing(result.briefing);setNextActions(result.actions)}catch(error){setIntelligenceError(error instanceof Error?error.message:'Briefing indisponible')}finally{setIntelligenceBusy(false)}};
+  const loadIntelligence=async()=>{if(!canIntelligence)return;setIntelligenceBusy(true);setIntelligenceError('');try{const result=await generateAgencyIntelligence();setBriefing(result.briefing);setNextActions(result.actions)}catch(error){setIntelligenceError(error instanceof Error?error.message:'Briefing indisponible')}finally{setIntelligenceBusy(false)}};
   useEffect(() => {
     Promise.all([
-      listClients(),
-      listProjects(),
-      listInvoices(),
-      listTasks(),
-      listPayments(),
-      listExpenses(),
-      listSuppliers(),
-      listProfiles(),
-      listUserSessions(),
+      canClients?listClients():Promise.resolve([]),
+      canProjects?listProjects():Promise.resolve([]),
+      canInvoices?listInvoices():Promise.resolve([]),
+      canTasks?listTasks():Promise.resolve([]),
+      canAccounting?listPayments():Promise.resolve([]),
+      canAccounting?listExpenses():Promise.resolve([]),
+      canSuppliers?listSuppliers():Promise.resolve([]),
+      canTeam?listProfiles():Promise.resolve([]),
+      canTeam?listUserSessions():Promise.resolve([]),
     ]).then(([a, b, d, e, f, g, h, j, k]) => {
       setC(a);
       setP(b);
@@ -527,8 +573,8 @@ function Dashboard({ profile, onNavigate }: { profile: Profile; onNavigate:(page
       setTeam(j);
       setSessions(k);
     }).finally(()=>setLoading(false));
-    const roles=profile.roles?.length?profile.roles:[profile.role];if(roles.some(role=>['SUPER_ADMIN','ADMIN','MANAGER'].includes(role)))void loadIntelligence();
-  }, []);
+    if(canIntelligence)void loadIntelligence();
+  }, [accessLoaded,access?.allowed_modules.join('|'),access?.denied_permissions.join('|')]);
   const billed = i.reduce((sum, row) => sum + Number(row.total || 0), 0);
   const collected = payments.reduce((sum, row) => sum + Number(row.amount || 0), 0);
   const spent = expenses.reduce((sum, row) => sum + Number(row.amount || 0), 0);
@@ -548,40 +594,39 @@ function Dashboard({ profile, onNavigate }: { profile: Profile; onNavigate:(page
   const chartMax = Math.max(1, ...monthSeries.flatMap((row) => [row.revenue, row.cost]));
   const topClients = useMemo(() => c.map((client) => ({ client, total: i.filter((row) => row.client_id === client.id).reduce((sum, row) => sum + Number(row.total || 0), 0) })).sort((a, b) => b.total - a.total).slice(0, 4), [c, i]);
   const metrics = [
-    { label: "Facturé", value: money(billed), copy: `${i.length} facture(s)`, icon: ReceiptText, tone: "purple" },
-    { label: "Encaissé", value: money(collected), copy: `${payments.length} paiement(s)`, icon: WalletCards, tone: "green" },
-    { label: "À recevoir", value: money(receivables), copy: `${overdue.length} facture(s) en retard`, icon: CircleDollarSign, tone: "yellow" },
-    { label: "Dépenses", value: money(spent), copy: `Solde ${money(collected - spent)}`, icon: Activity, tone: "red" },
-    { label: "Clients", value: c.length, copy: `${c.filter((row) => row.status === "ACTIVE").length} actifs`, icon: Users, tone: "blue" },
-    { label: "Projets", value: activeProjects.length, copy: `${p.length} au total`, icon: BriefcaseBusiness, tone: "purple" },
-    { label: "Tâches", value: openTasks.length, copy: `${completion}% terminées`, icon: ClipboardList, tone: "green" },
-    { label: "Fournisseurs", value: suppliers.length, copy: `${suppliers.filter((row) => row.status === "ACTIVE").length} actifs`, icon: Boxes, tone: "yellow" },
+    ...(canInvoices?[{ label: "Facturé", value: money(billed), copy: `${i.length} facture(s)`, icon: ReceiptText, tone: "purple" },{ label: "À recevoir", value: money(receivables), copy: `${overdue.length} facture(s) en retard`, icon: CircleDollarSign, tone: "yellow" }]:[]),
+    ...(canAccounting?[{ label: "Encaissé", value: money(collected), copy: `${payments.length} paiement(s)`, icon: WalletCards, tone: "green" },{ label: "Dépenses", value: money(spent), copy: `Solde ${money(collected - spent)}`, icon: Activity, tone: "red" }]:[]),
+    ...(canClients?[{ label: "Clients", value: c.length, copy: `${c.filter((row) => row.status === "ACTIVE").length} actifs`, icon: Users, tone: "blue" }]:[]),
+    ...(canProjects?[{ label: "Projets", value: activeProjects.length, copy: `${p.length} au total`, icon: BriefcaseBusiness, tone: "purple" }]:[]),
+    ...(canTasks?[{ label: "Tâches", value: openTasks.length, copy: `${completion}% terminées`, icon: ClipboardList, tone: "green" }]:[]),
+    ...(canSuppliers?[{ label: "Fournisseurs", value: suppliers.length, copy: `${suppliers.filter((row) => row.status === "ACTIVE").length} actifs`, icon: Boxes, tone: "yellow" }]:[]),
   ];
   return (
     <div className={`command-dashboard ${loading ? "is-loading" : ""}`}>
       <motion.section className="command-hero" initial={{opacity:0,y:14}} animate={{opacity:1,y:0}} transition={{duration:.45}}>
         <div className="command-grid"/><div className="command-glow glow-one"/><div className="command-glow glow-two"/>
-        <div className="command-copy"><span className="eyebrow"><i/> CENTRE DE COMMANDE EN TEMPS RÉEL</span><h1>Bonjour, {profile.full_name.split(" ")[0]}.</h1><p>Une vision instantanée de la finance, des opérations, des clients et de l’équipe.</p><div className="live-chip"><i/> Données synchronisées avec Supabase</div></div>
-        <div className="command-orbit"><div className="orbit-ring ring-a"/><div className="orbit-ring ring-b"/><div className="orbit-core"><strong>{money(collected-spent)}</strong><span>trésorerie nette</span></div></div>
+        <div className="command-copy"><span className="eyebrow"><i/> VOTRE ESPACE AUTORISÉ</span><h1>Bonjour, {profile.full_name.split(" ")[0]}.</h1><p>Ce tableau de bord affiche uniquement les données correspondant à vos droits.</p><div className="live-chip"><i/> Accès contrôlé par Supabase</div></div>
+        <div className="command-orbit"><div className="orbit-ring ring-a"/><div className="orbit-ring ring-b"/><div className="orbit-core"><strong>{canAccounting?money(collected-spent):metrics.length}</strong><span>{canAccounting?'trésorerie nette':'indicateurs autorisés'}</span></div></div>
       </motion.section>
-      <section className="agency-intelligence">
+      {canIntelligence&&<section className="agency-intelligence">
         <motion.article className="panel agency-briefing" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}}>
           <div className="agency-ai-head"><div className="ai-orb compact"><Sparkles/></div><div><span className="eyebrow"><i/> DIRECTEUR IA</span><h2>{briefing?.greeting||'Votre briefing stratégique'}</h2></div><button className="ghost-action" disabled={intelligenceBusy} onClick={()=>void loadIntelligence()}>{intelligenceBusy?'Analyse…':'Actualiser'}</button></div>
           {intelligenceError?<div className="error-banner">{intelligenceError}</div>:<><p className="briefing-summary">{briefing?.summary||'Analyse des opérations en cours…'}</p><div className="briefing-signals"><div><strong>Opportunités</strong>{(briefing?.opportunities||[]).map((item,index)=><span key={index}>↗ {item}</span>)}</div><div><strong>Points de vigilance</strong>{(briefing?.watchouts||[]).map((item,index)=><span key={index}>• {item}</span>)}</div></div></>}
         </motion.article>
         <motion.article className="panel next-actions" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} transition={{delay:.08}}><div className="command-panel-head"><div><span className="eyebrow"><i/> NEXT BEST ACTION</span><h2>Les décisions recommandées</h2></div><b>{nextActions.length}</b></div><div className="next-action-list">{nextActions.length?nextActions.map(action=><div key={action.id} className={`next-action priority-${action.priority.toLowerCase()}`}><span className="action-priority">{action.priority}</span><div><strong>{action.title}</strong><small>{action.reason}</small></div><div className="next-action-buttons"><button className="primary-btn compact" onClick={async()=>{await executeNextBestAction(action);setNextActions(rows=>rows.filter(row=>row.id!==action.id));onNavigate(action.target_page as Page,action.client_id)}}>{action.action_type==='COMPLETE_TASK'?'Confirmer terminée':'Ouvrir'}</button><button className="icon-btn" title="Ignorer" onClick={async()=>{await updateNextBestAction(action.id,'IGNOREE');setNextActions(rows=>rows.filter(row=>row.id!==action.id))}}><X/></button></div></div>):<p className="muted">Aucune action urgente. Actualisez le briefing lorsque les données changent.</p>}</div></motion.article>
-      </section>
+      </section>}
       <section className="innovation-launchpad">
-        <button onClick={()=>onNavigate("Jumeau numérique")}><Gauge/><span><small>PRÉVOIR</small><strong>Jumeau numérique</strong><em>Simuler trésorerie, marge et capacité.</em></span><ChevronRight/></button>
-        <button onClick={()=>onNavigate("Radar commercial")}><Target/><span><small>DÉTECTER</small><strong>Radar commercial</strong><em>Prioriser clients et prospects.</em></span><ChevronRight/></button>
-        <button onClick={()=>onNavigate("Studio campagnes IA")}><Megaphone/><span><small>ACCÉLÉRER</small><strong>Studio campagnes IA</strong><em>Concevoir, valider puis diffuser.</em></span><ChevronRight/></button>
+        {canAccounting&&<button onClick={()=>onNavigate("Jumeau numérique")}><Gauge/><span><small>PRÉVOIR</small><strong>Jumeau numérique</strong><em>Simuler trésorerie, marge et capacité.</em></span><ChevronRight/></button>}
+        {canClients&&<button onClick={()=>onNavigate("Radar commercial")}><Target/><span><small>DÉTECTER</small><strong>Radar commercial</strong><em>Prioriser clients et prospects.</em></span><ChevronRight/></button>}
+        {allowed('communication.view')&&<button onClick={()=>onNavigate("Studio campagnes IA")}><Megaphone/><span><small>ACCÉLÉRER</small><strong>Studio campagnes IA</strong><em>Concevoir, valider puis diffuser.</em></span><ChevronRight/></button>}
       </section>
+      {!metrics.length&&<div className="panel feature-ready"><ShieldCheck/><div><h2>Tableau de bord protégé</h2><p>Aucune donnée métier ne vous est encore attribuée. Le Super Admin peut activer vos modules dans Équipe et droits.</p></div></div>}
       <section className="command-metrics">{metrics.map((metric,index)=><motion.article className={`command-metric tone-${metric.tone}`} key={metric.label} initial={{opacity:0,y:18}} animate={{opacity:1,y:0}} transition={{delay:.04*index,duration:.35}} whileHover={{y:-4}}><div className="metric-icon"><metric.icon/></div><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.copy}</small><div className="metric-scan"/></motion.article>)}</section>
       <section className="command-panels">
-        <motion.article className="panel finance-radar" initial={{opacity:0,x:-16}} animate={{opacity:1,x:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> FINANCE</span><h2>Flux des 6 derniers mois</h2></div><span className="pulse-label">● LIVE</span></div><div className="future-chart">{monthSeries.map(row=><div className="future-month" key={row.label}><div className="future-bars"><i style={{height:`${Math.max(4,row.revenue/chartMax*100)}%`}}/><b style={{height:`${Math.max(4,row.cost/chartMax*100)}%`}}/></div><span>{row.label}</span></div>)}</div><div className="chart-key"><span><i/>Facturation</span><span><i/>Dépenses</span></div></motion.article>
-        <motion.article className="panel operations-ring" initial={{opacity:0,x:16}} animate={{opacity:1,x:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> EXÉCUTION</span><h2>Avancement opérationnel</h2></div></div><div className="progress-orb" style={{"--progress":`${completion*3.6}deg`} as CSSProperties}><div><strong>{completion}%</strong><span>tâches terminées</span></div></div><div className="operation-stats"><span><b>{openTasks.length}</b> ouvertes</span><span><b>{t.filter(row=>row.priority==="URGENTE"&&row.status!=="TERMINE").length}</b> urgentes</span><span><b>{activeProjects.length}</b> projets actifs</span></div></motion.article>
-        <motion.article className="panel client-intelligence" initial={{opacity:0,y:16}} animate={{opacity:1,y:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> CLIENTS</span><h2>Portefeuille principal</h2></div><span>{c.length} comptes</span></div><div className="rank-list">{topClients.length?topClients.map((row,index)=><div key={row.client.id}><span>{String(index+1).padStart(2,"0")}</span><div><strong>{row.client.name}</strong><small>{row.client.sector||"Secteur non renseigné"}</small></div><b>{money(row.total)}</b></div>):<p className="muted">Les revenus par client apparaîtront ici.</p>}</div></motion.article>
-        <motion.article className="panel team-radar" initial={{opacity:0,y:16}} animate={{opacity:1,y:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> ÉQUIPE</span><h2>Présence et capacité</h2></div><span>{onlineIds.size} en ligne</span></div><div className="team-cloud">{team.slice(0,8).map((member,index)=><motion.div key={member.id} animate={{y:[0,-3,0]}} transition={{duration:2.8+index*.15,repeat:Infinity,delay:index*.12}} className={onlineIds.has(member.id)?"online":""}><b>{member.full_name.slice(0,2).toUpperCase()}</b><span>{member.full_name.split(" ")[0]}</span></motion.div>)}</div><div className="team-summary"><span><b>{team.filter(row=>row.active).length}</b> collaborateurs actifs</span><span><b>{suppliers.length}</b> fournisseurs référencés</span></div></motion.article>
+        {canFinance&&<motion.article className="panel finance-radar" initial={{opacity:0,x:-16}} animate={{opacity:1,x:0}} whileHover={{y:-4,scale:1.005}}><div className="command-panel-head"><div><span className="eyebrow"><i/> FINANCE</span><h2>Flux des 6 derniers mois</h2></div><span className="pulse-label">● LIVE</span></div><TrendCurve rows={monthSeries} showRevenue={canInvoices} showCost={canAccounting}/><div className="future-chart">{monthSeries.map((row,index)=><div className="future-month" key={row.label}><div className="future-bars"><motion.i initial={{height:0}} animate={{height:`${Math.max(4,row.revenue/chartMax*100)}%`}} transition={{duration:.75,delay:index*.08}}/><motion.b initial={{height:0}} animate={{height:`${Math.max(4,row.cost/chartMax*100)}%`}} transition={{duration:.75,delay:.12+index*.08}}/></div><span>{row.label}</span></div>)}</div><div className="chart-key">{canInvoices&&<span><i/>Facturation</span>}{canAccounting&&<span><i/>Dépenses</span>}</div></motion.article>}
+        {(canTasks||canProjects)&&<motion.article className="panel operations-ring" initial={{opacity:0,x:16}} animate={{opacity:1,x:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> EXÉCUTION</span><h2>Avancement opérationnel</h2></div></div><div className="progress-orb" style={{"--progress":`${completion*3.6}deg`} as CSSProperties}><div><strong>{canTasks?`${completion}%`:'—'}</strong><span>tâches terminées</span></div></div><div className="operation-stats">{canTasks&&<><span><b>{openTasks.length}</b> ouvertes</span><span><b>{t.filter(row=>row.priority==="URGENTE"&&row.status!=="TERMINE").length}</b> urgentes</span></>}{canProjects&&<span><b>{activeProjects.length}</b> projets actifs</span>}</div></motion.article>}
+        {canClients&&<motion.article className="panel client-intelligence" initial={{opacity:0,y:16}} animate={{opacity:1,y:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> CLIENTS</span><h2>Portefeuille principal</h2></div><span>{c.length} comptes</span></div><div className="rank-list">{topClients.length?topClients.map((row,index)=><div key={row.client.id}><span>{String(index+1).padStart(2,"0")}</span><div><strong>{row.client.name}</strong><small>{row.client.sector||"Secteur non renseigné"}</small></div>{canInvoices&&<b>{money(row.total)}</b>}</div>):<p className="muted">Les clients apparaîtront ici.</p>}</div></motion.article>}
+        {canTeam&&<motion.article className="panel team-radar" initial={{opacity:0,y:16}} animate={{opacity:1,y:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> ÉQUIPE</span><h2>Présence et capacité</h2></div><span>{onlineIds.size} en ligne</span></div><div className="team-cloud">{team.slice(0,8).map((member,index)=><motion.div key={member.id} animate={{y:[0,-3,0]}} transition={{duration:2.8+index*.15,repeat:Infinity,delay:index*.12}} className={onlineIds.has(member.id)?"online":""}><b>{member.full_name.slice(0,2).toUpperCase()}</b><span>{member.full_name.split(" ")[0]}</span></motion.div>)}</div><div className="team-summary"><span><b>{team.filter(row=>row.active).length}</b> collaborateurs actifs</span>{canSuppliers&&<span><b>{suppliers.length}</b> fournisseurs référencés</span>}</div></motion.article>}
       </section>
     </div>
   );
@@ -699,7 +744,7 @@ function ClientDetail({
             title="Tâches"
             rows={data.tasks.map((x) => [
               x.title,
-              `${label(x.status)} · ${x.profiles?.full_name || "Non assignée"}`,
+              `${label(x.status)} · ${x.task_assignees?.map(member=>member.profiles?.full_name).filter(Boolean).join(', ') || x.profiles?.full_name || "Non assignée"}`,
               fmt(x.due_at),
             ])}
           />
@@ -875,11 +920,13 @@ function ProjectDetail({
   onClose,
   onChanged,
   rights,
+  profiles,
 }: {
   id: string;
   onClose: () => void;
   onChanged: () => void;
   rights: CrudRights;
+  profiles: Profile[];
 }) {
   const [data, setData] = useState<Awaited<
       ReturnType<typeof getProjectWorkspace>
@@ -917,7 +964,8 @@ function ProjectDetail({
         onSubmit={async (e) => {
           e.preventDefault();
           if (!rights.update) return;
-          const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<
+          const formData=new FormData(e.currentTarget);
+          const f = Object.fromEntries(formData) as Record<
             string,
             string
           >;
@@ -927,7 +975,7 @@ function ProjectDetail({
             priority: f.priority,
             ends_on: f.ends_on || null,
             description: f.description,
-          });
+          },formData.getAll('member_ids').map(String));
           load();
           onChanged();
         }}
@@ -971,6 +1019,9 @@ function ProjectDetail({
               defaultValue={data.project.description || ""}
             />
           </Field>
+          <Field label="Équipe du projet (plusieurs choix possibles)" wide>
+            <ProfileChecklist profiles={profiles} name="member_ids" selected={data.project.project_members?.map(member=>member.profile_id)||[]}/>
+          </Field>
         </div>
         {rights.update && <button className="primary-btn compact">Mettre à jour le projet</button>}</fieldset>
       </form>
@@ -978,7 +1029,7 @@ function ProjectDetail({
         title="Tâches"
         rows={data.tasks.map((x) => [
           x.title,
-          `${label(x.status)} · ${x.profiles?.full_name || "Non assignée"}`,
+          `${label(x.status)} · ${x.task_assignees?.map(member=>member.profiles?.full_name).filter(Boolean).join(', ') || x.profiles?.full_name || "Non assignée"}`,
           fmt(x.due_at),
         ])}
       />
@@ -1018,9 +1069,12 @@ function ProjectsPage({ rights, clientFilter, onClearFilter }: { rights: CrudRig
     [selected, setSelected] = useState<string | null>(null),
     [error, setError] = useState("");
   const load = () => listProjects().then(setRows).catch((e) => setError(e.message));
+  const loadReferences = () => {
+    if (!clients.length || !profiles.length) void Promise.all([listClients(), listProfiles()]).then(([a, b]) => { setClients(a); setProfiles(b); }).catch((e) => setError(e.message));
+  };
   const openCreator = () => {
     setOpen(true);
-    if (!clients.length || !profiles.length) void Promise.all([listClients(), listProfiles()]).then(([a, b]) => { setClients(a); setProfiles(b); }).catch((e) => setError(e.message));
+    loadReferences();
   };
   useEffect(() => {
     void load();
@@ -1044,7 +1098,7 @@ function ProjectsPage({ rights, clientFilter, onClearFilter }: { rights: CrudRig
             <article
               className="clickable-row"
               key={r.id}
-              onClick={() => setSelected(r.id)}
+              onClick={() => {setSelected(r.id);loadReferences();}}
             >
               <div className="record-main">
                 <span className="record-avatar">PR</span>
@@ -1052,7 +1106,7 @@ function ProjectsPage({ rights, clientFilter, onClearFilter }: { rights: CrudRig
                   <strong>{r.name}</strong>
                   <small>
                     {r.clients?.name || "Sans client"} ·{" "}
-                    {r.profiles?.full_name || "Sans manager"}
+                    {r.project_members?.map(member=>member.profiles?.full_name).filter(Boolean).join(', ') || r.profiles?.full_name || "Sans équipe"}
                   </small>
                 </div>
               </div>
@@ -1077,14 +1131,12 @@ function ProjectsPage({ rights, clientFilter, onClearFilter }: { rights: CrudRig
               className="entity-form"
               onSubmit={async (e) => {
                 e.preventDefault();
-                const f = Object.fromEntries(
-                  new FormData(e.currentTarget),
-                ) as Record<string, string>;
+                const formData=new FormData(e.currentTarget);
+                const f = Object.fromEntries(formData) as Record<string, string>;
                 await createProject({
                   ...f,
                   budget: Number(f.budget),
-                  manager_id: f.manager_id || null,
-                } as Partial<Project>);
+                } as Partial<Project>,formData.getAll('member_ids').map(String));
                 setOpen(false);
                 load();
               }}
@@ -1103,15 +1155,8 @@ function ProjectsPage({ rights, clientFilter, onClearFilter }: { rights: CrudRig
                     ))}
                   </select>
                 </Field>
-                <Field label="Responsable">
-                  <select name="manager_id">
-                    <option value="">Non affecté</option>
-                    {profiles.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.full_name}
-                      </option>
-                    ))}
-                  </select>
+                <Field label="Équipe du projet (optionnel)" wide>
+                  <ProfileChecklist profiles={profiles} name="member_ids" />
                 </Field>
                 <Field label="Type">
                   <input name="type" />
@@ -1136,6 +1181,7 @@ function ProjectsPage({ rights, clientFilter, onClearFilter }: { rights: CrudRig
             onClose={() => setSelected(null)}
             onChanged={load}
             rights={rights}
+            profiles={profiles}
           />
         )}
       </AnimatePresence>
@@ -1265,7 +1311,7 @@ function TasksPage({
                   <strong>{r.title}</strong>
                   <small>
                     {r.projects?.name || "Sans projet"} ·{" "}
-                    {r.profiles?.full_name || "Non assignée"}
+                    {r.task_assignees?.map(member=>member.profiles?.full_name).filter(Boolean).join(', ') || r.profiles?.full_name || "Non assignée"}
                   </small>
                 </div>
               </div>
@@ -1305,7 +1351,6 @@ function TasksPage({
                 await createTask({
                   title: String(f.get("title")),
                   project_id: String(f.get("project_id") || "") || null,
-                  assignee_id: String(f.get("assignee_id") || "") || null,
                   priority: String(f.get("priority")),
                   due_at: String(f.get("due_at") || "") || null,
                   description: String(f.get("description") || ""),
@@ -1313,7 +1358,7 @@ function TasksPage({
                   notification_channels: f.getAll(
                     "notification_channels",
                   ) as string[],
-                });
+                },f.getAll('assignee_ids').map(String));
                 setOpen(false);
                 load();
               }}
@@ -1332,17 +1377,8 @@ function TasksPage({
                     ))}
                   </select>
                 </Field>
-                <Field label="Assignée à">
-                  <select name="assignee_id">
-                    <option value="">Non assignée</option>
-                    {profiles
-                      .filter((p) => p.active)
-                      .map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.full_name}
-                        </option>
-                      ))}
-                  </select>
+                <Field label="Personnes assignées (optionnel)" wide>
+                  <ProfileChecklist profiles={profiles} name="assignee_ids" />
                 </Field>
                 <Field label="Priorité">
                   <select name="priority">
@@ -1411,17 +1447,15 @@ function TasksPage({
               onSubmit={async (e) => {
                 e.preventDefault();
                 if (!rights.update) return;
-                const f = Object.fromEntries(
-                  new FormData(e.currentTarget),
-                ) as Record<string, string>;
+                const formData=new FormData(e.currentTarget);
+                const f = Object.fromEntries(formData) as Record<string, string>;
                 await updateTask(selected.id, {
                   title: f.title,
                   description: f.description,
                   status: f.status,
                   priority: f.priority,
                   due_at: f.due_at || null,
-                  assignee_id: f.assignee_id || null,
-                });
+                },formData.getAll('assignee_ids').map(String));
                 setSelected(null);
                 load();
               }}
@@ -1439,18 +1473,8 @@ function TasksPage({
                     <option>BLOQUE</option>
                   </select>
                 </Field>
-                <Field label="Assignée à">
-                  <select
-                    name="assignee_id"
-                    defaultValue={selected.assignee_id || ""}
-                  >
-                    <option value="">Non assignée</option>
-                    {profiles.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.full_name}
-                      </option>
-                    ))}
-                  </select>
+                <Field label="Personnes assignées" wide>
+                  <ProfileChecklist profiles={profiles} name="assignee_ids" selected={selected.task_assignees?.map(member=>member.profile_id) ?? (selected.assignee_id?[selected.assignee_id]:[])}/>
                 </Field>
                 <Field label="Priorité">
                   <select name="priority" defaultValue={selected.priority}>
@@ -1503,7 +1527,7 @@ function TasksPage({
   );
 }
 
-function ServicesPage({ admin }: { admin: boolean }) {
+function ServicesPage({ rights }: { rights:CrudRights }) {
   const [rows, setRows] = useState<Service[]>([]),
     [suppliers, setSuppliers] = useState<Supplier[]>([]),
     [open, setOpen] = useState(false),
@@ -1517,6 +1541,7 @@ function ServicesPage({ admin }: { admin: boolean }) {
       className="entity-form"
       onSubmit={async (e) => {
         e.preventDefault();
+        if(item?!rights.update:!rights.create)return;
         const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<
           string,
           string
@@ -1582,8 +1607,8 @@ function ServicesPage({ admin }: { admin: boolean }) {
         </Field>
       </div>
       <div className="form-actions">
-        <button className="primary-btn compact">Enregistrer</button>
-        {item && admin && (
+        {(!item&&rights.create||Boolean(item)&&rights.update)&&<button className="primary-btn compact">Enregistrer</button>}
+        {item && rights.delete && (
           <Danger
             onClick={async () => {
               if (confirm("Supprimer ce service ?")) {
@@ -1602,12 +1627,12 @@ function ServicesPage({ admin }: { admin: boolean }) {
       <Header
         title="Catalogue de services"
         copy="Prestations réutilisables dans les devis, factures et bons."
-        onAdd={() => setOpen(true)}
+        onAdd={rights.create?() => setOpen(true):undefined}
         add="Nouveau service"
       />
       <div className="records panel">
         {!rows.length ? (
-          <Empty name="service" onAdd={() => setOpen(true)} />
+          <Empty name="service" onAdd={rights.create?() => setOpen(true):undefined} />
         ) : (
           rows.map((r) => (
             <article
@@ -2210,7 +2235,7 @@ function EditorialPage() {
   );
 }
 
-function DocumentsPage() {
+function DocumentsPage({rights}:{rights:CrudRights}) {
   const [rows, setRows] = useState<CommercialDocument[]>([]),
     [clients, setClients] = useState<Client[]>([]),
     [projects, setProjects] = useState<Project[]>([]),
@@ -2233,13 +2258,13 @@ function DocumentsPage() {
     <>
       <Header
         title="Documents commerciaux"
-        copy="Bons de commande, livraison, vente et sortie de matériel."
-        onAdd={() => setOpen(true)}
+        copy="Bons de commande, livraison, vente, sortie et entrée de matériel."
+        onAdd={rights.create?() => setOpen(true):undefined}
         add="Nouveau bon"
       />
       <div className="records panel">
         {!rows.length ? (
-          <Empty name="document" onAdd={() => setOpen(true)} />
+          <Empty name="document" onAdd={rights.create?() => setOpen(true):undefined} />
         ) : (
           rows.map((r) => (
             <article
@@ -2290,6 +2315,7 @@ function DocumentsPage() {
                     <option value="BON_LIVRAISON">Bon de livraison</option>
                     <option value="BON_VENTE">Bon de vente</option>
                     <option value="BON_SORTIE">Bon de sortie matériel</option>
+                    <option value="BON_ENTREE">Bon d’entrée matériel</option>
                   </select>
                 </Field>
                 <Field label="Client">
@@ -2358,7 +2384,7 @@ function DocumentsPage() {
                 >
                   Imprimer / PDF
                 </button>
-                <button
+                {rights.update&&<button
                   className="ghost-action"
                   onClick={async () => {
                     await updateCommercialDocument(selected.id, {
@@ -2369,7 +2395,7 @@ function DocumentsPage() {
                   }}
                 >
                   Valider
-                </button>
+                </button>}
               </div>
             </div>
           </Modal>
@@ -2379,7 +2405,7 @@ function DocumentsPage() {
   );
 }
 
-function AccountingPage() {
+function AccountingPage({rights}:{rights:CrudRights}) {
   const [rows, setRows] = useState<Expense[]>([]),
     [projects, setProjects] = useState<Project[]>([]),
     [invoices, setInvoices] = useState<Invoice[]>([]),
@@ -2401,7 +2427,7 @@ function AccountingPage() {
       <Header
         title="Comptabilité"
         copy="Pilotage des dépenses, encaissements, créances, résultat et centres de coûts."
-        onAdd={() => setOpen(true)}
+        onAdd={rights.create?() => setOpen(true):undefined}
         add="Nouvelle dépense"
       />
       <section className="production-kpis accounting-kpis">
@@ -2443,7 +2469,7 @@ function AccountingPage() {
               {r.category || "Autre"} · {fmt(r.spent_on)}
             </span>
             <b className="record-amount">{money(r.amount, r.currency)}</b>
-            {r.status!=='APPROUVE'&&<button className="ghost-action" onClick={async()=>{await updateExpenseStatus(r.id,'APPROUVE');await load()}}>Approuver</button>}
+            {rights.update&&r.status!=='APPROUVE'&&<button className="ghost-action" onClick={async()=>{await updateExpenseStatus(r.id,'APPROUVE');await load()}}>Approuver</button>}
           </article>
         ))}
       </div>
@@ -2505,94 +2531,30 @@ function AccountingPage() {
   );
 }
 
-function EquipmentPage() {
-  const [rows, setRows] = useState<Equipment[]>([]),
-    [open, setOpen] = useState(false);
-  const load = () => listEquipment().then(setRows);
-  useEffect(() => {
-    void load();
-  }, []);
-  return (
-    <>
-      <Header
-        title="Matériel"
-        copy="Inventaire, numéros de série, état et disponibilité."
-        onAdd={() => setOpen(true)}
-        add="Nouveau matériel"
-      />
-      <div className="records panel">
-        {!rows.length ? (
-          <Empty name="matériel" onAdd={() => setOpen(true)} />
-        ) : (
-          rows.map((r) => (
-            <article key={r.id}>
-              <div className="record-main">
-                <span className="record-avatar">MT</span>
-                <div>
-                  <strong>{r.name}</strong>
-                  <small>
-                    {r.code} · {r.serial_number || "Sans numéro de série"}
-                  </small>
-                </div>
-              </div>
-              <span className="status">{label(r.status)}</span>
-              <span className="record-meta">{r.category || "Autre"}</span>
-              <b className="record-amount">{r.condition || "—"}</b>
-            </article>
-          ))
-        )}
-      </div>
-      <AnimatePresence>
-        {open && (
-          <Modal title="Ajouter du matériel" onClose={() => setOpen(false)}>
-            <form
-              className="entity-form"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                await createEquipment(
-                  Object.fromEntries(
-                    new FormData(e.currentTarget),
-                  ) as Partial<Equipment>,
-                );
-                setOpen(false);
-                load();
-              }}
-            >
-              <div className="form-grid">
-                <Field label="Code">
-                  <input name="code" required />
-                </Field>
-                <Field label="Désignation">
-                  <input name="name" required />
-                </Field>
-                <Field label="Catégorie">
-                  <input name="category" />
-                </Field>
-                <Field label="N° de série">
-                  <input name="serial_number" />
-                </Field>
-                <Field label="État">
-                  <input name="condition" />
-                </Field>
-                <Field label="Statut">
-                  <select name="status">
-                    <option>DISPONIBLE</option>
-                    <option>EN_MISSION</option>
-                    <option>MAINTENANCE</option>
-                    <option>HORS_SERVICE</option>
-                  </select>
-                </Field>
-                <Field label="Notes" wide>
-                  <textarea name="notes" />
-                </Field>
-              </div>
-              <button className="primary-btn compact">Enregistrer</button>
-            </form>
-          </Modal>
-        )}
-      </AnimatePresence>
-    </>
-  );
+function EquipmentPage({rights}:{rights:CrudRights}) {
+  const [rows,setRows]=useState<Equipment[]>([]),[categories,setCategories]=useState<EquipmentCategory[]>([]),
+    [movements,setMovements]=useState<EquipmentMovement[]>([]),[open,setOpen]=useState(false),[categoryOpen,setCategoryOpen]=useState(false),
+    [selected,setSelected]=useState<Equipment|null>(null),[movementType,setMovementType]=useState<'SORTIE'|'RETOUR'|null>(null),[error,setError]=useState('');
+  const load=()=>Promise.all([listEquipment(),listEquipmentCategories(),listEquipmentMovements()]).then(([equipment,nextCategories,nextMovements])=>{setRows(equipment);setCategories(nextCategories);setMovements(nextMovements)}).catch(reason=>setError(reason instanceof Error?reason.message:'Chargement impossible'));
+  useEffect(()=>{void load()},[]);
+  const equipmentForm=(item?:Equipment)=><form className="entity-form" onSubmit={async event=>{event.preventDefault();const form=new FormData(event.currentTarget),categoryId=String(form.get('category_id')||''),category=categories.find(row=>row.id===categoryId);const input={code:String(form.get('code')),name:String(form.get('name')),model:String(form.get('model')||'')||null,category_id:categoryId||null,category:category?.name||'Autre',serial_number:String(form.get('serial_number')||'')||null,condition:String(form.get('condition')||'')||null,status:String(form.get('status')),notes:String(form.get('notes')||'')||null} as Partial<Equipment>;try{if(item)await updateEquipment(item.id,input);else await createEquipment(input);setOpen(false);setSelected(null);await load()}catch(reason){setError(reason instanceof Error?reason.message:'Enregistrement impossible')}}}>
+    <div className="form-grid"><Field label="Code"><input name="code" defaultValue={item?.code||''} required/></Field><Field label="Désignation"><input name="name" defaultValue={item?.name||''} required/></Field><Field label="Modèle"><input name="model" defaultValue={item?.model||''}/></Field><Field label="Catégorie"><select name="category_id" defaultValue={item?.category_id||categories.find(row=>row.name===item?.category)?.id||''} required><option value="">Choisir…</option>{categories.map(category=><option key={category.id} value={category.id}>{category.name}</option>)}</select></Field><Field label="N° de série"><input name="serial_number" defaultValue={item?.serial_number||''}/></Field><Field label="État"><input name="condition" defaultValue={item?.condition||''} placeholder="Bon, à contrôler…"/></Field><Field label="Statut"><select name="status" defaultValue={item?.status||'DISPONIBLE'}><option>DISPONIBLE</option><option>EN_MISSION</option><option>MAINTENANCE</option><option>HORS_SERVICE</option></select></Field><Field label="Notes" wide><textarea name="notes" defaultValue={item?.notes||''}/></Field></div><button className="primary-btn compact">{item?'Enregistrer les modifications':'Ajouter à l’inventaire'}</button>
+  </form>;
+  return <>
+    <Header title="Matériel" copy="Inventaire complet, modèles, catégories personnalisables et traçabilité des entrées/sorties." onAdd={rights.create?()=>setOpen(true):undefined} add="Nouveau matériel">
+      {rights.create&&<button className="ghost-action" onClick={()=>setCategoryOpen(true)}><Plus/>Nouvelle catégorie</button>}
+    </Header>
+    <ErrorBar value={error}/>
+    <section className="command-metrics equipment-summary"><Stat name="Équipements" value={rows.length} copy={`${rows.filter(row=>row.status==='DISPONIBLE').length} disponibles`}/><Stat name="En mission" value={rows.filter(row=>row.status==='EN_MISSION').length} copy="sorties actives"/><Stat name="Catégories" value={categories.length} copy="standards et personnalisées"/><Stat name="Mouvements" value={movements.length} copy="entrées et sorties tracées"/></section>
+    <div className="records panel">{rows.length?rows.map(row=><article className="clickable-row" key={row.id} onClick={()=>setSelected(row)}><div className="record-main"><span className="record-avatar">MT</span><div><strong>{row.name}</strong><small>{row.code} · {row.model||'Modèle non renseigné'} · {row.serial_number||'Sans n° de série'}</small></div></div><span className="status">{label(row.status)}</span><span className="record-meta">{row.category||'Autre'}</span><b className="record-amount">{row.condition||'—'} <ChevronRight/></b></article>):<Empty name="matériel" onAdd={rights.create?()=>setOpen(true):undefined}/>}</div>
+    <section className="panel detail-section"><h3>Derniers mouvements</h3>{movements.slice(0,10).map(movement=><div className="detail-line" key={movement.id}><strong>{movement.movement_type==='SORTIE'?'↗ Bon de sortie':'↙ Bon de rentrée'} · {movement.equipment?.name||'Matériel'}</strong><span>{movement.reason||movement.condition_notes||'Sans précision'}</span><b>{fmt(movement.moved_at)}</b></div>)}{!movements.length&&<p className="muted">Aucun mouvement enregistré.</p>}</section>
+    <AnimatePresence>
+      {open&&<Modal title="Ajouter du matériel" onClose={()=>setOpen(false)}>{equipmentForm()}</Modal>}
+      {categoryOpen&&<Modal title="Créer une catégorie" onClose={()=>setCategoryOpen(false)} wide={false}><form className="entity-form" onSubmit={async event=>{event.preventDefault();const form=new FormData(event.currentTarget);try{await createEquipmentCategory({name:String(form.get('name')),description:String(form.get('description')||'')});setCategoryOpen(false);await load()}catch(reason){setError(reason instanceof Error?reason.message:'Création impossible')}}}><Field label="Nom"><input name="name" required/></Field><Field label="Description"><textarea name="description"/></Field><button className="primary-btn compact">Créer la catégorie</button></form></Modal>}
+      {selected&&!movementType&&<Modal title={selected.name} onClose={()=>setSelected(null)}><div className="detail-hero"><div className="record-avatar large">MT</div><div><h3>{selected.name}</h3><p>{selected.model||'Modèle non renseigné'} · {selected.category||'Autre'} · {selected.serial_number||'Sans n° de série'}</p><span className="status">{label(selected.status)}</span></div></div>{rights.update&&equipmentForm(selected)}<div className="form-actions">{rights.update&&<><button className="ghost-action" onClick={()=>setMovementType('SORTIE')}>Bon de sortie</button><button className="primary-btn compact" onClick={()=>setMovementType('RETOUR')}>Bon de rentrée</button></>}{rights.delete&&<Danger onClick={async()=>{if(confirm(`Supprimer ${selected.name} de l’inventaire ?`)){await deleteEquipment(selected.id);setSelected(null);await load()}}}/>}</div></Modal>}
+      {selected&&movementType&&<Modal title={movementType==='SORTIE'?'Enregistrer un bon de sortie':'Enregistrer un bon de rentrée'} onClose={()=>setMovementType(null)} wide={false}><form className="entity-form" onSubmit={async event=>{event.preventDefault();const form=new FormData(event.currentTarget);try{await recordEquipmentMovement({equipment_id:selected.id,movement_type:movementType,reason:String(form.get('reason')||''),condition_notes:String(form.get('condition_notes')||'')});setMovementType(null);setSelected(null);await load()}catch(reason){setError(reason instanceof Error?reason.message:'Mouvement impossible')}}}><p><strong>{selected.code} · {selected.name}</strong></p><Field label="Motif"><input name="reason" required placeholder={movementType==='SORTIE'?'Projet, tournage, prêt…':'Retour, réintégration, récupération…'}/></Field><Field label="État constaté"><textarea name="condition_notes" placeholder="État du matériel au moment du mouvement"/></Field><button className="primary-btn compact">Valider le {movementType==='SORTIE'?'bon de sortie':'bon de rentrée'}</button></form></Modal>}
+    </AnimatePresence>
+  </>;
 }
 
 function CommunicationPage({ onBack }: { onBack: () => void }) {
@@ -2907,6 +2869,8 @@ function Shell({
     [mobile, setMobile] = useState(false),
     [clientFilter, setClientFilter] = useState<string | null>(clientFromHash),
     [access, setAccess] = useState<AccessControl | null>(null),
+    [accessLoaded, setAccessLoaded] = useState(false),
+    [openGroups,setOpenGroups]=useState<string[]>(['Pilotage']),
     [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null),
     [installed, setInstalled] = useState(() => window.matchMedia('(display-mode: standalone)').matches);
   const navigate = (next: Page, clientId: string | null = null) => {
@@ -2929,7 +2893,8 @@ function Shell({
   }, [theme]);
   useEffect(() => {
     startSession();
-    void getAccessControl(profile.id).then(setAccess);
+    setAccessLoaded(false);
+    void getAccessControl(profile.id).then(setAccess).catch(()=>setAccess(null)).finally(()=>setAccessLoaded(true));
     const timer = window.setInterval(pulseSession, 60_000);
     return () => window.clearInterval(timer);
   }, [profile.id]);
@@ -2950,20 +2915,19 @@ function Shell({
   const roles = (profile.roles?.length ? profile.roles : [profile.role]) as Role[],
     admin = roles.some((item) => ["SUPER_ADMIN", "ADMIN"].includes(item));
   if (roles.includes("CLIENT")) return <ClientPortalView onLogout={onLogout} />;
-  const actionAllowed = (key: string) => roles.includes("SUPER_ADMIN") || !access?.denied_permissions?.includes(key);
+  if (!accessLoaded&&!roles.includes("SUPER_ADMIN")) return <div className="app-loading"><img src={companyProfile.logo_dark}/><span>Vérification de vos autorisations…</span></div>;
+  const actionAllowed = (key: string) => isActionAllowed(roles,access,accessLoaded,key);
   const rightsFor = (scope: string): CrudRights => ({
     view: actionAllowed(`${scope}.view`),
     create: actionAllowed(`${scope}.create`),
     update: actionAllowed(`${scope}.update`),
     delete: actionAllowed(`${scope}.delete`),
   });
-  const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'suppliers.view',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Portail client':'portal.view','Jumeau numérique':'accounting.view','Radar commercial':'clients.view','Studio campagnes IA':'communication.view','Autopilot IA':'Dashboard'};
-  const visible = (n: [Page, typeof LayoutDashboard, Permission?]) =>
-    (!n[2] || can(roles, n[2])) &&
+  const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'suppliers.view',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Portail client':'portal.view','Jumeau numérique':'accounting.view','Radar commercial':'clients.view','Studio campagnes IA':'communication.view'};
+  const visible = (n: [Page, typeof LayoutDashboard, Permission?]) => n[0]==='Dashboard'||(
     (!viewKeys[n[0]] || actionAllowed(viewKeys[n[0]]!)) &&
-    (!access?.allowed_modules?.length ||
-      access.allowed_modules.includes(n[0]) ||
-      roles.includes("SUPER_ADMIN"));
+    isModuleAllowed(roles,access,accessLoaded,n[0]));
+  const currentPage = nav.some((item)=>item[0]===page&&visible(item)) ? page : 'Dashboard';
   return (
     <div className="app-shell production-shell v2-shell">
       <aside className={mobile ? "mobile-open" : ""}>
@@ -2975,16 +2939,10 @@ function Shell({
         </div>
         <nav>
           <small>SMARTSELL APPS V3</small>
-          {nav.filter(visible).map(([name, Icon]) => (
-            <button
-              key={name}
-              className={page === name ? "active" : ""}
-              onClick={() => navigate(name)}
-            >
-              <Icon />
-              <span>{name}</span>
-            </button>
-          ))}
+          {navGroups.map(group=>{const items=nav.filter(item=>group.pages.includes(item[0])&&visible(item));if(!items.length)return null;const active=items.some(item=>item[0]===currentPage),expanded=openGroups.includes(group.label)||active;return <section className={`nav-group ${expanded?'expanded':''}`} key={group.label}>
+            <button className="nav-group-toggle" onClick={()=>setOpenGroups(groups=>groups.includes(group.label)?groups.filter(item=>item!==group.label):[...groups,group.label])}><span>{group.label}</span><ChevronRight/></button>
+            <AnimatePresence initial={false}>{expanded&&<motion.div className="nav-group-items" initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}} transition={{duration:.24,ease:'easeOut'}}>{items.map(([name,Icon])=><button key={name} className={currentPage===name?'active':''} onClick={()=>navigate(name)}><Icon/><span>{name}</span></button>)}</motion.div>}</AnimatePresence>
+          </section>})}
         </nav>
         <div className="side-bottom">
           <div className="user-avatar">
@@ -3006,11 +2964,10 @@ function Shell({
       </aside>
       <div className="app-main">
         <header>
-          <button className="mobile-menu" onClick={() => setMobile(true)}>
-            <Menu />
-          </button>
-          <div className="production-badge">
-            SMARTSELL APPS V3 <i />
+          <div className="top-navigation">
+            <button className="mobile-menu" onClick={() => setMobile(true)}><Menu /></button>
+            {currentPage!=="Dashboard"&&<button className="global-back" onClick={()=>navigate("Dashboard")} title="Retour au tableau de bord"><ArrowLeft/><span>Retour</span></button>}
+            <div className="production-badge">SMARTSELL APPS V3 <i /></div>
           </div>
           <div className="top-actions">
             {!installed&&<button className="install-app-btn" onClick={()=>void installApp()} title="Installer SmartSell Apps sur cet appareil"><Download/><span>Installer l’application</span></button>}
@@ -3028,52 +2985,52 @@ function Shell({
         <main>
           <AnimatePresence mode="wait">
             <motion.div
-              key={page}
+              key={currentPage}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
             >
-              {page === "Dashboard" ? (
-                <Dashboard profile={profile} onNavigate={navigate} />
-              ) : page === "Clients" ? (
+              {currentPage === "Dashboard" ? (
+                <Dashboard profile={profile} access={access} accessLoaded={accessLoaded} onNavigate={navigate} />
+              ) : currentPage === "Clients" ? (
                 <ClientsPage rights={rightsFor('clients')} onNavigate={(next,clientId)=>navigate(next,clientId)} />
-              ) : page === "Projets" ? (
+              ) : currentPage === "Projets" ? (
                 <ProjectsPage rights={rightsFor('projects')} clientFilter={clientFilter} onClearFilter={()=>navigate("Projets")} />
-              ) : page === "Tâches" ? (
+              ) : currentPage === "Tâches" ? (
                 <TasksPage rights={rightsFor('tasks')} clientFilter={clientFilter} onClearFilter={()=>navigate("Tâches")} />
-              ) : page === "Planning" ? (
+              ) : currentPage === "Planning" ? (
                 <TasksPage rights={{view:actionAllowed('planning.view'),create:actionAllowed('planning.create'),update:actionAllowed('planning.update'),delete:actionAllowed('tasks.delete')}} planning />
-              ) : page === "Éditorial" ? (
+              ) : currentPage === "Éditorial" ? (
                 <EditorialV3 />
-              ) : page === "Services" ? (
-                <ServicesPage admin={admin} />
-              ) : page === "Fournisseurs" ? (
-                <SuppliersPage admin={admin} />
-              ) : page === "Facturation" ? (
+              ) : currentPage === "Services" ? (
+                <ServicesPage rights={rightsFor('services')} />
+              ) : currentPage === "Fournisseurs" ? (
+                <SuppliersPage admin={admin} canCreate={actionAllowed('suppliers.create')} canUpdate={actionAllowed('suppliers.update')} canDelete={actionAllowed('suppliers.delete')} />
+              ) : currentPage === "Facturation" ? (
                 <BillingV3 admin={actionAllowed('invoices.delete')} canCreate={actionAllowed('invoices.create')} canUpdate={actionAllowed('invoices.update')} canSend={actionAllowed('invoices.send')} clientFilter={clientFilter} onClearFilter={()=>navigate("Facturation")} />
-              ) : page === "Documents" ? (
-                <DocumentsPage />
-              ) : page === "Comptabilité" ? (
-                <AccountingPage />
-              ) : page === "Matériel" ? (
-                <EquipmentPage />
-              ) : page === "Communication" ? (
+              ) : currentPage === "Documents" ? (
+                <DocumentsPage rights={rightsFor('documents')} />
+              ) : currentPage === "Comptabilité" ? (
+                <AccountingPage rights={rightsFor('accounting')} />
+              ) : currentPage === "Matériel" ? (
+                <EquipmentPage rights={rightsFor('equipment')} />
+              ) : currentPage === "Communication" ? (
                 <CommunicationHub onBack={()=>navigate("Dashboard")} />
-              ) : page === "Équipe" ? (
+              ) : currentPage === "Équipe" ? (
                 <TeamAccessPage admin={admin} superAdmin={roles.includes("SUPER_ADMIN")} />
-              ) : page === "RH" ? (
+              ) : currentPage === "RH" ? (
                 <HRPage />
-              ) : page === "Rapports" ? (
+              ) : currentPage === "Rapports" ? (
                 <ReportsPage />
-              ) : page === "Jumeau numérique" ? (
+              ) : currentPage === "Jumeau numérique" ? (
                 <DigitalTwinPage />
-              ) : page === "Radar commercial" ? (
+              ) : currentPage === "Radar commercial" ? (
                 <CommercialRadarPage />
-              ) : page === "Studio campagnes IA" ? (
+              ) : currentPage === "Studio campagnes IA" ? (
                 <CampaignStudioPage onOpenCampaigns={()=>navigate("Communication")} />
-              ) : page === "Autopilot IA" ? (
+              ) : currentPage === "Autopilot IA" ? (
                 <AutopilotPage onNavigate={target=>navigate(target as Page)} />
-              ) : page === "Portail client" ? (
+              ) : currentPage === "Portail client" ? (
                 <ClientPortalAdmin />
               ) : (
                 <AiAssistantPage />

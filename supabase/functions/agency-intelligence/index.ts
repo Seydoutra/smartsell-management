@@ -12,10 +12,15 @@ Deno.serve(async (request) => {
   if (request.method !== "POST") return json(request, { error: "Méthode non autorisée" }, 405);
   try {
     const { admin, user } = await authenticated(request);
-    const { data: profile, error: profileError } = await admin.from("profiles").select("full_name,role,roles").eq("id", user.id).single();
+    const [{ data: profile, error: profileError },{data:access}] = await Promise.all([
+      admin.from("profiles").select("full_name,role,roles").eq("id", user.id).single(),
+      admin.from("user_access_controls").select("allowed_modules,denied_permissions").eq("profile_id",user.id).maybeSingle()
+    ]);
     if (profileError) throw profileError;
     const roles = (profile.roles?.length ? profile.roles : [profile.role]) as string[];
     if (!roles.some((role) => ["SUPER_ADMIN","ADMIN","MANAGER"].includes(role))) return json(request, { error: "Le cockpit stratégique est réservé à la direction." }, 403);
+    const superAdmin=roles.includes("SUPER_ADMIN"), requiredModules=["Clients","Projets","Tâches","Facturation","Comptabilité"], requiredActions=["clients.view","projects.view","tasks.view","invoices.view","accounting.view"];
+    if(!superAdmin&&(!access||requiredModules.some(module=>!access.allowed_modules?.includes(module))||requiredActions.some(action=>access.denied_permissions?.includes(action)))) return json(request,{error:"Le briefing stratégique contient des données sensibles non autorisées pour ce profil."},403);
 
     const [clientsQ, projectsQ, invoicesQ, tasksQ, paymentsQ, expensesQ, prospectsQ] = await Promise.all([
       admin.from("clients").select("id,name,status"),
