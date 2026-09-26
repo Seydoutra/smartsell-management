@@ -12,6 +12,7 @@ import { isDemoMode } from './services/supabase'
 import ProductionApp from './ProductionAppV2'
 import LandingPage from './LandingPage'
 import SignupPage from './SignupPage'
+import LegalPage from './LegalPage'
 
 type Theme = 'light' | 'dark'
 type Page = 'Dashboard' | 'Prospects' | 'Clients' | 'Projets' | 'Tâches' | 'Planning' | 'Production' | 'Éditorial' | 'Finance' | 'Matériel' | 'Équipe' | 'Documents' | 'Communication' | 'Administration' | 'Paramètres'
@@ -208,13 +209,16 @@ function DemoApp(){
 }
 
 export default function App(){
-  const [route,setRoute]=useState<'landing'|'app'|'signup'>(()=>window.location.hash==='#app'?'app':window.location.hash==='#signup'?'signup':'landing')
+  type Route = 'landing'|'app'|'signup'|'privacy'|'terms'
+  const getRoute=():Route=>window.location.hash==='#app'?'app':window.location.hash==='#signup'?'signup':window.location.hash==='#privacy'?'privacy':window.location.hash==='#terms'?'terms':'landing'
+  const [route,setRoute]=useState<Route>(getRoute)
   useEffect(()=>{
-    const sync=()=>setRoute(window.location.hash==='#app'?'app':window.location.hash==='#signup'?'signup':'landing')
+    const sync=()=>{setRoute(getRoute());window.scrollTo({top:0})}
     window.addEventListener('hashchange',sync)
     return()=>window.removeEventListener('hashchange',sync)
   },[])
-  const navigate=(next:'landing'|'app'|'signup')=>{window.location.hash=next==='landing'?'':next;setRoute(next);window.scrollTo({top:0})}
+  const navigate=(next:Route)=>{window.location.hash=next==='landing'?'':next;setRoute(next);window.scrollTo({top:0})}
+  if(route==='privacy'||route==='terms')return <LegalPage kind={route} onBack={()=>navigate('landing')}/>
   if(route==='signup')return <SignupPage onBack={()=>navigate('landing')} onAccess={()=>navigate('app')}/>
   if(route==='app')return isDemoMode?<DemoApp/>:<ProductionApp/>
   return <LandingPage onOpenApp={()=>navigate('app')} onSignUp={()=>navigate('signup')}/>
