@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { companyProfile } from "./lib/companyProfile";
 import BetaSandboxApp from "./BetaSandboxApp";
+import CommunicationHub from "./CommunicationHub";
 import { contactsFromCsv, contactsFromFile, googleSheetCsvUrl, ImportedContact } from "./lib/contactImport";
 import { can, Permission, Role } from "./lib/permissions";
 import {
@@ -60,6 +61,8 @@ import {
 import {
   connectGoogleCalendar,
   createCampaign,
+  createCallList,
+  createContactGroup,
   completePasswordChange,
   createClient,
   createCommercialDocument,
@@ -86,7 +89,10 @@ import {
   finishCall,
   listActivityLogs,
   listCallLogs,
+  listCallListContacts,
+  listCallLists,
   listCampaigns,
+  listContactGroups,
   listClients,
   listCommercialDocuments,
   listEditorialItems,
@@ -111,6 +117,7 @@ import {
   updateClient,
   updateCommercialDocument,
   updateEditorialItem,
+  updateExpenseStatus,
   updateProfile,
   updateProject,
   updateService,
@@ -120,10 +127,13 @@ import type {
   AccessControl,
   ActivityLog,
   CalendarConnection,
+  CallList,
+  CallListContact,
   CallLog,
   Campaign,
   Client,
   CommercialDocument,
+  ContactGroup,
   EditorialItem,
   Equipment,
   Expense,
@@ -1457,9 +1467,10 @@ function TasksPage({
 
 function ServicesPage({ admin }: { admin: boolean }) {
   const [rows, setRows] = useState<Service[]>([]),
+    [suppliers, setSuppliers] = useState<Supplier[]>([]),
     [open, setOpen] = useState(false),
     [selected, setSelected] = useState<Service | null>(null);
-  const load = () => listServices().then(setRows);
+  const load = () => Promise.all([listServices(),listSuppliers()]).then(([services,nextSuppliers])=>{setRows(services);setSuppliers(nextSuppliers)});
   useEffect(() => {
     void load();
   }, []);
@@ -1480,6 +1491,7 @@ function ServicesPage({ admin }: { admin: boolean }) {
           unit_price: Number(f.unit_price),
           currency: f.currency,
           tax_rate: Number(f.tax_rate),
+          supplier_id: f.supplier_id || null,
           active: true,
         };
         item ? await updateService(item.id, input) : await createService(input);
@@ -1520,6 +1532,12 @@ function ServicesPage({ admin }: { admin: boolean }) {
             min="0"
             defaultValue={item?.tax_rate || 0}
           />
+        </Field>
+        <Field label="Fournisseur associé">
+          <select name="supplier_id" defaultValue={item?.supplier_id || ""}>
+            <option value="">Service interne / aucun fournisseur</option>
+            {suppliers.map(supplier=><option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+          </select>
         </Field>
         <Field label="Description" wide>
           <textarea name="description" defaultValue={item?.description || ""} />
@@ -1564,7 +1582,7 @@ function ServicesPage({ admin }: { admin: boolean }) {
                 <div>
                   <strong>{r.name}</strong>
                   <small>
-                    {r.category || "Sans catégorie"} · par {r.unit}
+                    {r.category || "Sans catégorie"} · par {r.unit} · {r.suppliers?.name || "Service interne"}
                   </small>
                 </div>
               </div>
@@ -2326,39 +2344,51 @@ function DocumentsPage() {
 function AccountingPage() {
   const [rows, setRows] = useState<Expense[]>([]),
     [projects, setProjects] = useState<Project[]>([]),
+    [invoices, setInvoices] = useState<Invoice[]>([]),
+    [payments, setPayments] = useState<Payment[]>([]),
     [open, setOpen] = useState(false);
   const load = () =>
-    Promise.all([listExpenses(), listProjects()]).then(([a, b]) => {
+    Promise.all([listExpenses(), listProjects(),listInvoices(),listPayments()]).then(([a, b,c,d]) => {
       setRows(a);
       setProjects(b);
+      setInvoices(c);
+      setPayments(d);
     });
   useEffect(() => {
     void load();
   }, []);
+  const approved=rows.filter(row=>row.status==='APPROUVE'),approvedTotal=approved.reduce((sum,row)=>sum+Number(row.amount),0),pendingTotal=rows.filter(row=>row.status!=='APPROUVE').reduce((sum,row)=>sum+Number(row.amount),0),billed=invoices.reduce((sum,row)=>sum+Number(row.total),0),collected=payments.reduce((sum,row)=>sum+Number(row.amount),0),receivables=Math.max(0,billed-collected),result=collected-approvedTotal,categories=Object.entries(rows.reduce<Record<string,number>>((acc,row)=>{const key=row.category||'Autre';acc[key]=(acc[key]||0)+Number(row.amount);return acc},{})).sort((a,b)=>b[1]-a[1]);
   return (
     <>
       <Header
         title="Comptabilité"
-        copy="Dépenses, catégories, projets et suivi financier."
+        copy="Pilotage des dépenses, encaissements, créances, résultat et centres de coûts."
         onAdd={() => setOpen(true)}
         add="Nouvelle dépense"
       />
-      <section className="production-kpis">
+      <section className="production-kpis accounting-kpis">
         <Stat
-          name="Dépenses"
-          value={money(rows.reduce((s, x) => s + Number(x.amount), 0))}
-          copy={`${rows.length} opération(s)`}
+          name="Dépenses approuvées"
+          value={money(approvedTotal)}
+          copy={`${approved.length} opération(s) validée(s)`}
         />
         <Stat
-          name="À approuver"
-          value={rows.filter((x) => x.status === "BROUILLON").length}
-          copy="dépenses en attente"
+          name="Dépenses à approuver"
+          value={money(pendingTotal)}
+          copy={`${rows.length-approved.length} en attente`}
         />
         <Stat
-          name="Projets concernés"
-          value={new Set(rows.map((x) => x.project_id).filter(Boolean)).size}
-          copy="centres de coûts"
+          name="Encaissements"
+          value={money(collected)}
+          copy={`${payments.length} paiement(s)`}
         />
+        <Stat name="Créances clients" value={money(receivables)} copy={`${invoices.filter(invoice=>invoice.status!=='PAYEE').length} facture(s) à suivre`}/>
+        <Stat name="Résultat de trésorerie" value={money(result)} copy={result>=0?'Solde positif':'Attention : solde négatif'}/>
+        <Stat name="Total facturé" value={money(billed)} copy={`${invoices.length} facture(s)`}/>
+      </section>
+      <section className="accounting-overview">
+        <div className="panel accounting-breakdown"><div className="panel-title"><div><span className="eyebrow"><i/> ANALYSE</span><h2>Dépenses par catégorie</h2></div></div>{categories.length?categories.slice(0,8).map(([name,value])=><div className="accounting-bar" key={name}><span>{name}</span><i><b style={{width:`${Math.max(4,value/Math.max(...categories.map(entry=>entry[1]))*100)}%`}}/></i><strong>{money(value)}</strong></div>):<p className="muted">Aucune dépense enregistrée.</p>}</div>
+        <div className="panel accounting-summary"><h2>Situation financière</h2><div><span>Taux d'encaissement</span><strong>{billed?Math.round(collected/billed*100):0}%</strong></div><div><span>Centres de coûts</span><strong>{new Set(rows.map(row=>row.project_id).filter(Boolean)).size}</strong></div><div><span>Dépenses totales</span><strong>{money(approvedTotal+pendingTotal)}</strong></div></div>
       </section>
       <div className="records panel spaced">
         {rows.map((r) => (
@@ -2375,6 +2405,7 @@ function AccountingPage() {
               {r.category || "Autre"} · {fmt(r.spent_on)}
             </span>
             <b className="record-amount">{money(r.amount, r.currency)}</b>
+            {r.status!=='APPROUVE'&&<button className="ghost-action" onClick={async()=>{await updateExpenseStatus(r.id,'APPROUVE');await load()}}>Approuver</button>}
           </article>
         ))}
       </div>
@@ -2989,7 +3020,7 @@ function Shell({
               ) : page === "Matériel" ? (
                 <EquipmentPage />
               ) : page === "Communication" ? (
-                <CommunicationPage onBack={()=>navigate("Dashboard")} />
+                <CommunicationHub onBack={()=>navigate("Dashboard")} />
               ) : page === "Équipe" ? (
                 <TeamAccessPage admin={admin} />
               ) : page === "RH" ? (
