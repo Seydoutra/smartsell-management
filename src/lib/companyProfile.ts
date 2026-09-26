@@ -8,7 +8,7 @@ export const companyProfile = {
   accent_color: '#FAEE35',
   phone: '620 619 064',
   whatsapp: '620 619 064',
-  email: 'contact@smartsell.pro',
+  email: 'contact.smartsell@gmail.com',
   address: 'Soloprimo, Conakry',
   website: '',
   social_links: {},

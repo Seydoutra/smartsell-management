@@ -21,6 +21,16 @@ async function invokeEdge<T>(name:string,body?:Record<string,unknown>,retryNetwo
 }
 
 export async function signIn(email:string,password:string){const client=db();const {data,error}=await client.auth.signInWithPassword({email,password});fail(error);if(!data.user)return data;const {data:profile, error:profileError}=await client.from('profiles').select('active,access_expires_at').eq('id',data.user.id).single();if(profileError){await client.auth.signOut();throw new Error('Profil utilisateur introuvable.')}if(!profile.active){await client.auth.signOut();throw new Error('Ce compte est suspendu. Contactez le Super Admin.')}if(profile.access_expires_at&&new Date(profile.access_expires_at).getTime()<=Date.now()){await client.auth.signOut();throw new Error('La période d’essai de ce compte est terminée. Contactez SmartSell pour poursuivre.')}return data}
+export async function signUpWithPassword(input:{email:string;password:string;fullName:string;companyName:string}){
+  const redirectTo=new URL(import.meta.env.BASE_URL,location.origin);redirectTo.hash='app';
+  const {data,error}=await db().auth.signUp({email:input.email,password:input.password,options:{emailRedirectTo:redirectTo.href,data:{name:input.fullName,full_name:input.fullName,company_name:input.companyName,trial_hours:72}}});
+  fail(error);return data
+}
+export async function signInWithGoogle(){
+  const redirectTo=new URL(import.meta.env.BASE_URL,location.origin);redirectTo.hash='app';
+  const {data,error}=await db().auth.signInWithOAuth({provider:'google',options:{redirectTo:redirectTo.href,queryParams:{access_type:'offline',prompt:'consent'}}});
+  fail(error);return data
+}
 export async function signOut(){const {error}=await db().auth.signOut();fail(error)}
 export async function requestPasswordReset(email:string){
   const appUrl=new URL(import.meta.env.BASE_URL,location.origin).href;

@@ -11,6 +11,7 @@ import { endSession, getDemoActivity, pulseSession, startSession, trackActivity 
 import { isDemoMode } from './services/supabase'
 import ProductionApp from './ProductionAppV2'
 import LandingPage from './LandingPage'
+import SignupPage from './SignupPage'
 
 type Theme = 'light' | 'dark'
 type Page = 'Dashboard' | 'Prospects' | 'Clients' | 'Projets' | 'Tâches' | 'Planning' | 'Production' | 'Éditorial' | 'Finance' | 'Matériel' | 'Équipe' | 'Documents' | 'Communication' | 'Administration' | 'Paramètres'
@@ -207,12 +208,14 @@ function DemoApp(){
 }
 
 export default function App(){
-  const [showApp,setShowApp]=useState(()=>window.location.hash==='#app')
+  const [route,setRoute]=useState<'landing'|'app'|'signup'>(()=>window.location.hash==='#app'?'app':window.location.hash==='#signup'?'signup':'landing')
   useEffect(()=>{
-    const sync=()=>setShowApp(window.location.hash==='#app')
+    const sync=()=>setRoute(window.location.hash==='#app'?'app':window.location.hash==='#signup'?'signup':'landing')
     window.addEventListener('hashchange',sync)
     return()=>window.removeEventListener('hashchange',sync)
   },[])
-  const openApp=()=>{window.location.hash='app';setShowApp(true);window.scrollTo({top:0})}
-  return showApp?(isDemoMode?<DemoApp/>:<ProductionApp/>):<LandingPage onOpenApp={openApp}/>
+  const navigate=(next:'landing'|'app'|'signup')=>{window.location.hash=next==='landing'?'':next;setRoute(next);window.scrollTo({top:0})}
+  if(route==='signup')return <SignupPage onBack={()=>navigate('landing')} onAccess={()=>navigate('app')}/>
+  if(route==='app')return isDemoMode?<DemoApp/>:<ProductionApp/>
+  return <LandingPage onOpenApp={()=>navigate('app')} onSignUp={()=>navigate('signup')}/>
 }
