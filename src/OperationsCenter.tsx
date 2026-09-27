@@ -1,8 +1,9 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Activity, Bell, Building2, Check, Download, FileArchive, FileSpreadsheet, Gauge, LockKeyhole, RefreshCw, Save, Settings2, ShieldCheck, Sparkles } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { getAutopilotSettings, getCompanySettings, listActivityLogs, listClients, listExpenses, listInvoices, listNotifications, listProjects, listUserSessions, markAllNotificationsRead, markNotificationRead, saveAutopilotSettings, updateCompanySettings } from './services/repository'
 import type { ActivityLog, AutopilotSettings, Client, CompanySettings, Expense, Invoice, Notification, Profile, Project, UserSession } from './types/models'
+import { playUiTone } from './lib/uiFeedback'
 
 type Tab = 'notifications'|'audit'|'export'|'automation'|'security'|'kpi'|'company'
 const tabs:Array<[Tab,string,typeof Bell]> = [['notifications','Notifications',Bell],['audit','Journal d’audit',Activity],['export','Sauvegarde & export',FileArchive],['automation','Automatisation commerciale',Sparkles],['security','Sécurité & conformité',ShieldCheck],['kpi','Indicateurs de performance',Gauge],['company','Paramètres entreprise',Building2]]
@@ -10,9 +11,10 @@ const fmt=(value?:string|null)=>value?new Date(value).toLocaleString('fr-FR'):'�
 const csv=(rows:Array<Record<string,unknown>>)=>{const keys=[...new Set(rows.flatMap(row=>Object.keys(row)))];return [keys.join(';'),...rows.map(row=>keys.map(key=>JSON.stringify(row[key]??'')).join(';'))].join('\n')}
 function download(name:string,body:string,type='text/csv'){const blob=new Blob([body],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();URL.revokeObjectURL(url)}
 
-export function NotificationBell(){
+export function NotificationBell({onRowsChange}:{onRowsChange?:(rows:Notification[])=>void}={}){
   const [open,setOpen]=useState(false),[rows,setRows]=useState<Notification[]>([])
-  const load=()=>listNotifications().then(setRows).catch(()=>undefined)
+  const previousUnread=useRef<number|null>(null)
+  const load=()=>listNotifications().then(next=>{const unread=next.filter(row=>!row.read_at).length;if(previousUnread.current!==null&&unread>previousUnread.current)playUiTone('confirm');previousUnread.current=unread;setRows(next);onRowsChange?.(next)}).catch(()=>undefined)
   useEffect(()=>{void load();const timer=window.setInterval(()=>void load(),60_000);return()=>window.clearInterval(timer)},[])
   const unread=rows.filter(row=>!row.read_at).length
   return <div className="notification-wrap"><button className="icon-btn notification-trigger" onClick={()=>setOpen(value=>!value)} aria-label="Notifications"><Bell/>{unread>0&&<b>{unread>99?'99+':unread}</b>}</button><AnimatePresence>{open&&<motion.div className="notification-popover" initial={{opacity:0,y:-8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-8}}><div className="notification-head"><div><span className="eyebrow"><i/> CENTRE DE NOTIFICATION</span><h3>Vos alertes</h3></div><button className="ghost-action" onClick={async()=>{await markAllNotificationsRead();await load()}}>Tout lire</button></div>{rows.length?rows.slice(0,8).map(row=><button key={row.id} className={`notification-item ${row.read_at?'read':''}`} onClick={async()=>{if(!row.read_at){await markNotificationRead(row.id);await load()}}}><span className="notification-dot"/><span><strong>{row.title}</strong><small>{row.body||'—'}</small><time>{fmt(row.created_at)}</time></span></button>):<p className="muted notification-empty">Aucune notification.</p>}</motion.div>}</AnimatePresence></div>

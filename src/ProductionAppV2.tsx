@@ -1,4 +1,4 @@
-import { CSSProperties, FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { CSSProperties, FormEvent, MouseEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Activity,
@@ -49,6 +49,7 @@ import CommunicationHub from "./CommunicationHub";
 import { contactsFromCsv, contactsFromFile, googleSheetCsvUrl, ImportedContact } from "./lib/contactImport";
 import { can, Permission, Role } from "./lib/permissions";
 import { isActionAllowed, isModuleAllowed } from "./lib/access";
+import { playUiTone } from "./lib/uiFeedback";
 import {
   endSession,
   pulseSession,
@@ -165,6 +166,7 @@ import type {
   Expense,
   Invoice,
   InvoiceItem,
+  Notification,
   NextBestAction,
   Payment,
   Profile,
@@ -1262,7 +1264,7 @@ function TasksPage({
       void getCalendarConnection()
         .then(setCalendarConnection)
         .catch((e) => setError(e.message));
-      const params = new URLSearchParams(location.search);
+      const params = new URLSearchParams(location.hash.split("?")[1] || location.search);
       const state = params.get("calendar");
       if (state === "connected") {
         setError("");
@@ -1272,7 +1274,12 @@ function TasksPage({
       }
       if (state) {
         params.delete("calendar");
-        history.replaceState({}, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
+        if (location.hash.includes("?calendar=")) {
+          const cleanHash = location.hash.split("?")[0];
+          history.replaceState({}, "", `${location.pathname}${location.search}${cleanHash}`);
+        } else {
+          history.replaceState({}, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
+        }
       }
     }
   }, [planning]);
@@ -2914,7 +2921,8 @@ function Shell({
     [accessLoaded, setAccessLoaded] = useState(false),
     [openGroups,setOpenGroups]=useState<string[]>(['Pilotage','Production & clients','Communication']),
     [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null),
-    [installed, setInstalled] = useState(() => window.matchMedia('(display-mode: standalone)').matches);
+    [installed, setInstalled] = useState(() => window.matchMedia('(display-mode: standalone)').matches),
+    [notificationRows, setNotificationRows] = useState<Notification[]>([]);
   const navigate = (next: Page, clientId: string | null = null) => {
     const hash = `#/${encodeURIComponent(next)}${clientId ? `?client=${encodeURIComponent(clientId)}` : ""}`;
     history.pushState({}, "", hash);
@@ -2954,11 +2962,27 @@ function Shell({
     if (installPrompt) { await installPrompt.prompt(); const choice = await installPrompt.userChoice; if (choice.outcome === 'accepted') setInstallPrompt(null); return; }
     alert('Dans Chrome ou Edge, ouvrez le menu du navigateur puis choisissez « Installer SmartSell Apps ». Sur iPhone/iPad : Partager → Sur l’écran d’accueil.');
   };
+  const handleUiClick = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    const control = target.closest('button, a, [role="button"]');
+    if (!control || (control as HTMLButtonElement).disabled) return;
+    playUiTone(control.classList.contains('primary-btn') ? 'confirm' : 'tap');
+  }, []);
   const roles = (profile.roles?.length ? profile.roles : [profile.role]) as Role[],
     admin = roles.some((item) => ["SUPER_ADMIN", "ADMIN"].includes(item));
   if (roles.includes("CLIENT")) return <ClientPortalView onLogout={onLogout} />;
   if (!accessLoaded&&!roles.includes("SUPER_ADMIN")) return <div className="app-loading"><img src={companyProfile.logo_dark}/><span>Vérification de vos autorisations…</span></div>;
   const actionAllowed = (key: string) => isActionAllowed(roles,access,accessLoaded,key);
+  const navNotificationCount = (name: Page) => {
+    const unread = notificationRows.filter(row=>!row.read_at);
+    if (name === 'Centre de contrôle') return unread.length;
+    const types:Partial<Record<Page,string[]>> = {
+      Projets:['project','projects'], Tâches:['task','tasks'], Planning:['task','tasks'],
+      Communication:['communication','campaign'], Facturation:['invoice','invoices'],
+      Équipe:['team','user'], Clients:['client','clients'],
+    };
+    return unread.filter(row=>types[name]?.includes(row.entity_type||'')).length;
+  };
   const rightsFor = (scope: string): CrudRights => ({
     view: actionAllowed(`${scope}.view`),
     create: actionAllowed(`${scope}.create`),
@@ -2971,7 +2995,7 @@ function Shell({
     (n[0]==='Centre de contrôle' ? actionAllowed('audit.read') : isModuleAllowed(roles,access,accessLoaded,n[0])));
   const currentPage = nav.some((item)=>item[0]===page&&visible(item)) ? page : 'Dashboard';
   return (
-    <div className="app-shell production-shell v2-shell">
+    <div className="app-shell production-shell v2-shell" onClickCapture={handleUiClick}>
       <aside className={mobile ? "mobile-open" : ""}>
         <div className="side-head">
           <img src={companyProfile.logo_light} />
@@ -2983,7 +3007,7 @@ function Shell({
           <small>SMARTSELL APPS V3</small>
           {navGroups.map(group=>{const items=nav.filter(item=>group.pages.includes(item[0])&&visible(item));if(!items.length)return null;const active=items.some(item=>item[0]===currentPage),expanded=openGroups.includes(group.label)||active;return <section className={`nav-group ${expanded?'expanded':''}`} key={group.label}>
             <button className="nav-group-toggle" onClick={()=>setOpenGroups(groups=>groups.includes(group.label)?groups.filter(item=>item!==group.label):[...groups,group.label])}><span>{group.label}</span><ChevronRight/></button>
-            <AnimatePresence initial={false}>{expanded&&<motion.div className="nav-group-items" initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}} transition={{duration:.24,ease:'easeOut'}}>{items.map(([name,Icon])=><button key={name} className={currentPage===name?'active':''} onClick={()=>navigate(name)}><Icon/><span>{name==='Clients'?'CRM & clients':name}</span></button>)}</motion.div>}</AnimatePresence>
+            <AnimatePresence initial={false}>{expanded&&<motion.div className="nav-group-items" initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}} transition={{duration:.24,ease:'easeOut'}}>{items.map(([name,Icon])=><button key={name} className={currentPage===name?'active':''} onClick={()=>navigate(name)}><Icon/><span>{name==='Clients'?'CRM & clients':name}</span>{navNotificationCount(name)>0&&<b className="nav-alert-badge">{navNotificationCount(name)>99?'99+':navNotificationCount(name)}</b>}</button>)}</motion.div>}</AnimatePresence>
           </section>})}
         </nav>
         <div className="side-bottom">
@@ -3019,7 +3043,7 @@ function Shell({
             >
               {theme === "dark" ? <Sun /> : <Moon />}
             </button>
-            <NotificationBell />
+            <NotificationBell onRowsChange={setNotificationRows} />
           </div>
         </header>
         <main>
