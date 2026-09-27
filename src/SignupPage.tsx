@@ -2,7 +2,7 @@ import { type FormEvent, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, Sparkles } from 'lucide-react'
 import { companyProfile } from './lib/companyProfile'
 import { isDemoMode } from './services/supabase'
-import { signInWithGoogle, signUpWithPassword } from './services/repository'
+import { resendConfirmationEmail, signInWithGoogle, signUpWithPassword } from './services/repository'
 import './signup.css'
 
 type Props = { onBack: () => void; onAccess: () => void }
@@ -12,6 +12,8 @@ export default function SignupPage({ onBack, onAccess }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [confirmationEmail, setConfirmationEmail] = useState('')
+  const [resendBusy, setResendBusy] = useState(false)
+  const [resendMessage, setResendMessage] = useState('')
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -45,6 +47,8 @@ export default function SignupPage({ onBack, onAccess }: Props) {
       <p>Nous avons envoyé un lien de confirmation à <strong>{confirmationEmail}</strong>. Cliquez dessus pour activer votre démo de 72 heures.</p>
       <div><Check/> L’accès démarre après validation de votre adresse</div>
       <div><Check/> Votre espace sera protégé et personnel</div>
+      {resendMessage && <p className="confirmation-note">{resendMessage}</p>}
+      <button onClick={async () => { setResendBusy(true); setResendMessage(''); try { await resendConfirmationEmail(confirmationEmail); setResendMessage('Nouveau lien envoyé. Vérifiez aussi vos courriers indésirables.'); } catch (reason) { setResendMessage(reason instanceof Error ? reason.message : 'Impossible de renvoyer le lien.'); } finally { setResendBusy(false); } }} disabled={resendBusy}>{resendBusy ? 'Envoi…' : 'Renvoyer le lien de confirmation'}</button>
       <button onClick={onAccess}>J’ai confirmé mon adresse <ArrowRight/></button>
       <button className="text-button" onClick={() => setConfirmationEmail('')}>Modifier mon adresse</button>
     </section>

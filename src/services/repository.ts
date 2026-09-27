@@ -20,11 +20,31 @@ async function invokeEdge<T>(name:string,body?:Record<string,unknown>,retryNetwo
   throw new Error('Briefing indisponible');
 }
 
-export async function signIn(email:string,password:string){const client=db();const {data,error}=await client.auth.signInWithPassword({email,password});fail(error);if(!data.user)return data;const {data:profile, error:profileError}=await client.from('profiles').select('active,access_expires_at').eq('id',data.user.id).single();if(profileError){await client.auth.signOut();throw new Error('Profil utilisateur introuvable.')}if(!profile.active){await client.auth.signOut();throw new Error('Ce compte est suspendu. Contactez le Super Admin.')}if(profile.access_expires_at&&new Date(profile.access_expires_at).getTime()<=Date.now()){await client.auth.signOut();throw new Error('La période d’essai de ce compte est terminée. Contactez SmartSell pour poursuivre.')}return data}
+export async function signIn(email:string,password:string){
+  const client=db();
+  const {data,error}=await client.auth.signInWithPassword({email,password});
+  if(error){
+    const message=error.message.toLowerCase();
+    if(message.includes('email not confirmed')) throw new Error('Adresse e-mail non confirmée. Demandez un nouveau lien de confirmation.');
+    if(message.includes('invalid login credentials')) throw new Error('E-mail ou mot de passe incorrect. Si vous venez de vous inscrire, confirmez d’abord le lien reçu par e-mail.');
+    throw new Error(error.message);
+  }
+  if(!data.user)return data;
+  const {data:profile, error:profileError}=await client.from('profiles').select('active,access_expires_at').eq('id',data.user.id).single();
+  if(profileError){await client.auth.signOut();throw new Error('Profil utilisateur introuvable.');}
+  if(!profile.active){await client.auth.signOut();throw new Error('Ce compte est suspendu. Contactez le Super Admin.');}
+  if(profile.access_expires_at&&new Date(profile.access_expires_at).getTime()<=Date.now()){await client.auth.signOut();throw new Error('La période d’essai de ce compte est terminée. Contactez SmartSell pour poursuivre.');}
+  return data;
+}
 export async function signUpWithPassword(input:{email:string;password:string;fullName:string;companyName:string}){
   const redirectTo=new URL(import.meta.env.BASE_URL,location.origin);redirectTo.hash='app';
   const {data,error}=await db().auth.signUp({email:input.email,password:input.password,options:{emailRedirectTo:redirectTo.href,data:{name:input.fullName,full_name:input.fullName,company_name:input.companyName,trial_hours:72}}});
   fail(error);return data
+}
+export async function resendConfirmationEmail(email:string){
+  const redirectTo=new URL(import.meta.env.BASE_URL,location.origin);redirectTo.hash='app';
+  const {error}=await db().auth.resend({type:'signup',email,options:{emailRedirectTo:redirectTo.href}});
+  fail(error);
 }
 export async function signInWithGoogle(){
   const redirectTo=new URL(import.meta.env.BASE_URL,location.origin);redirectTo.hash='app';
