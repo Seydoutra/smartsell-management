@@ -30,6 +30,7 @@ import {
   Phone,
   Plus,
   ReceiptText,
+  Save,
   Send,
   Settings2,
   ShieldCheck,
@@ -2769,7 +2770,17 @@ function TeamPage({ admin }: { admin: boolean }) {
           </Modal>
         )}
         {selected && (
-          <Modal title={selected.full_name} onClose={() => setSelected(null)}>
+          <Modal title={`Modifier · ${selected.full_name}`} onClose={() => setSelected(null)}>
+            {admin && <form className="entity-form" onSubmit={async (event) => { event.preventDefault(); const form=new FormData(event.currentTarget); try { await updateProfile(selected.id,{full_name:String(form.get("full_name")),role:String(form.get("role")),phone:String(form.get("phone")||"")||null,avatar_url:String(form.get("avatar_url")||"")||null,active:form.get("active")==="on"}); setSelected(null); await load(); } catch (error) { setError(error instanceof Error ? error.message : "Modification impossible"); } }}>
+              <div className="form-grid">
+                <Field label="Nom complet"><input name="full_name" defaultValue={selected.full_name} required /></Field>
+                <Field label="Rôle"><select name="role" defaultValue={selected.role}>{["ADMIN","MANAGER","CHEF_DE_PROJET","COMMERCIAL","COMMUNITY_MANAGER","GRAPHISTE","VIDEASTE","PHOTOGRAPHE","DEVELOPPEUR","COMPTABLE","COLLABORATEUR"].map(role=><option key={role}>{role}</option>)}</select></Field>
+                <Field label="Téléphone"><input name="phone" type="tel" defaultValue={selected.phone||""} /></Field>
+                <Field label="Photo (URL)" wide><input name="avatar_url" type="url" defaultValue={selected.avatar_url||""} placeholder="https://…/photo.jpg" /></Field>
+                <label className="check-options wide"><input name="active" type="checkbox" defaultChecked={selected.active} /> Compte actif</label>
+              </div>
+              <button className="primary-btn compact" type="submit"><Save/>Enregistrer les modifications</button>
+            </form>}
             <div className="access-summary">
               <ShieldCheck />
               <div>
