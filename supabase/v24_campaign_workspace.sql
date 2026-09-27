@@ -1,4 +1,4 @@
--- Campagnes SMARC/client : gouvernance, validation et traçabilité.
+-- Campagnes Smartsell/client : gouvernance, validation et traçabilité.
 alter table public.campaigns add column if not exists scope text not null default 'MARCEL';
 alter table public.campaigns add column if not exists client_id uuid references public.clients(id) on delete set null;
 alter table public.campaigns add column if not exists objective text;
@@ -11,13 +11,13 @@ create index if not exists idx_campaigns_approval on public.campaigns(approval_s
 
 -- Modèles de base utiles dès l'installation. Les insertions sont idempotentes.
 insert into public.communication_templates(channel,name,subject,body,variables)
-select 'SMS','Bienvenue collaborateur',null,'Bonjour {{nom}}, bienvenue chez SMARC. Votre accès SmartSell est prêt.',array['nom']
+select 'SMS','Bienvenue collaborateur',null,'Bonjour {{nom}}, bienvenue chez Smartsell. Votre accès Smartsell est prêt.',array['nom']
 where not exists (select 1 from public.communication_templates where name='Bienvenue collaborateur');
 insert into public.communication_templates(channel,name,subject,body,variables)
 select 'SMS','Rappel de tâche',null,'Bonjour {{nom}}, votre tâche « {{tache}} » arrive à échéance. Pensez à mettre SmartSell à jour.',array['nom','tache']
 where not exists (select 1 from public.communication_templates where name='Rappel de tâche');
 insert into public.communication_templates(channel,name,subject,body,variables)
-select 'EMAIL','Bienvenue client','Bienvenue chez SMARC','Bonjour {{nom}},\n\nVotre espace client SMARC est prêt. Retrouvez vos projets, validations et factures depuis votre portail.',array['nom']
+select 'EMAIL','Bienvenue client','Bienvenue chez Smartsell','Bonjour {{nom}},\n\nVotre espace client Smartsell est prêt. Retrouvez vos projets, validations et factures depuis votre portail.',array['nom']
 where not exists (select 1 from public.communication_templates where name='Bienvenue client');
 insert into public.communication_templates(channel,name,subject,body,variables)
 select 'EMAIL','Rapport de campagne','Rapport de campagne — {{entreprise}}','Bonjour {{nom}},\n\nVotre rapport de campagne est disponible : {{lien}}',array['nom','entreprise','lien']

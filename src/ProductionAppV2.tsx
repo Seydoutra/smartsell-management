@@ -625,7 +625,7 @@ function Dashboard({ profile, access, accessLoaded, onNavigate }: { profile: Pro
     <div className={`command-dashboard ${loading ? "is-loading" : ""}`}>
       <motion.section className="command-hero" initial={{opacity:0,y:14}} animate={{opacity:1,y:0}} transition={{duration:.45}}>
         <div className="command-grid"/><div className="command-glow glow-one"/><div className="command-glow glow-two"/>
-        <div className="command-copy"><span className="eyebrow"><i/> TABLEAU DE BORD SMARC</span><h1>{currentGreeting()}, {profile.full_name.split(" ")[0]}.</h1><p>Votre vue personnalisée de l’activité, des projets et des priorités du jour.</p><div className="live-chip"><i/> Données actualisées</div></div>
+        <div className="command-copy"><span className="eyebrow"><i/> TABLEAU DE BORD SMARTSELL</span><h1>{currentGreeting()}, {profile.full_name.split(" ")[0]}.</h1><p>Votre vue personnalisée de l’activité, des projets et des priorités du jour.</p><div className="live-chip"><i/> Données actualisées</div></div>
         <div className="command-orbit"><div className="orbit-ring ring-a"/><div className="orbit-ring ring-b"/><div className="orbit-core"><strong>{canAccounting?money(collected-spent):metrics.length}</strong><span>{canAccounting?'trésorerie nette':'indicateurs autorisés'}</span></div></div>
       </motion.section>
       {loadError&&<div className="error-banner dashboard-load-error"><span>{loadError}</span><button className="ghost-action" onClick={()=>window.location.reload()}>Réessayer</button></div>}
