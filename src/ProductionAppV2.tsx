@@ -384,6 +384,10 @@ function currentGreeting(){
   const hour=Number(new Intl.DateTimeFormat("fr-FR",{hour:"2-digit",hour12:false,timeZone:"Africa/Conakry"}).format(new Date()).replace(/\D/g,""));
   return hour<12?"Bonjour":hour<18?"Bon après-midi":"Bonsoir";
 }
+function currentGreetingEnglish(){
+  const hour=Number(new Intl.DateTimeFormat("en-US",{hour:"2-digit",hour12:false,timeZone:"Africa/Conakry"}).format(new Date()).replace(/\D/g,""));
+  return hour<12?"Good morning":hour<18?"Good afternoon":"Good evening";
+}
 function Modal({
   title,
   onClose,
@@ -548,6 +552,7 @@ function TrendCurve({rows,showRevenue,showCost}:{rows:Array<{label:string;revenu
 }
 
 function Dashboard({ profile, access, accessLoaded, onNavigate }: { profile: Profile; access:AccessControl|null; accessLoaded:boolean; onNavigate:(page:Page,clientId?:string|null)=>void }) {
+  const [english,setEnglish]=useState(false);
   const roles=(profile.roles?.length?profile.roles:[profile.role]) as Role[];
   const allowed=(action:string)=>isActionAllowed(roles,access,accessLoaded,action);
   const canClients=allowed('clients.view'), canProjects=allowed('projects.view'), canTasks=allowed('tasks.view'),
@@ -626,7 +631,7 @@ function Dashboard({ profile, access, accessLoaded, onNavigate }: { profile: Pro
     <div className={`command-dashboard ${loading ? "is-loading" : ""}`}>
       <motion.section className="command-hero" initial={{opacity:0,y:14}} animate={{opacity:1,y:0}} transition={{duration:.45}}>
         <div className="command-grid"/><div className="command-glow glow-one"/><div className="command-glow glow-two"/>
-        <div className="command-copy"><span className="eyebrow"><i/> TABLEAU DE BORD SMARTSELL</span><h1>{currentGreeting()}, {profile.full_name.split(" ")[0]}.</h1><p>Votre vue personnalisée de l’activité, des projets et des priorités du jour.</p><div className="live-chip"><i/> Données actualisées</div></div>
+        <div className="command-copy"><div className="dashboard-language"><button className="ghost-action" onClick={()=>setEnglish(value=>!value)}>{english?"FR":"EN"}</button></div><span className="eyebrow"><i/> {english?"SMARTSELL DASHBOARD":"TABLEAU DE BORD SMARTSELL"}</span><h1>{english?currentGreetingEnglish():currentGreeting()}, {profile.full_name.split(" ")[0]}.</h1><p>{english?"Your personalized view of activity, projects and today’s priorities.":"Votre vue personnalisée de l’activité, des projets et des priorités du jour."}</p><div className="live-chip"><i/> {english?"Live data":"Données actualisées"}</div></div>
         <div className="command-orbit"><div className="orbit-ring ring-a"/><div className="orbit-ring ring-b"/><div className="orbit-core"><strong>{canAccounting?money(collected-spent):metrics.length}</strong><span>{canAccounting?'trésorerie nette':'indicateurs autorisés'}</span></div></div>
       </motion.section>
       {loadError&&<div className="error-banner dashboard-load-error"><span>{loadError}</span><button className="ghost-action" onClick={()=>window.location.reload()}>Réessayer</button></div>}
@@ -2672,8 +2677,8 @@ function TeamPage({ admin }: { admin: boolean }) {
             onClick={() => setSelected(r)}
           >
             <div className="record-main">
-              <span className="record-avatar">
-                {r.full_name.slice(0, 2).toUpperCase()}
+              <span className="record-avatar team-photo">
+                {r.avatar_url ? <img src={r.avatar_url} alt={`Photo de ${r.full_name}`} /> : r.full_name.slice(0, 2).toUpperCase()}
               </span>
               <div>
                 <strong>{r.full_name}</strong>
@@ -2705,12 +2710,13 @@ function TeamPage({ admin }: { admin: boolean }) {
                   new FormData(e.currentTarget),
                 ) as Record<string, string>;
                 try {
-                  await createTeamMember({
+                  const created = await createTeamMember({
                     email: f.email,
                     password: f.password,
                     name: f.name,
                     roles: [f.role],
                   });
+                  if (f.avatar_url && created.id) await updateProfile(created.id, { avatar_url: f.avatar_url });
                   setOpen(false);
                   load();
                 } catch (x) {
@@ -2753,6 +2759,9 @@ function TeamPage({ admin }: { admin: boolean }) {
                       <option key={x}>{x}</option>
                     ))}
                   </select>
+                </Field>
+                <Field label="Photo (URL)" wide>
+                  <input name="avatar_url" type="url" placeholder="https://…/photo.jpg" />
                 </Field>
               </div>
               <button className="primary-btn compact">Créer le compte</button>

@@ -175,6 +175,7 @@ html,body,#root{max-width:100%;overflow-x:hidden}.app-shell,.app-main,.app-main 
 .team-summary{grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}
 @keyframes teamShimmer{0%,55%{transform:translateX(-110%)}75%,100%{transform:translateX(110%)}}
 .team-photo{overflow:hidden!important;padding:0}.team-photo img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
+.dashboard-language{display:flex;justify-content:flex-end;margin-bottom:4px}.command-copy .dashboard-language .ghost-action{border-color:rgba(255,255,255,.2);color:#fff;background:rgba(255,255,255,.06);padding:6px 10px}
 
 /* Chaque état possède une couleur sémantique distincte. */
 .status{border:1px solid transparent;transition:background .2s,color .2s,border-color .2s}
