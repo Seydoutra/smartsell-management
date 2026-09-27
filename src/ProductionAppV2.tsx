@@ -358,7 +358,7 @@ function WelcomeSplash({ profile, onComplete }: { profile: Profile; onComplete: 
     hour12: false,
     timeZone: "Africa/Conakry",
   }).format(new Date()).replace(/\D/g, ""));
-  const greeting = hour < 12 ? "Bonjour" : hour < 18 ? "Salut" : "Bonsoir";
+  const greeting = hour < 12 ? "Bonjour" : hour < 18 ? "Bon après-midi" : "Bonsoir";
   const displayName = profile.full_name.trim().split(/\s+/)[0] || "à vous";
   return (
     <motion.main
@@ -378,6 +378,10 @@ function WelcomeSplash({ profile, onComplete }: { profile: Profile; onComplete: 
       </motion.h1>
     </motion.main>
   );
+}
+function currentGreeting(){
+  const hour=Number(new Intl.DateTimeFormat("fr-FR",{hour:"2-digit",hour12:false,timeZone:"Africa/Conakry"}).format(new Date()).replace(/\D/g,""));
+  return hour<12?"Bonjour":hour<18?"Bon après-midi":"Bonsoir";
 }
 function Modal({
   title,
@@ -621,7 +625,7 @@ function Dashboard({ profile, access, accessLoaded, onNavigate }: { profile: Pro
     <div className={`command-dashboard ${loading ? "is-loading" : ""}`}>
       <motion.section className="command-hero" initial={{opacity:0,y:14}} animate={{opacity:1,y:0}} transition={{duration:.45}}>
         <div className="command-grid"/><div className="command-glow glow-one"/><div className="command-glow glow-two"/>
-        <div className="command-copy"><span className="eyebrow"><i/> VOTRE ESPACE AUTORISÉ</span><h1>Bonjour, {profile.full_name.split(" ")[0]}.</h1><p>Ce tableau de bord affiche uniquement les données correspondant à vos droits.</p><div className="live-chip"><i/> Accès contrôlé par Supabase</div></div>
+        <div className="command-copy"><span className="eyebrow"><i/> TABLEAU DE BORD SMARC</span><h1>{currentGreeting()}, {profile.full_name.split(" ")[0]}.</h1><p>Votre vue personnalisée de l’activité, des projets et des priorités du jour.</p><div className="live-chip"><i/> Données actualisées</div></div>
         <div className="command-orbit"><div className="orbit-ring ring-a"/><div className="orbit-ring ring-b"/><div className="orbit-core"><strong>{canAccounting?money(collected-spent):metrics.length}</strong><span>{canAccounting?'trésorerie nette':'indicateurs autorisés'}</span></div></div>
       </motion.section>
       {loadError&&<div className="error-banner dashboard-load-error"><span>{loadError}</span><button className="ghost-action" onClick={()=>window.location.reload()}>Réessayer</button></div>}
@@ -637,13 +641,13 @@ function Dashboard({ profile, access, accessLoaded, onNavigate }: { profile: Pro
         {canClients&&<button onClick={()=>onNavigate("Radar commercial")}><Target/><span><small>DÉTECTER</small><strong>Radar commercial</strong><em>Prioriser clients et prospects.</em></span><ChevronRight/></button>}
         {allowed('communication.view')&&<button onClick={()=>onNavigate("Studio campagnes IA")}><Megaphone/><span><small>ACCÉLÉRER</small><strong>Studio campagnes IA</strong><em>Concevoir, valider puis diffuser.</em></span><ChevronRight/></button>}
       </section>
-      {!metrics.length&&<div className="panel feature-ready"><ShieldCheck/><div><h2>Tableau de bord protégé</h2><p>Aucune donnée métier ne vous est encore attribuée. Le Super Admin peut activer vos modules dans Équipe et droits.</p></div></div>}
+      {!metrics.length&&<div className="panel feature-ready"><ShieldCheck/><div><h2>Votre espace est prêt</h2><p>Aucune donnée métier ne vous est encore attribuée. Les modules disponibles apparaîtront dès vos premières activités.</p></div></div>}
       <section className="command-metrics">{metrics.map((metric,index)=><motion.article className={`command-metric tone-${metric.tone}`} key={metric.label} initial={{opacity:0,y:18}} animate={{opacity:1,y:0}} transition={{delay:.04*index,duration:.35}} whileHover={{y:-4}}><div className="metric-icon"><metric.icon/></div><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.copy}</small><div className="metric-scan"/></motion.article>)}</section>
       <section className="command-panels">
         {canFinance&&<motion.article className="panel finance-radar" initial={{opacity:0,x:-16}} animate={{opacity:1,x:0}} whileHover={{y:-4,scale:1.005}}><div className="command-panel-head"><div><span className="eyebrow"><i/> FINANCE</span><h2>Flux des 6 derniers mois</h2></div><span className="pulse-label">● LIVE</span></div><TrendCurve rows={monthSeries} showRevenue={canInvoices} showCost={canAccounting}/><div className="future-chart">{monthSeries.map((row,index)=><div className="future-month" key={row.label}><div className="future-bars"><motion.i initial={{height:0}} animate={{height:`${Math.max(4,row.revenue/chartMax*100)}%`}} transition={{duration:.75,delay:index*.08}}/><motion.b initial={{height:0}} animate={{height:`${Math.max(4,row.cost/chartMax*100)}%`}} transition={{duration:.75,delay:.12+index*.08}}/></div><span>{row.label}</span></div>)}</div><div className="chart-key">{canInvoices&&<span><i/>Facturation</span>}{canAccounting&&<span><i/>Dépenses</span>}</div></motion.article>}
         {(canTasks||canProjects)&&<motion.article className="panel operations-ring" initial={{opacity:0,x:16}} animate={{opacity:1,x:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> EXÉCUTION</span><h2>Avancement opérationnel</h2></div></div><div className="progress-orb" style={{"--progress":`${completion*3.6}deg`} as CSSProperties}><div><strong>{canTasks?`${completion}%`:'—'}</strong><span>tâches terminées</span></div></div><div className="operation-stats">{canTasks&&<><span><b>{openTasks.length}</b> ouvertes</span><span><b>{t.filter(row=>row.priority==="URGENTE"&&row.status!=="TERMINE").length}</b> urgentes</span></>}{canProjects&&<span><b>{activeProjects.length}</b> projets actifs</span>}</div></motion.article>}
         {canClients&&<motion.article className="panel client-intelligence" initial={{opacity:0,y:16}} animate={{opacity:1,y:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> CLIENTS</span><h2>Portefeuille principal</h2></div><span>{c.length} comptes</span></div><div className="rank-list">{topClients.length?topClients.map((row,index)=><div key={row.client.id}><span>{String(index+1).padStart(2,"0")}</span><div><strong>{row.client.name}</strong><small>{row.client.sector||"Secteur non renseigné"}</small></div>{canInvoices&&<b>{money(row.total)}</b>}</div>):<p className="muted">Les clients apparaîtront ici.</p>}</div></motion.article>}
-        {canTeam&&<motion.article className="panel team-radar" initial={{opacity:0,y:16}} animate={{opacity:1,y:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> ÉQUIPE</span><h2>Présence et capacité</h2></div><span>{onlineIds.size} en ligne</span></div><div className="team-cloud">{team.slice(0,8).map((member,index)=><motion.div key={member.id} animate={{y:[0,-3,0]}} transition={{duration:2.8+index*.15,repeat:Infinity,delay:index*.12}} className={onlineIds.has(member.id)?"online":""}><b>{member.full_name.slice(0,2).toUpperCase()}</b><span>{member.full_name.split(" ")[0]}</span></motion.div>)}</div><div className="team-summary"><span><b>{team.filter(row=>row.active).length}</b> collaborateurs actifs</span>{canSuppliers&&<span><b>{suppliers.length}</b> fournisseurs référencés</span>}</div></motion.article>}
+        {canTeam&&<motion.article className="panel team-radar" initial={{opacity:0,y:16}} animate={{opacity:1,y:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> ÉQUIPE</span><h2>Équipe en mouvement</h2></div><span className="pulse-label">● {onlineIds.size} en ligne</span></div><div className="team-cloud">{team.slice(0,8).map((member,index)=><motion.div key={member.id} whileHover={{y:-5,scale:1.04}} animate={{y:[0,-3,0]}} transition={{duration:2.8+index*.15,repeat:Infinity,delay:index*.12}} className={`team-member-card ${onlineIds.has(member.id)?"online":""}`}><b>{member.full_name.slice(0,2).toUpperCase()}</b><span>{member.full_name.split(" ")[0]}</span><small>{member.roles?.[0]||member.role||"Collaborateur"}</small></motion.div>)}</div><div className="team-summary"><span><b>{team.filter(row=>row.active).length}</b> collaborateurs actifs</span><span><b>{onlineIds.size}</b> présence en direct</span>{canSuppliers&&<span><b>{suppliers.length}</b> fournisseurs référencés</span>}</div></motion.article>}
       </section>
     </div>
   );
