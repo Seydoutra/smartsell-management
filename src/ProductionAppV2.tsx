@@ -557,12 +557,15 @@ function Dashboard({ profile, access, accessLoaded, onNavigate }: { profile: Pro
     [team, setTeam] = useState<Profile[]>([]),
     [sessions, setSessions] = useState<UserSession[]>([]),
     [loading, setLoading] = useState(true),
+    [loadError, setLoadError] = useState(''),
     [briefing,setBriefing]=useState<AgencyBriefing|null>(null),
     [nextActions,setNextActions]=useState<NextBestAction[]>([]),
     [intelligenceBusy,setIntelligenceBusy]=useState(false),
     [intelligenceError,setIntelligenceError]=useState('');
   const loadIntelligence=async()=>{if(!canIntelligence)return;setIntelligenceBusy(true);setIntelligenceError('');try{const result=await generateAgencyIntelligence();setBriefing(result.briefing);setNextActions(result.actions)}catch(error){setIntelligenceError(error instanceof Error?error.message:'Briefing indisponible')}finally{setIntelligenceBusy(false)}};
   useEffect(() => {
+    setLoadError('');
+    setLoading(true);
     Promise.all([
       canClients?listClients():Promise.resolve([]),
       canProjects?listProjects():Promise.resolve([]),
@@ -583,7 +586,7 @@ function Dashboard({ profile, access, accessLoaded, onNavigate }: { profile: Pro
       setSuppliers(h);
       setTeam(j);
       setSessions(k);
-    }).finally(()=>setLoading(false));
+    }).catch((error)=>setLoadError(error instanceof Error?error.message:'Impossible de charger les indicateurs.')).finally(()=>setLoading(false));
     if(canIntelligence)void loadIntelligence();
   }, [accessLoaded,access?.allowed_modules.join('|'),access?.denied_permissions.join('|')]);
   const billed = i.reduce((sum, row) => sum + Number(row.total || 0), 0);
@@ -619,6 +622,7 @@ function Dashboard({ profile, access, accessLoaded, onNavigate }: { profile: Pro
         <div className="command-copy"><span className="eyebrow"><i/> VOTRE ESPACE AUTORISÉ</span><h1>Bonjour, {profile.full_name.split(" ")[0]}.</h1><p>Ce tableau de bord affiche uniquement les données correspondant à vos droits.</p><div className="live-chip"><i/> Accès contrôlé par Supabase</div></div>
         <div className="command-orbit"><div className="orbit-ring ring-a"/><div className="orbit-ring ring-b"/><div className="orbit-core"><strong>{canAccounting?money(collected-spent):metrics.length}</strong><span>{canAccounting?'trésorerie nette':'indicateurs autorisés'}</span></div></div>
       </motion.section>
+      {loadError&&<div className="error-banner dashboard-load-error"><span>{loadError}</span><button className="ghost-action" onClick={()=>window.location.reload()}>Réessayer</button></div>}
       {canIntelligence&&<section className="agency-intelligence">
         <motion.article className="panel agency-briefing" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}}>
           <div className="agency-ai-head"><div className="ai-orb compact"><Sparkles/></div><div><span className="eyebrow"><i/> DIRECTEUR IA</span><h2>{briefing?.greeting||'Votre briefing stratégique'}</h2></div><button className="ghost-action" disabled={intelligenceBusy} onClick={()=>void loadIntelligence()}>{intelligenceBusy?'Analyse…':'Actualiser'}</button></div>
