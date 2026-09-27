@@ -254,6 +254,7 @@ const money = (v: number, c = "GNF") =>
 const fmt = (d?: string | null) =>
   d ? new Date(d).toLocaleDateString("fr-FR") : "—";
 const label = (s?: string | null) => (s || "—").replaceAll("_", " ");
+const statusClass = (s?: string | null) => { const value=(s||"").toUpperCase(); if(/TERMINE|PAYEE|APPROUVE|PUBLIE|ACTIVE|CONNECTE|SENT|COMPLETED/.test(value)) return "success"; if(/ATTENTE|VALIDER|REDIGER|CREATION|PLANIFIE|A_FAIRE|DRAFT/.test(value)) return "pending"; if(/COURS|MISSION|QUEUED|CONTACT|QUALIFIE/.test(value)) return "progress"; if(/URGENT|REFUS|ANNULE|FAILED|HORS_SERVICE|CRITIQUE/.test(value)) return "danger"; if(/PAUSE|MAINTENANCE|RELANCER/.test(value)) return "warning"; return "neutral"; };
 
 function Login({ onSuccess }: { onSuccess: () => void }) {
   const [email, setEmail] = useState("");
@@ -647,7 +648,7 @@ function Dashboard({ profile, access, accessLoaded, onNavigate }: { profile: Pro
         {canFinance&&<motion.article className="panel finance-radar" initial={{opacity:0,x:-16}} animate={{opacity:1,x:0}} whileHover={{y:-4,scale:1.005}}><div className="command-panel-head"><div><span className="eyebrow"><i/> FINANCE</span><h2>Flux des 6 derniers mois</h2></div><span className="pulse-label">● LIVE</span></div><TrendCurve rows={monthSeries} showRevenue={canInvoices} showCost={canAccounting}/><div className="future-chart">{monthSeries.map((row,index)=><div className="future-month" key={row.label}><div className="future-bars"><motion.i initial={{height:0}} animate={{height:`${Math.max(4,row.revenue/chartMax*100)}%`}} transition={{duration:.75,delay:index*.08}}/><motion.b initial={{height:0}} animate={{height:`${Math.max(4,row.cost/chartMax*100)}%`}} transition={{duration:.75,delay:.12+index*.08}}/></div><span>{row.label}</span></div>)}</div><div className="chart-key">{canInvoices&&<span><i/>Facturation</span>}{canAccounting&&<span><i/>Dépenses</span>}</div></motion.article>}
         {(canTasks||canProjects)&&<motion.article className="panel operations-ring" initial={{opacity:0,x:16}} animate={{opacity:1,x:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> EXÉCUTION</span><h2>Avancement opérationnel</h2></div></div><div className="progress-orb" style={{"--progress":`${completion*3.6}deg`} as CSSProperties}><div><strong>{canTasks?`${completion}%`:'—'}</strong><span>tâches terminées</span></div></div><div className="operation-stats">{canTasks&&<><span><b>{openTasks.length}</b> ouvertes</span><span><b>{t.filter(row=>row.priority==="URGENTE"&&row.status!=="TERMINE").length}</b> urgentes</span></>}{canProjects&&<span><b>{activeProjects.length}</b> projets actifs</span>}</div></motion.article>}
         {canClients&&<motion.article className="panel client-intelligence" initial={{opacity:0,y:16}} animate={{opacity:1,y:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> CLIENTS</span><h2>Portefeuille principal</h2></div><span>{c.length} comptes</span></div><div className="rank-list">{topClients.length?topClients.map((row,index)=><div key={row.client.id}><span>{String(index+1).padStart(2,"0")}</span><div><strong>{row.client.name}</strong><small>{row.client.sector||"Secteur non renseigné"}</small></div>{canInvoices&&<b>{money(row.total)}</b>}</div>):<p className="muted">Les clients apparaîtront ici.</p>}</div></motion.article>}
-        {canTeam&&<motion.article className="panel team-radar" initial={{opacity:0,y:16}} animate={{opacity:1,y:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> ÉQUIPE</span><h2>Équipe en mouvement</h2></div><span className="pulse-label">● {onlineIds.size} en ligne</span></div><div className="team-cloud">{team.slice(0,8).map((member,index)=><motion.div key={member.id} whileHover={{y:-5,scale:1.04}} animate={{y:[0,-3,0]}} transition={{duration:2.8+index*.15,repeat:Infinity,delay:index*.12}} className={`team-member-card ${onlineIds.has(member.id)?"online":""}`}><b>{member.full_name.slice(0,2).toUpperCase()}</b><span>{member.full_name.split(" ")[0]}</span><small>{member.roles?.[0]||member.role||"Collaborateur"}</small></motion.div>)}</div><div className="team-summary"><span><b>{team.filter(row=>row.active).length}</b> collaborateurs actifs</span><span><b>{onlineIds.size}</b> présence en direct</span>{canSuppliers&&<span><b>{suppliers.length}</b> fournisseurs référencés</span>}</div></motion.article>}
+        {canTeam&&<motion.article className="panel team-radar" initial={{opacity:0,y:16}} animate={{opacity:1,y:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> ÉQUIPE</span><h2>Équipe en mouvement</h2></div><span className="pulse-label">● {onlineIds.size} en ligne</span></div><div className="team-cloud">{team.slice(0,8).map((member,index)=><motion.div key={member.id} whileHover={{y:-5,scale:1.04}} animate={{y:[0,-3,0]}} transition={{duration:2.8+index*.15,repeat:Infinity,delay:index*.12}} className={`team-member-card ${onlineIds.has(member.id)?"online":""}`}><b className="team-photo">{member.avatar_url?<img src={member.avatar_url} alt={`Photo de ${member.full_name}`}/>:member.full_name.slice(0,2).toUpperCase()}</b><span>{member.full_name.split(" ")[0]}</span><small>{member.roles?.[0]||member.role||"Collaborateur"}</small></motion.div>)}</div><div className="team-summary"><span><b>{team.filter(row=>row.active).length}</b> collaborateurs actifs</span><span><b>{onlineIds.size}</b> présence en direct</span>{canSuppliers&&<span><b>{suppliers.length}</b> fournisseurs référencés</span>}</div></motion.article>}
       </section>
     </div>
   );
@@ -741,7 +742,7 @@ function ClientDetail({
                 {data.client.email || "Aucun email"} ·{" "}
                 {data.client.phone || "Aucun téléphone"}
               </p>
-              <span className="status">{label(data.client.status)}</span>
+              <span className={`status ${statusClass(data.client.status)}`}>{label(data.client.status)}</span>
             </div>
             {rights.update && <button className="ghost-action" onClick={() => setEdit(true)}>
               <Pencil />
@@ -879,7 +880,7 @@ function ClientsPage({ rights, onNavigate }: { rights: CrudRights; onNavigate: (
                   <small>{r.sector || "Secteur non renseigné"}</small>
                 </div>
               </div>
-              <span className="status">{label(r.status)}</span>
+              <span className={`status ${statusClass(r.status)}`}>{label(r.status)}</span>
               <span className="record-meta">
                 {r.email || r.phone || "Aucun contact"}
               </span>
@@ -1154,7 +1155,7 @@ function ProjectsPage({ rights, clientFilter, onClearFilter }: { rights: CrudRig
                   </small>
                 </div>
               </div>
-              <span className="status">{label(r.status)}</span>
+              <span className={`status ${statusClass(r.status)}`}>{label(r.status)}</span>
               <span className="record-meta">
                 <i className="mini-progress">
                   <b style={{ width: `${r.progress}%` }} />

@@ -174,3 +174,13 @@ html,body,#root{max-width:100%;overflow-x:hidden}.app-shell,.app-main,.app-main 
 .team-cloud small{margin-top:3px;font-size:.48rem;color:var(--brand-primary)}
 .team-summary{grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}
 @keyframes teamShimmer{0%,55%{transform:translateX(-110%)}75%,100%{transform:translateX(110%)}}
+.team-photo{overflow:hidden!important;padding:0}.team-photo img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
+
+/* Chaque état possède une couleur sémantique distincte. */
+.status{border:1px solid transparent;transition:background .2s,color .2s,border-color .2s}
+.status.pending,.status.waiting{background:rgba(235,151,42,.13);color:#b66b08;border-color:rgba(235,151,42,.28)}
+.status.info,.status.progress{background:rgba(61,126,214,.13);color:#2863a9;border-color:rgba(61,126,214,.28)}
+.status.warning{background:rgba(145,73,173,.13);color:#71318e;border-color:rgba(145,73,173,.28)}
+.status.neutral{background:rgba(117,111,126,.13);color:#6e6875;border-color:rgba(117,111,126,.25)}
+.status.danger{background:rgba(219,75,87,.13);color:#bf3542;border-color:rgba(219,75,87,.28)}
+.status.success{background:rgba(35,168,106,.13);color:#168354;border-color:rgba(35,168,106,.28)}
