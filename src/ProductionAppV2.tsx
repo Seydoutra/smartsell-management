@@ -67,6 +67,7 @@ import {
 } from "./AdvancedModulesV3";
 import { CampaignStudioPage, CommercialRadarPage, DigitalTwinPage } from "./InnovationsV4";
 import { AutopilotPage } from "./AutopilotV5";
+import { NotificationBell, OperationsCenter } from "./OperationsCenter";
 import {
   connectGoogleCalendar,
   createCampaign,
@@ -193,6 +194,7 @@ type Page =
   | "Équipe"
   | "RH"
   | "Rapports"
+  | "Centre de contrôle"
   | "Jumeau numérique"
   | "Radar commercial"
   | "Studio campagnes IA"
@@ -219,6 +221,7 @@ const nav: [Page, typeof LayoutDashboard, Permission?][] = [
   ["Équipe", Users, "users.manage"],
   ["RH", BriefcaseBusiness, "users.manage"],
   ["Rapports", Activity, "audit.read"],
+  ["Centre de contrôle", ShieldCheck, "audit.read"],
   ["Jumeau numérique", Gauge, "finance.read"],
   ["Radar commercial", Target, "crm.write"],
   ["Studio campagnes IA", Megaphone, "communication.send"],
@@ -231,7 +234,7 @@ const navGroups:{label:string;pages:Page[]}[]=[
   {label:'Production & clients',pages:['Clients','Projets','Tâches','Planning','Éditorial']},
   {label:'Finance & achats',pages:['Services','Fournisseurs','Facturation','Documents','Comptabilité','Matériel']},
   {label:'Communication',pages:['Communication','Intégrations']},
-  {label:'Administration',pages:['Équipe','RH','Rapports','Portail client']},
+  {label:'Administration',pages:['Équipe','RH','Rapports','Centre de contrôle','Portail client']},
   {label:'Intelligence artificielle',pages:['Jumeau numérique','Radar commercial','Studio campagnes IA','Autopilot IA','Assistant IA']},
 ];
 const pageNames = new Set<Page>(nav.map(([name]) => name));
@@ -2958,10 +2961,10 @@ function Shell({
     update: actionAllowed(`${scope}.update`),
     delete: actionAllowed(`${scope}.delete`),
   });
-  const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'suppliers.view',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Intégrations:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Portail client':'portal.view','Jumeau numérique':'accounting.view','Radar commercial':'clients.view','Studio campagnes IA':'communication.view'};
+  const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'finance.read',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Intégrations:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Centre de contrôle':'audit.read','Portail client':'portal.view','Jumeau numérique':'accounting.view','Radar commercial':'clients.view','Studio campagnes IA':'communication.view'};
   const visible = (n: [Page, typeof LayoutDashboard, Permission?]) => n[0]==='Dashboard'||(
     (!viewKeys[n[0]] || actionAllowed(viewKeys[n[0]]!)) &&
-    isModuleAllowed(roles,access,accessLoaded,n[0]));
+    (n[0]==='Centre de contrôle' ? actionAllowed('audit.read') : isModuleAllowed(roles,access,accessLoaded,n[0])));
   const currentPage = nav.some((item)=>item[0]===page&&visible(item)) ? page : 'Dashboard';
   return (
     <div className="app-shell production-shell v2-shell">
@@ -3012,9 +3015,7 @@ function Shell({
             >
               {theme === "dark" ? <Sun /> : <Moon />}
             </button>
-            <button className="icon-btn">
-              <Bell />
-            </button>
+            <NotificationBell />
           </div>
         </header>
         <main>
@@ -3060,6 +3061,8 @@ function Shell({
                 <HRPage />
               ) : currentPage === "Rapports" ? (
                 <ReportsPage />
+              ) : currentPage === "Centre de contrôle" ? (
+                <OperationsCenter profile={profile} />
               ) : currentPage === "Jumeau numérique" ? (
                 <DigitalTwinPage />
               ) : currentPage === "Radar commercial" ? (
