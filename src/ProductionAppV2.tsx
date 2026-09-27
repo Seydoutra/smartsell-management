@@ -51,6 +51,7 @@ import { contactsFromCsv, contactsFromFile, googleSheetCsvUrl, ImportedContact }
 import { can, Permission, Role } from "./lib/permissions";
 import { isActionAllowed, isModuleAllowed } from "./lib/access";
 import { playUiTone } from "./lib/uiFeedback";
+import { watchTranslations } from "./lib/i18n";
 import {
   endSession,
   pulseSession,
@@ -2675,36 +2676,45 @@ function TeamPage({ admin }: { admin: boolean }) {
         add="Nouvel utilisateur"
       />
       <ErrorBar value={error} />
-      <div className="records panel">
-        {rows.map((r) => (
-          <article
-            className="clickable-row"
-            key={r.id}
-            onClick={() => setSelected(r)}
-          >
-            <div className="record-main">
-              <span className="record-avatar team-photo">
-                {r.avatar_url ? <img src={r.avatar_url} alt={`Photo de ${r.full_name}`} /> : r.full_name.slice(0, 2).toUpperCase()}
-              </span>
-              <div>
-                <strong>{r.full_name}</strong>
-                <small>{label(r.role)}</small>
+      <section className="team-management">
+        <div className="team-overview panel">
+          <div>
+            <span className="eyebrow"><i /> ESPACE COLLABORATEURS</span>
+            <h2>Une équipe claire, des accès maîtrisés.</h2>
+            <p>Ouvrez une fiche pour modifier le profil, ajouter sa photo, gérer son rôle ou suspendre son accès.</p>
+          </div>
+          <div className="team-overview-stats">
+            <span><b>{rows.length}</b><small>profils</small></span>
+            <span><b>{rows.filter((row) => row.active).length}</b><small>actifs</small></span>
+            <span><b>{rows.filter((row) => row.avatar_url).length}</b><small>photos</small></span>
+          </div>
+        </div>
+        {rows.length ? <div className="team-management-grid">
+          {rows.map((r) => (
+            <article className="team-card panel" key={r.id} onClick={() => setSelected(r)}>
+              <div className="team-card-head">
+                <span className="team-card-photo team-photo">
+                  {r.avatar_url ? <img src={r.avatar_url} alt={`Photo de ${r.full_name}`} /> : r.full_name.slice(0, 2).toUpperCase()}
+                </span>
+                <div className="team-card-identity">
+                  <strong>{r.full_name}</strong>
+                  <small>{label(r.role)}</small>
+                </div>
+                <span className={`status ${r.active ? "success" : "danger"}`}>{r.active ? "Actif" : "Suspendu"}</span>
               </div>
-            </div>
-            <span className={`status ${!r.active ? "danger" : ""}`}>
-              {r.active ? "Actif" : "Suspendu"}
-            </span>
-            <span className="record-meta">
-              {r.must_change_password
-                ? "Mot de passe à changer"
-                : "Compte vérifié"}
-            </span>
-            <b className="record-amount">
-              Gérer <ChevronRight />
-            </b>
-          </article>
-        ))}
-      </div>
+              <div className="team-card-meta">
+                <span>{r.phone || "Téléphone non renseigné"}</span>
+                <span>{r.must_change_password ? "Mot de passe à changer" : "Compte vérifié"}</span>
+              </div>
+              <div className="team-card-actions">
+                {admin && <button className="primary-btn compact" onClick={(event) => { event.stopPropagation(); setSelected(r); }}><Pencil /> Modifier</button>}
+                {admin && <button className="ghost-action compact" onClick={async (event) => { event.stopPropagation(); await updateProfile(r.id, { active: !r.active }); await load(); }}>{r.active ? "Suspendre" : "Réactiver"}</button>}
+                <button className="icon-btn" aria-label={`Ouvrir la fiche de ${r.full_name}`} onClick={(event) => { event.stopPropagation(); setSelected(r); }}><ChevronRight /></button>
+              </div>
+            </article>
+          ))}
+        </div> : <div className="empty-state panel">Aucun collaborateur enregistré.</div>}
+      </section>
       <AnimatePresence>
         {open && (
           <Modal title="Créer un utilisateur" onClose={() => setOpen(false)}>
@@ -2961,6 +2971,7 @@ function Shell({
     setClientFilter(clientId);
     setMobile(false);
   };
+  useEffect(()=>watchTranslations(englishDashboard),[englishDashboard]);
   useEffect(() => {
     if (!location.hash) history.replaceState({}, "", `#/${encodeURIComponent("Dashboard")}`);
     const sync = () => { setPage(pageFromHash()); setClientFilter(clientFromHash()); };
@@ -3068,7 +3079,7 @@ function Shell({
           </div>
           <div className="top-actions">
             {!installed&&<button className="install-app-btn" onClick={()=>void installApp()} title="Installer SmartSell Apps sur cet appareil"><Download/><span>Installer l’application</span></button>}
-            {currentPage==="Dashboard"&&<button className="language-toggle" onClick={()=>setEnglishDashboard(value=>!value)} title="Dashboard language">{englishDashboard?"FR":"EN"}</button>}
+            <button className="language-toggle" onClick={()=>setEnglishDashboard(value=>!value)} title="Dashboard language">{englishDashboard?"FR":"EN"}</button>
             <button
               className="icon-btn"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
