@@ -552,8 +552,7 @@ function TrendCurve({rows,showRevenue,showCost}:{rows:Array<{label:string;revenu
   </div>;
 }
 
-function Dashboard({ profile, access, accessLoaded, onNavigate }: { profile: Profile; access:AccessControl|null; accessLoaded:boolean; onNavigate:(page:Page,clientId?:string|null)=>void }) {
-  const [english,setEnglish]=useState(false);
+function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { profile: Profile; access:AccessControl|null; accessLoaded:boolean; onNavigate:(page:Page,clientId?:string|null)=>void; english:boolean }) {
   const roles=(profile.roles?.length?profile.roles:[profile.role]) as Role[];
   const allowed=(action:string)=>isActionAllowed(roles,access,accessLoaded,action);
   const canClients=allowed('clients.view'), canProjects=allowed('projects.view'), canTasks=allowed('tasks.view'),
@@ -638,7 +637,7 @@ function Dashboard({ profile, access, accessLoaded, onNavigate }: { profile: Pro
     <div className={`command-dashboard ${loading ? "is-loading" : ""}`}>
       <motion.section className="command-hero" initial={{opacity:0,y:14}} animate={{opacity:1,y:0}} transition={{duration:.45}}>
         <div className="command-grid"/><div className="command-glow glow-one"/><div className="command-glow glow-two"/>
-        <div className="command-copy"><div className="dashboard-language"><button className="ghost-action" onClick={()=>setEnglish(value=>!value)}>{english?"FR":"EN"}</button></div><span className="eyebrow"><i/> {english?"SMARTSELL DASHBOARD":"TABLEAU DE BORD SMARTSELL"}</span><h1>{english?currentGreetingEnglish():currentGreeting()}, {profile.full_name.split(" ")[0]}.</h1><p>{english?"Your personalized view of activity, projects and today’s priorities.":"Votre vue personnalisée de l’activité, des projets et des priorités du jour."}</p><div className="live-chip"><i/> {english?"Live data":"Données actualisées"}</div></div>
+        <div className="command-copy"><span className="eyebrow"><i/> {english?"SMARTSELL DASHBOARD":"TABLEAU DE BORD SMARTSELL"}</span><h1>{english?currentGreetingEnglish():currentGreeting()}, {profile.full_name.split(" ")[0]}.</h1><p>{english?"Your personalized view of activity, projects and today’s priorities.":"Votre vue personnalisée de l’activité, des projets et des priorités du jour."}</p><div className="live-chip"><i/> {english?"Live data":"Données actualisées"}</div></div>
         <div className="command-orbit"><div className="orbit-ring ring-a"/><div className="orbit-ring ring-b"/><div className="orbit-core"><strong>{canAccounting?money(collected-spent):metrics.length}</strong><span>{canAccounting?tx.netCash:tx.allowedMetrics}</span></div></div>
       </motion.section>
       {loadError&&<div className="error-banner dashboard-load-error"><span>{loadError}</span><button className="ghost-action" onClick={()=>window.location.reload()}>{tx.retry}</button></div>}
@@ -2953,7 +2952,8 @@ function Shell({
     [openGroups,setOpenGroups]=useState<string[]>(['Pilotage','Production & clients','Communication']),
     [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null),
     [installed, setInstalled] = useState(() => window.matchMedia('(display-mode: standalone)').matches),
-    [notificationRows, setNotificationRows] = useState<Notification[]>([]);
+    [notificationRows, setNotificationRows] = useState<Notification[]>([]),
+    [englishDashboard, setEnglishDashboard] = useState(false);
   const navigate = (next: Page, clientId: string | null = null) => {
     const hash = `#/${encodeURIComponent(next)}${clientId ? `?client=${encodeURIComponent(clientId)}` : ""}`;
     history.pushState({}, "", hash);
@@ -3068,6 +3068,7 @@ function Shell({
           </div>
           <div className="top-actions">
             {!installed&&<button className="install-app-btn" onClick={()=>void installApp()} title="Installer SmartSell Apps sur cet appareil"><Download/><span>Installer l’application</span></button>}
+            {currentPage==="Dashboard"&&<button className="language-toggle" onClick={()=>setEnglishDashboard(value=>!value)} title="Dashboard language">{englishDashboard?"FR":"EN"}</button>}
             <button
               className="icon-btn"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -3087,7 +3088,7 @@ function Shell({
               exit={{ opacity: 0 }}
             >
               {currentPage === "Dashboard" ? (
-                <Dashboard profile={profile} access={access} accessLoaded={accessLoaded} onNavigate={navigate} />
+                <Dashboard profile={profile} access={access} accessLoaded={accessLoaded} onNavigate={navigate} english={englishDashboard} />
               ) : currentPage === "Clients" ? (
                 <ClientsPage rights={rightsFor('clients')} onNavigate={(next,clientId)=>navigate(next,clientId)} />
               ) : currentPage === "Projets" ? (
