@@ -3080,7 +3080,7 @@ function Shell({
               ) : currentPage === "Matériel" ? (
                 <EquipmentPage rights={rightsFor('equipment')} />
               ) : currentPage === "Communication" ? (
-                <CommunicationHub onBack={()=>navigate("Dashboard")} onOpenIntegrations={()=>navigate("Intégrations")} />
+                <CommunicationHub canApprove={admin} onBack={()=>navigate("Dashboard")} onOpenIntegrations={()=>navigate("Intégrations")} />
               ) : currentPage === "Intégrations" ? (
                 <IntegrationsPage rights={rightsFor('communication')} />
               ) : currentPage === "Équipe" ? (
