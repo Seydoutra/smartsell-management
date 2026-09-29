@@ -105,6 +105,7 @@ import {
   getClientWorkspace,
   getProfile,
   getProjectWorkspace,
+  getAppSetting,
   finishCall,
   listActivityLogs,
   listCallLogs,
@@ -126,6 +127,7 @@ import {
   listProjects,
   listSocialIntegrations,
   saveSocialIntegration,
+  saveAppSetting,
   listServices,
   listSuppliers,
   listTasks,
@@ -576,6 +578,8 @@ function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { pro
     [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]),
     [salesAdvice, setSalesAdvice] = useState(''),
     [salesAdviceBusy, setSalesAdviceBusy] = useState(false),
+    [monthlyGoal, setMonthlyGoal] = useState<{metric:string;target:number;period:string;plan?:string}>(),
+    [goalBusy, setGoalBusy] = useState(false),
     [loading, setLoading] = useState(true),
     [loadError, setLoadError] = useState(''),
     [briefing,setBriefing]=useState<AgencyBriefing|null>(null),
@@ -611,6 +615,8 @@ function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { pro
     }).catch((error)=>setLoadError(error instanceof Error?error.message:'Impossible de charger les indicateurs.')).finally(()=>setLoading(false));
     if(canIntelligence)void loadIntelligence();
   }, [accessLoaded,access?.allowed_modules.join('|'),access?.denied_permissions.join('|')]);
+  useEffect(()=>{if(!roles.includes('SUPER_ADMIN'))return;void getAppSetting<{metric:string;target:number;period:string;plan?:string}>('monthly_goal').then(value=>setMonthlyGoal(value||undefined)).catch(()=>undefined)},[roles.join('|')]);
+  const saveMonthlyGoal=async(goal:{metric:string;target:number;period:string})=>{setGoalBusy(true);try{const active=team.filter(member=>member.active&&!member.roles?.includes('SUPER_ADMIN'));const allocation=active.length?Math.ceil(goal.target/active.length):goal.target;const plan=await askAiAssistant(`Objectif mensuel SmartSell : ${goal.target} ${goal.metric} sur ${goal.period}. Équipe active : ${active.map(item=>item.full_name).join(', ')||'aucun collaborateur'}. Répartis l’objectif sur 4 semaines et indique les activités opérationnelles prioritaires. Donne un plan très concis en français.`, 'Plan d’objectifs mensuel');const value={...goal,plan:`Répartition indicative : ${allocation} ${goal.metric} par collaborateur actif.\n${plan}`};await saveAppSetting('monthly_goal',value);setMonthlyGoal(value)}catch(error){setSalesAdvice(error instanceof Error?error.message:'Impossible de calculer le plan')}finally{setGoalBusy(false)}};
   const billed = i.reduce((sum, row) => sum + Number(row.total || 0), 0);
   const collected = payments.reduce((sum, row) => sum + Number(row.amount || 0), 0);
   const spent = expenses.reduce((sum, row) => sum + Number(row.amount || 0), 0);
@@ -656,6 +662,7 @@ function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { pro
         <motion.article className="panel next-actions" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} transition={{delay:.08}}><div className="command-panel-head"><div><span className="eyebrow"><i/> NEXT BEST ACTION</span><h2>Les décisions recommandées</h2></div><b>{nextActions.length}</b></div><div className="next-action-list">{nextActions.length?nextActions.map(action=><div key={action.id} className={`next-action priority-${action.priority.toLowerCase()}`}><span className="action-priority">{action.priority}</span><div><strong>{action.title}</strong><small>{action.reason}</small></div><div className="next-action-buttons"><button className="primary-btn compact" onClick={async()=>{await executeNextBestAction(action);setNextActions(rows=>rows.filter(row=>row.id!==action.id));onNavigate(action.target_page as Page,action.client_id)}}>{action.action_type==='COMPLETE_TASK'?'Confirmer terminée':'Ouvrir'}</button><button className="icon-btn" title="Ignorer" onClick={async()=>{await updateNextBestAction(action.id,'IGNOREE');setNextActions(rows=>rows.filter(row=>row.id!==action.id))}}><X/></button></div></div>):<p className="muted">Aucune action urgente. Actualisez le briefing lorsque les données changent.</p>}</div></motion.article>
       </section>}
       {roles.includes('SUPER_ADMIN')&&<SaaSSalesDashboard leads={salesLeads} advice={salesAdvice} busy={salesAdviceBusy} onSuggest={()=>void loadSalesAdvice()} onOpen={()=>onNavigate('Demandes SaaS')} />}
+      {roles.includes('SUPER_ADMIN')&&<MonthlyGoalDashboard goal={monthlyGoal} busy={goalBusy} onSave={saveMonthlyGoal} />}
       <section className="innovation-launchpad">
         {canAccounting&&<button onClick={()=>onNavigate("Jumeau numérique")}><Gauge/><span><small>{tx.forecast}</small><strong>{tx.digitalTwin}</strong><em>{tx.simulate}</em></span><ChevronRight/></button>}
         {canClients&&<button onClick={()=>onNavigate("Radar commercial")}><Target/><span><small>{tx.detect}</small><strong>{tx.commercialRadar}</strong><em>{tx.prioritize}</em></span><ChevronRight/></button>}
@@ -676,6 +683,11 @@ function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { pro
 function SaaSSalesDashboard({leads,advice,busy,onSuggest,onOpen}:{leads:Array<{item:Profile;score:number;actions:number;last?:string|null}>;advice:string;busy:boolean;onSuggest:()=>void;onOpen:()=>void}){
   const hot=leads.filter(row=>row.score>=71).length, engaged=leads.filter(row=>row.score>=31).length;
   return <motion.section className="panel saas-sales-dashboard" initial={{opacity:0,y:14}} animate={{opacity:1,y:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> SALES SaaS · PRIVÉ SUPER ADMIN</span><h2>Transformer les essais en clients</h2><p>Les indicateurs d’usage vous indiquent qui contacter et pourquoi.</p></div><div className="saas-sales-actions"><button className="ghost-action" onClick={onOpen}>Voir les demandes</button><button className="primary-btn compact" onClick={onSuggest} disabled={busy}><Sparkles/>{busy?'Analyse IA…':'Suggestions IA'}</button></div></div><div className="saas-sales-kpis"><div><b>{leads.length}</b><span>Essais SaaS</span></div><div><b>{engaged}</b><span>Engagés</span></div><div><b>{hot}</b><span>Prospects chauds</span></div><div><b>{leads.length?Math.round(engaged/leads.length*100):0}%</b><span>Activation</span></div></div>{advice&&<div className="saas-ai-advice"><Sparkles/><div><strong>Recommandations du directeur commercial IA</strong><p>{advice}</p></div></div>}<div className="saas-sales-list">{leads.slice(0,5).map(lead=><div key={lead.item.id}><span className={`saas-score ${lead.score>=71?'hot':lead.score>=31?'warm':''}`}>{lead.score}</span><div><strong>{lead.item.full_name}</strong><small>{lead.actions} actions · dernière activité {fmt(lead.last)}</small></div><em>{lead.score>=71?'À contacter maintenant':lead.score>=31?'À accompagner':'À réactiver'}</em></div>)}{!leads.length&&<p className="muted">Aucune inscription autonome à analyser pour le moment.</p>}</div></motion.section>
+}
+
+function MonthlyGoalDashboard({goal,busy,onSave}:{goal?:{metric:string;target:number;period:string;plan?:string};busy:boolean;onSave:(goal:{metric:string;target:number;period:string})=>Promise<void>}){
+  const [open,setOpen]=useState(false);
+  return <motion.section className="panel monthly-goal-dashboard" initial={{opacity:0,y:14}} animate={{opacity:1,y:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> OBJECTIF MENSUEL · IA</span><h2>{goal?`${goal.target.toLocaleString('fr-FR')} ${goal.metric}`:'Fixer un objectif pour l’équipe'}</h2><p>{goal?.period||'L’IA répartit la cible sur quatre semaines et propose les activités à suivre.'}</p></div><button className="primary-btn compact" onClick={()=>setOpen(value=>!value)}>{goal?'Modifier l’objectif':'Définir l’objectif'}</button></div>{goal?.plan&&<div className="goal-plan"><Sparkles/><p>{goal.plan}</p></div>}{open&&<form className="goal-form" onSubmit={async event=>{event.preventDefault();const form=new FormData(event.currentTarget);await onSave({metric:String(form.get('metric')),target:Number(form.get('target')||0),period:String(form.get('period'))});setOpen(false)}}><label>Indicateur<select name="metric" defaultValue={goal?.metric||'GNF de chiffre d’affaires'}><option>GNF de chiffre d’affaires</option><option>clients convertis</option><option>services vendus</option><option>tâches terminées</option><option>campagnes publiées</option></select></label><label>Cible<input name="target" type="number" min="1" required defaultValue={goal?.target||''}/></label><label>Période<input name="period" type="month" required defaultValue={goal?.period||new Date().toISOString().slice(0,7)}/></label><button className="primary-btn compact" disabled={busy}><Sparkles/>{busy?'Calcul IA…':'Enregistrer et répartir'}</button></form>}</motion.section>
 }
 
 function ClientDetail({
