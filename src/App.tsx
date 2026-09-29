@@ -13,6 +13,7 @@ import ProductionApp from './ProductionAppV2'
 import LandingPage from './LandingPage'
 import SignupPage from './SignupPage'
 import LegalPage from './LegalPage'
+import { applyBrandTheme, readBrandTheme } from './lib/brandTheme'
 
 type Theme = 'light' | 'dark'
 type Page = 'Dashboard' | 'Prospects' | 'Clients' | 'Projets' | 'Tâches' | 'Planning' | 'Production' | 'Éditorial' | 'Finance' | 'Matériel' | 'Équipe' | 'Documents' | 'Communication' | 'Administration' | 'Paramètres'
@@ -209,6 +210,7 @@ function DemoApp(){
 }
 
 export default function App(){
+  useEffect(() => { applyBrandTheme(readBrandTheme()) }, [])
   type Route = 'landing'|'app'|'signup'|'privacy'|'terms'
   const getRoute=():Route=>window.location.hash==='#app'?'app':window.location.hash==='#signup'?'signup':window.location.hash==='#privacy'?'privacy':window.location.hash==='#terms'?'terms':'landing'
   const [route,setRoute]=useState<Route>(getRoute)
