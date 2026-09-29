@@ -2,7 +2,7 @@ import { type FormEvent, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, Sparkles } from 'lucide-react'
 import { companyProfile } from './lib/companyProfile'
 import { isDemoMode } from './services/supabase'
-import { resendConfirmationEmail, signInWithGoogle, signUpWithPassword } from './services/repository'
+import { resendConfirmationEmail, signInWithGoogle, signUpWithPassword, startSmsSignupOtp, verifySmsSignupOtp } from './services/repository'
 import './signup.css'
 
 type Props = { onBack: () => void; onAccess: () => void }
@@ -14,6 +14,8 @@ export default function SignupPage({ onBack, onAccess }: Props) {
   const [confirmationEmail, setConfirmationEmail] = useState('')
   const [resendBusy, setResendBusy] = useState(false)
   const [resendMessage, setResendMessage] = useState('')
+  const [smsMode, setSmsMode] = useState(false)
+  const [smsChallenge, setSmsChallenge] = useState<{ id: string; email: string; password: string } | null>(null)
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -29,11 +31,18 @@ export default function SignupPage({ onBack, onAccess }: Props) {
     if (isDemoMode) return setError('L’inscription sécurisée est disponible sur la version publiée de SmartSell.')
     setBusy(true)
     try {
-      const result = await signUpWithPassword({ email, password, fullName, companyName })
-      if (result.session) {
-        sessionStorage.setItem('smartsell-show-welcome', '1')
-        onAccess()
-      } else setConfirmationEmail(email)
+      if (smsMode) {
+        const phone = String(form.get('phone') || '').trim()
+        const result = await startSmsSignupOtp({ phone, email, fullName, companyName })
+        setSmsChallenge({ id: result.challenge_id, email, password })
+        setError('')
+      } else {
+        const result = await signUpWithPassword({ email, password, fullName, companyName })
+        if (result.session) {
+          sessionStorage.setItem('smartsell-show-welcome', '1')
+          onAccess()
+        } else setConfirmationEmail(email)
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Inscription impossible pour le moment.')
     } finally { setBusy(false) }
@@ -54,6 +63,21 @@ export default function SignupPage({ onBack, onAccess }: Props) {
     </section>
   </main>
 
+  if (smsChallenge) return <main className="signup-page confirmation-state">
+    <section className="signup-confirmation">
+      <div className="confirmation-icon"><Mail/></div>
+      <span>CONFIRMATION PAR SMS</span>
+      <h1>Entrez le code reçu.</h1>
+      <p>Un code à 6 chiffres a été envoyé par Nimba au numéro indiqué. Il est valable 10 minutes.</p>
+      <form onSubmit={async event => { event.preventDefault(); setBusy(true); setError(''); try { await verifySmsSignupOtp({ challengeId: smsChallenge.id, code: String(new FormData(event.currentTarget).get('code') || ''), password: smsChallenge.password }); sessionStorage.setItem('smartsell-show-welcome', '1'); onAccess(); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Code invalide.') } finally { setBusy(false) } }}>
+        <label>Code reçu par SMS<input name="code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" required placeholder="000000"/></label>
+        {error && <div className="signup-error"><LockKeyhole/>{error}</div>}
+        <button className="signup-submit" disabled={busy}>{busy ? 'Vérification…' : 'Valider et créer mon espace'} <ArrowRight/></button>
+      </form>
+      <button className="text-button" onClick={() => setSmsChallenge(null)}>Revenir au formulaire</button>
+    </section>
+  </main>
+
   return <main className="signup-page">
     <section className="signup-story">
       <button className="signup-back" onClick={onBack}><ArrowLeft/> Retour au site</button>
@@ -70,11 +94,13 @@ export default function SignupPage({ onBack, onAccess }: Props) {
         <div className="signup-divider"><span/>ou avec votre e-mail<span/></div>
         <div className="signup-fields"><label>Nom complet<input name="fullName" autoComplete="name" required placeholder="Awa Touré"/></label><label>Entreprise<input name="companyName" autoComplete="organization" required placeholder="Votre entreprise"/></label></div>
         <label>Adresse e-mail<input name="email" type="email" autoComplete="email" required placeholder="vous@entreprise.com"/></label>
+        {smsMode && <label>Téléphone guinéen<input name="phone" type="tel" autoComplete="tel" required placeholder="+224 620 00 00 00"/></label>}
         <label>Mot de passe<div className="password-field"><input name="password" type={showPassword ? 'text' : 'password'} minLength={10} autoComplete="new-password" required placeholder="10 caractères minimum"/><button type="button" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}>{showPassword ? <EyeOff/> : <Eye/>}</button></div><small>Majuscule, minuscule et chiffre requis.</small></label>
         <label>Confirmer le mot de passe<input name="confirmation" type={showPassword ? 'text' : 'password'} minLength={10} autoComplete="new-password" required/></label>
         {error && <div className="signup-error"><LockKeyhole/>{error}</div>}
         <label className="signup-consent"><input type="checkbox" required/><span>J’accepte que SmartSell crée mon espace d’essai et me contacte au sujet de cette demande.</span></label>
-        <button className="signup-submit" disabled={busy}>{busy ? 'Création en cours…' : 'Créer ma démo de 72 h'} <ArrowRight/></button>
+        <button className="signup-submit" disabled={busy}>{busy ? (smsMode ? 'Envoi du code…' : 'Création en cours…') : (smsMode ? 'Recevoir mon code SMS' : 'Créer ma démo de 72 h')} <ArrowRight/></button>
+        <button type="button" className="text-button" onClick={() => { setSmsMode(value => !value); setError('') }}>{smsMode ? 'Utiliser la confirmation par e-mail' : 'Je préfère recevoir un code par SMS'}</button>
         <p className="signup-login">Vous avez déjà un compte ? <button type="button" onClick={onAccess}>Se connecter</button></p>
       </form>
     </section>

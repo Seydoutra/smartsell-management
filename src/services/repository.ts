@@ -46,6 +46,12 @@ export async function resendConfirmationEmail(email:string){
   const {error}=await db().auth.resend({type:'signup',email,options:{emailRedirectTo:redirectTo.href}});
   fail(error);
 }
+export async function startSmsSignupOtp(input:{phone:string;email:string;fullName:string;companyName:string}){
+  return invokeEdge<{challenge_id:string;expires_at:string}>('signup-otp-start',{phone:input.phone,email:input.email,full_name:input.fullName,company_name:input.companyName});
+}
+export async function verifySmsSignupOtp(input:{challengeId:string;code:string;password:string}){
+  return invokeEdge<{success:boolean;email:string}>('signup-otp-verify',{challenge_id:input.challengeId,code:input.code,password:input.password});
+}
 export async function signInWithGoogle(){
   const redirectTo=new URL(import.meta.env.BASE_URL,location.origin);redirectTo.hash='app';
   const {data,error}=await db().auth.signInWithOAuth({provider:'google',options:{redirectTo:redirectTo.href,queryParams:{access_type:'offline',prompt:'consent'}}});
