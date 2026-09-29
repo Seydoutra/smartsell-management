@@ -8,6 +8,7 @@ const messages = [
 ];
 
 Deno.serve(async (request) => {
+  try {
   const secret = Deno.env.get("CRON_SECRET");
   const bearer = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   const authorized = (secret && request.headers.get("x-cron-secret") === secret)
@@ -45,4 +46,7 @@ Deno.serve(async (request) => {
     await admin.from("reminder_deliveries").upsert({ task_id: reminder.task_id, profile_id: reminder.profile_id, tenant_owner_id: task.tenant_owner_id || profile?.tenant_owner_id || null, channel: "SMS", scheduled_for: reminder.scheduled_for, status, provider_message_id: providerMessageId, error: errorMessage }, { onConflict: "task_id,channel,scheduled_for" });
   }
   return json(request, { processed: reminders?.length || 0, sent, failed, cancelled });
+  } catch (error) {
+    return json(request, { error: error instanceof Error ? error.message : 'Erreur de traitement des rappels' }, 500);
+  }
 });
