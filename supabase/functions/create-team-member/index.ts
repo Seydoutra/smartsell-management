@@ -2,9 +2,10 @@ import { authenticated, edgeError, handleOptions, json } from "../_shared/http.t
 import { sendWelcomeEmail, sendWelcomeSms } from "../_shared/welcome.ts";
 import type { DeliveryResult } from "../_shared/welcome.ts";
 
-const roles = new Set(["ADMIN", "MANAGER", "CHEF_DE_PROJET", "COMMERCIAL", "COMMUNITY_MANAGER", "GRAPHISTE", "VIDEASTE", "PHOTOGRAPHE", "DEVELOPPEUR", "COMPTABLE", "COLLABORATEUR"]);
+const roles = new Set(["SUPER_ADMIN", "ADMIN", "MANAGER", "CHEF_DE_PROJET", "COMMERCIAL", "COMMUNITY_MANAGER", "GRAPHISTE", "VIDEASTE", "PHOTOGRAPHE", "DEVELOPPEUR", "COMPTABLE", "COLLABORATEUR"]);
 const rolePriority = ["SUPER_ADMIN", "ADMIN", "MANAGER", "CHEF_DE_PROJET", "COMMERCIAL", "COMMUNITY_MANAGER", "COMPTABLE", "DEVELOPPEUR", "GRAPHISTE", "VIDEASTE", "PHOTOGRAPHE", "COLLABORATEUR"];
 const modulesByRole: Record<string,string[]> = {
+  SUPER_ADMIN:["Dashboard","Clients","Projets","Tâches","Planning","Éditorial","Services","Fournisseurs","Facturation","Documents","Comptabilité","Matériel","Communication","Équipe","RH","Rapports","Jumeau numérique","Radar commercial","Studio campagnes IA","Autopilot IA","Portail client","Assistant IA"],
   ADMIN:["Clients","Projets","Tâches","Planning","Éditorial","Services","Fournisseurs","Facturation","Documents","Comptabilité","Matériel","Communication","Équipe","RH","Rapports","Portail client","Assistant IA"],
   MANAGER:["Clients","Projets","Tâches","Planning","Éditorial","Services","Fournisseurs","Facturation","Documents","Comptabilité","Matériel","Communication","Rapports","Assistant IA"],
   COMPTABLE:["Clients","Services","Fournisseurs","Facturation","Documents","Comptabilité","Rapports","Assistant IA"],
@@ -30,6 +31,7 @@ Deno.serve(async (request) => {
     const email = body.email?.trim().toLowerCase(), name = body.name?.trim();
     const selectedRoles = [...new Set((Array.isArray(body.roles) ? body.roles : [body.role]).filter((role): role is string => Boolean(role)).map((role) => role.trim()))];
     if (!email || !name || !selectedRoles.length || selectedRoles.some((role) => !roles.has(role))) return json(request, { error: "Nom, e-mail et rôles valides requis" }, 400);
+    if (selectedRoles.includes("SUPER_ADMIN") && !callerRoles.includes("SUPER_ADMIN")) return json(request, { error: "Seul un Super Admin peut créer un autre propriétaire." }, 403);
     const role = rolePriority.find((candidate) => selectedRoles.includes(candidate)) || "COLLABORATEUR";
     if (!body.password || body.password.length < 8) return json(request, { error: "Le mot de passe temporaire doit contenir au moins 8 caractères" }, 400);
     const trialDays = body.trial_days == null || body.trial_days === 0 ? null : Math.trunc(Number(body.trial_days));

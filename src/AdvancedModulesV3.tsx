@@ -35,7 +35,7 @@ const permissionGroups=[
   {module:'Rapports',actions:[['reports.view','Voir'],['reports.export','Exporter']]},
   {module:'Portail client',actions:[['portal.view','Voir'],['portal.create','Créer un accès'],['portal.update','Modifier'],['portal.revoke','Révoquer']]},
 ] as const
-const assignableRoles: Role[]=['ADMIN','MANAGER','CHEF_DE_PROJET','COMMERCIAL','COMMUNITY_MANAGER','GRAPHISTE','VIDEASTE','PHOTOGRAPHE','DEVELOPPEUR','COMPTABLE','COLLABORATEUR']
+const assignableRoles: Role[]=['SUPER_ADMIN','ADMIN','MANAGER','CHEF_DE_PROJET','COMMERCIAL','COMMUNITY_MANAGER','GRAPHISTE','VIDEASTE','PHOTOGRAPHE','DEVELOPPEUR','COMPTABLE','COLLABORATEUR']
 
 function Header({title,copy,onAdd,add='Créer',children}:{title:string;copy:string;onAdd?:()=>void;add?:string;children?:ReactNode}){return <div className="module-head"><div><span className="eyebrow"><i/> SMARTSELL V3</span><h1>{title}</h1><p>{copy}</p></div><div className="head-actions">{children}{onAdd&&<button className="primary-btn compact" onClick={onAdd}><Plus/>{add}</button>}</div></div>}
 function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:ReactNode}){return <motion.div className="modal-backdrop" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onMouseDown={onClose}><motion.div className="modal wide-modal" initial={{opacity:0,y:20,scale:.98}} animate={{opacity:1,y:0,scale:1}} onMouseDown={e=>e.stopPropagation()}><div className="modal-head"><div><span className="eyebrow"><i/> SMARTSELL</span><h2>{title}</h2></div><button className="icon-btn" onClick={onClose}><X/></button></div>{children}</motion.div></motion.div>}
