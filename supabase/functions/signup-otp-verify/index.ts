@@ -25,7 +25,7 @@ Deno.serve(async (request) => {
     await admin.from("signup_otp_challenges").update({ verified_at: new Date().toISOString() }).eq("id", challenge.id);
     const { data, error: createError } = await admin.auth.admin.createUser({ email: challenge.email, password: body.password, email_confirm: true, user_metadata: { name: challenge.full_name, full_name: challenge.full_name, company_name: challenge.company_name, phone: challenge.phone, signup_channel: "SMS_OTP" } });
     if (createError || !data.user) return json(request, { error: createError?.message || "Création du compte impossible." }, 400);
-    await admin.from("profiles").update({ phone: challenge.phone }).eq("id", data.user.id);
+    await admin.from("profiles").update({ phone: challenge.phone, email: challenge.email }).eq("id", data.user.id);
     return json(request, { success: true, email: challenge.email });
   } catch (error) { return edgeError(request, error); }
 });

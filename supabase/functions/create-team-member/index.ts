@@ -39,7 +39,7 @@ Deno.serve(async (request) => {
     const accessExpiresAt = trialDays === null ? null : new Date(Date.now() + trialDays * 86_400_000).toISOString();
     const { data, error } = await admin.auth.admin.createUser({ email, password: body.password, email_confirm: true, user_metadata: { name } });
     if (error || !data.user) return json(request, { error: error?.message || "Création impossible" }, 400);
-    const { error: profileError } = await admin.from("profiles").upsert({ id: data.user.id, full_name: name, phone: body.phone?.trim() || null, role, roles: selectedRoles, department_id: body.department_id || null, active: true, must_change_password: true, is_temporary: trialDays !== null, access_expires_at: accessExpiresAt });
+    const { error: profileError } = await admin.from("profiles").upsert({ id: data.user.id, full_name: name, email, phone: body.phone?.trim() || null, role, roles: selectedRoles, department_id: body.department_id || null, active: true, must_change_password: true, is_temporary: trialDays !== null, access_expires_at: accessExpiresAt });
     if (profileError) {
       await admin.auth.admin.deleteUser(data.user.id);
       return json(request, { error: `Profil non créé : ${profileError.message}` }, 400);
