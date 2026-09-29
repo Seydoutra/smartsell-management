@@ -16,7 +16,7 @@ begin
     select id into owner_id from public.profiles order by created_at asc limit 1;
   end if;
   update public.profiles
-    set tenant_owner_id = coalesce(tenant_owner_id, owner_id),
+    set tenant_owner_id = case when coalesce(is_temporary,false) then id else coalesce(tenant_owner_id, owner_id) end,
         is_platform_owner = (id = owner_id)
     where tenant_owner_id is null or is_platform_owner <> (id = owner_id);
 end $$;
