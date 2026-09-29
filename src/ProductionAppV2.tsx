@@ -556,6 +556,7 @@ function TrendCurve({rows,showRevenue,showCost}:{rows:Array<{label:string;revenu
 
 function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { profile: Profile; access:AccessControl|null; accessLoaded:boolean; onNavigate:(page:Page,clientId?:string|null)=>void; english:boolean }) {
   const roles=(profile.roles?.length?profile.roles:[profile.role]) as Role[];
+  const platformOwner=roles.includes('SUPER_ADMIN')&&!profile.is_temporary;
   const allowed=(action:string)=>isActionAllowed(roles,access,accessLoaded,action);
   const canClients=allowed('clients.view'), canProjects=allowed('projects.view'), canTasks=allowed('tasks.view'),
     canInvoices=allowed('invoices.view'), canAccounting=allowed('accounting.view'), canSuppliers=allowed('suppliers.view'),
@@ -636,7 +637,7 @@ function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { pro
   const chartMax = Math.max(1, ...monthSeries.flatMap((row) => [row.revenue, row.cost]));
   const topClients = useMemo(() => c.map((client) => ({ client, total: i.filter((row) => row.client_id === client.id).reduce((sum, row) => sum + Number(row.total || 0), 0) })).sort((a, b) => b.total - a.total).slice(0, 4), [c, i]);
   const clientRows = topClients.map((row,index)=><div key={row.client.id}><span>{String(index+1).padStart(2,"0")}</span><div><strong>{row.client.name}</strong><small>{row.client.sector||tx.noSector}</small></div>{canInvoices&&<b>{money(row.total)}</b>}</div>);
-  const salesLeads = useMemo(() => team.filter(item=>roles.includes('SUPER_ADMIN')&&item.is_temporary&&item.role==='SUPER_ADMIN').map(item=>{const history=sessions.filter(row=>row.profile_id===item.id),logs=activityLogs.filter(row=>(row as any).actor_id===item.id),actions=logs.length,score=Math.min(100,Math.round((history.length?20:0)+(history.reduce((sum,row)=>sum+Number(row.pages_viewed||0),0)>3?15:0)+(actions?20:0)+(actions>5?20:0)+(actions>15?15:0)+(history.reduce((sum,row)=>sum+Number(row.active_seconds||0),0)>300?10:0)));return {item,score,actions,last:history.sort((a,b)=>new Date(b.last_seen_at).getTime()-new Date(a.last_seen_at).getTime())[0]?.last_seen_at||item.created_at}}).sort((a,b)=>b.score-a.score),[team,sessions,activityLogs,roles]);
+  const salesLeads = useMemo(() => team.filter(item=>platformOwner&&item.is_temporary&&item.role==='SUPER_ADMIN').map(item=>{const history=sessions.filter(row=>row.profile_id===item.id),logs=activityLogs.filter(row=>(row as any).actor_id===item.id),actions=logs.length,score=Math.min(100,Math.round((history.length?20:0)+(history.reduce((sum,row)=>sum+Number(row.pages_viewed||0),0)>3?15:0)+(actions?20:0)+(actions>5?20:0)+(actions>15?15:0)+(history.reduce((sum,row)=>sum+Number(row.active_seconds||0),0)>300?10:0)));return {item,score,actions,last:history.sort((a,b)=>new Date(b.last_seen_at).getTime()-new Date(a.last_seen_at).getTime())[0]?.last_seen_at||item.created_at}}).sort((a,b)=>b.score-a.score),[team,sessions,activityLogs,platformOwner]);
   const loadSalesAdvice=async()=>{if(!salesLeads.length)return;setSalesAdviceBusy(true);try{const context=salesLeads.slice(0,8).map(lead=>`${lead.item.full_name}: score ${lead.score}/100, ${lead.actions} actions, dernier accès ${lead.last||'inconnu'}`).join('\n');setSalesAdvice(await askAiAssistant('Tu es le directeur commercial SaaS de SmartSell. À partir des essais ci-dessous, donne 3 actions de conversion concrètes, priorisées, avec un message de relance court pour le prospect le plus chaud. Réponds en français, de façon concise.\n'+context,'Pipeline des essais autonomes'))}catch(error){setSalesAdvice(error instanceof Error?error.message:'Suggestion IA indisponible')}finally{setSalesAdviceBusy(false)}};
   const metrics = [
     ...(canInvoices?[{ label: tx.billed, value: money(billed), copy: `${i.length} ${tx.invoiceCount}`, icon: ReceiptText, tone: "purple" },{ label: tx.receivable, value: money(receivables), copy: `${overdue.length} ${tx.overdue}`, icon: CircleDollarSign, tone: "yellow" }]:[]),
@@ -661,7 +662,7 @@ function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { pro
         </motion.article>
         <motion.article className="panel next-actions" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} transition={{delay:.08}}><div className="command-panel-head"><div><span className="eyebrow"><i/> NEXT BEST ACTION</span><h2>Les décisions recommandées</h2></div><b>{nextActions.length}</b></div><div className="next-action-list">{nextActions.length?nextActions.map(action=><div key={action.id} className={`next-action priority-${action.priority.toLowerCase()}`}><span className="action-priority">{action.priority}</span><div><strong>{action.title}</strong><small>{action.reason}</small></div><div className="next-action-buttons"><button className="primary-btn compact" onClick={async()=>{await executeNextBestAction(action);setNextActions(rows=>rows.filter(row=>row.id!==action.id));onNavigate(action.target_page as Page,action.client_id)}}>{action.action_type==='COMPLETE_TASK'?'Confirmer terminée':'Ouvrir'}</button><button className="icon-btn" title="Ignorer" onClick={async()=>{await updateNextBestAction(action.id,'IGNOREE');setNextActions(rows=>rows.filter(row=>row.id!==action.id))}}><X/></button></div></div>):<p className="muted">Aucune action urgente. Actualisez le briefing lorsque les données changent.</p>}</div></motion.article>
       </section>}
-      {roles.includes('SUPER_ADMIN')&&<SaaSSalesDashboard leads={salesLeads} advice={salesAdvice} busy={salesAdviceBusy} onSuggest={()=>void loadSalesAdvice()} onOpen={()=>onNavigate('Demandes SaaS')} />}
+      {platformOwner&&<SaaSSalesDashboard leads={salesLeads} advice={salesAdvice} busy={salesAdviceBusy} onSuggest={()=>void loadSalesAdvice()} onOpen={()=>onNavigate('Demandes SaaS')} />}
       {roles.includes('SUPER_ADMIN')&&<MonthlyGoalDashboard goal={monthlyGoal} busy={goalBusy} onSave={saveMonthlyGoal} />}
       <section className="innovation-launchpad">
         {canAccounting&&<button onClick={()=>onNavigate("Jumeau numérique")}><Gauge/><span><small>{tx.forecast}</small><strong>{tx.digitalTwin}</strong><em>{tx.simulate}</em></span><ChevronRight/></button>}
@@ -3047,7 +3048,8 @@ function Shell({
     playUiTone(control.classList.contains('primary-btn') ? 'confirm' : 'tap');
   }, []);
   const roles = (profile.roles?.length ? profile.roles : [profile.role]) as Role[],
-    admin = roles.some((item) => ["SUPER_ADMIN", "ADMIN"].includes(item));
+    admin = roles.some((item) => ["SUPER_ADMIN", "ADMIN"].includes(item)),
+    platformOwner = roles.includes("SUPER_ADMIN") && !profile.is_temporary;
   if (roles.includes("CLIENT")) return <ClientPortalView onLogout={onLogout} />;
   if (!accessLoaded&&!roles.includes("SUPER_ADMIN")) return <div className="app-loading"><img src={companyProfile.logo_dark}/><span>Vérification de vos autorisations…</span></div>;
   const actionAllowed = (key: string) => isActionAllowed(roles,access,accessLoaded,key);
@@ -3068,7 +3070,7 @@ function Shell({
     delete: actionAllowed(`${scope}.delete`),
   });
   const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'finance.read',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Intégrations:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Centre de contrôle':'audit.read','Portail client':'portal.view','Jumeau numérique':'accounting.view','Radar commercial':'clients.view','Studio campagnes IA':'communication.view'};
-  const visible = (n: [Page, typeof LayoutDashboard, Permission?]) => n[0]==='Dashboard'||(n[0]==='Demandes SaaS' ? roles.includes('SUPER_ADMIN') : (
+  const visible = (n: [Page, typeof LayoutDashboard, Permission?]) => n[0]==='Dashboard'||(n[0]==='Demandes SaaS' ? platformOwner : (
     (!viewKeys[n[0]] || actionAllowed(viewKeys[n[0]]!)) &&
     (n[0]==='Centre de contrôle' ? actionAllowed('audit.read') : isModuleAllowed(roles,access,accessLoaded,n[0]))));
   const currentPage = nav.some((item)=>item[0]===page&&visible(item)) ? page : 'Dashboard';
