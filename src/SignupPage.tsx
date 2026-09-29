@@ -19,6 +19,13 @@ export default function SignupPage({ onBack, onAccess }: Props) {
   // secondary toggle.
   const [smsMode, setSmsMode] = useState(true)
   const [smsChallenge, setSmsChallenge] = useState<{ id: string; email: string; password: string } | null>(null)
+  const humanizeSignupError = (reason: unknown) => {
+    const message = reason instanceof Error ? reason.message : ''
+    if (/already been registered|already exists|déjà enregistré|déjà utilisée/i.test(message)) {
+      return 'Cette adresse e-mail est déjà utilisée. Connectez-vous avec ce compte ou utilisez « Mot de passe oublié ».'
+    }
+    return message || 'Inscription impossible pour le moment.'
+  }
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -47,7 +54,7 @@ export default function SignupPage({ onBack, onAccess }: Props) {
         } else setConfirmationEmail(email)
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Inscription impossible pour le moment.')
+      setError(humanizeSignupError(reason))
     } finally { setBusy(false) }
   }
 
@@ -72,7 +79,7 @@ export default function SignupPage({ onBack, onAccess }: Props) {
       <span>CONFIRMATION PAR SMS</span>
       <h1>Entrez le code reçu.</h1>
       <p>Un code à 6 chiffres a été envoyé par Nimba au numéro indiqué. Il est valable 10 minutes.</p>
-      <form onSubmit={async event => { event.preventDefault(); setBusy(true); setError(''); try { await verifySmsSignupOtp({ challengeId: smsChallenge.id, code: String(new FormData(event.currentTarget).get('code') || ''), password: smsChallenge.password }); sessionStorage.setItem('smartsell-show-welcome', '1'); onAccess(); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Code invalide.') } finally { setBusy(false) } }}>
+      <form onSubmit={async event => { event.preventDefault(); setBusy(true); setError(''); try { await verifySmsSignupOtp({ challengeId: smsChallenge.id, code: String(new FormData(event.currentTarget).get('code') || ''), password: smsChallenge.password }); sessionStorage.setItem('smartsell-show-welcome', '1'); onAccess(); } catch (reason) { setError(humanizeSignupError(reason)) } finally { setBusy(false) } }}>
         <label>Code reçu par SMS<input name="code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" required placeholder="000000"/></label>
         {error && <div className="signup-error"><LockKeyhole/>{error}</div>}
         <button className="signup-submit" disabled={busy}>{busy ? 'Vérification…' : 'Valider et créer mon espace'} <ArrowRight/></button>
