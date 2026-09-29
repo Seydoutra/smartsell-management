@@ -16,7 +16,7 @@ Deno.serve(async (request) => {
   if (!authorized) return json(request, { error: "Non autorisé" }, 401);
   const admin = adminClient(), now = new Date();
   const { data: reminders, error } = await admin.from("task_reminder_schedule")
-    .select("id,task_id,profile_id,step,scheduled_for,confirmation_token,tasks(title,due_at,status),profiles(full_name,phone)")
+    .select("id,task_id,profile_id,step,scheduled_for,confirmation_token,tasks(title,due_at,status,tenant_owner_id),profiles(full_name,phone,tenant_owner_id)")
     .eq("status", "PENDING").lte("scheduled_for", now.toISOString()).order("scheduled_for").limit(100);
   if (error) return json(request, { error: error.message }, 500);
   let sent = 0, failed = 0, cancelled = 0;
@@ -38,10 +38,10 @@ Deno.serve(async (request) => {
     try {
       if (!phone) throw new Error("Numéro du collaborateur manquant");
       const result = await sendNimbaSms([phone], body); providerMessageId = result.uid || result.id || null; sent++;
-      await admin.from("notifications").insert({ profile_id: reminder.profile_id, channel: "IN_APP", title: `Rappel ${reminder.step}/3 : ${task.title}`, body: `Échéance ${due}.`, entity_type: "task", entity_id: reminder.task_id });
+      await admin.from("notifications").insert({ profile_id: reminder.profile_id, tenant_owner_id: task.tenant_owner_id || profile?.tenant_owner_id || null, channel: "IN_APP", title: `Rappel ${reminder.step}/3 : ${task.title}`, body: `Échéance ${due}.`, entity_type: "task", entity_id: reminder.task_id });
     } catch (caught) { status = "FAILED"; errorMessage = caught instanceof Error ? caught.message : "Envoi SMS impossible"; failed++; }
     await admin.from("task_reminder_schedule").update({ status, sent_at: now.toISOString(), provider_message_id: providerMessageId, error: errorMessage }).eq("id", reminder.id);
-    await admin.from("reminder_deliveries").upsert({ task_id: reminder.task_id, profile_id: reminder.profile_id, channel: "SMS", scheduled_for: reminder.scheduled_for, status, provider_message_id: providerMessageId, error: errorMessage }, { onConflict: "task_id,channel,scheduled_for" });
+    await admin.from("reminder_deliveries").upsert({ task_id: reminder.task_id, profile_id: reminder.profile_id, tenant_owner_id: task.tenant_owner_id || profile?.tenant_owner_id || null, channel: "SMS", scheduled_for: reminder.scheduled_for, status, provider_message_id: providerMessageId, error: errorMessage }, { onConflict: "task_id,channel,scheduled_for" });
   }
   return json(request, { processed: reminders?.length || 0, sent, failed, cancelled });
 });

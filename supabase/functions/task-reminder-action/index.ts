@@ -7,7 +7,7 @@ Deno.serve(async (request) => {
   const url = new URL(request.url), token = url.searchParams.get("token");
   if (!token) return page("Lien invalide", "Ce lien de confirmation est incomplet.");
   const admin = adminClient();
-  const { data: reminder } = await admin.from("task_reminder_schedule").select("id,task_id,profile_id,status,tasks(title,status,due_at)").eq("confirmation_token", token).maybeSingle();
+  const { data: reminder } = await admin.from("task_reminder_schedule").select("id,task_id,profile_id,status,tasks(title,status,due_at,tenant_owner_id)").eq("confirmation_token", token).maybeSingle();
   if (!reminder) return page("Lien expiré", "Ce rappel n’existe plus ou a déjà été remplacé.");
   const task = Array.isArray(reminder.tasks) ? reminder.tasks[0] : reminder.tasks;
   const safeTitle = escapeHtml(task?.title || "La tâche assignée");
@@ -17,6 +17,6 @@ Deno.serve(async (request) => {
   const { error } = await admin.from("tasks").update({ status: "TERMINE", completed_at: new Date().toISOString() }).eq("id", reminder.task_id);
   if (error) return page("Confirmation impossible", "Une erreur est survenue. Réessayez depuis le lien du SMS.");
   await admin.from("task_reminder_schedule").update({ status: "CANCELLED" }).eq("task_id", reminder.task_id).eq("status", "PENDING");
-  await admin.from("notifications").insert({ profile_id: reminder.profile_id, channel: "IN_APP", title: "Tâche terminée", body: `${task?.title || "La tâche"} a été confirmée depuis le rappel SMS.`, entity_type: "task", entity_id: reminder.task_id });
+  await admin.from("notifications").insert({ profile_id: reminder.profile_id, tenant_owner_id: task?.tenant_owner_id || null, channel: "IN_APP", title: "Tâche terminée", body: `${task?.title || "La tâche"} a été confirmée depuis le rappel SMS.`, entity_type: "task", entity_id: reminder.task_id });
   return page("Merci, c’est enregistré", `<span class="done">${safeTitle}</span> est maintenant marquée comme terminée dans SmartSell. Les prochains rappels ont été arrêtés.`);
 });
