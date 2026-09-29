@@ -26,7 +26,10 @@ Deno.serve(async (request) => {
     if (!task || task.status === "TERMINE" || !task.due_at || new Date(task.due_at) <= now) {
       await admin.from("task_reminder_schedule").update({ status: "CANCELLED" }).eq("id", reminder.id); cancelled++; continue;
     }
-    const phone = Deno.env.get("COMMUNICATION_TEST_MODE") !== "false" ? Deno.env.get("COMMUNICATION_TEST_PHONE") : profile?.phone;
+    // Le mode test doit être explicitement activé. Une variable absente ne doit
+    // jamais détourner les rappels vers un seul numéro de test en production.
+    const testMode = Deno.env.get("COMMUNICATION_TEST_MODE") === "true";
+    const phone = testMode ? Deno.env.get("COMMUNICATION_TEST_PHONE") : profile?.phone;
     const name = String(profile?.full_name || "collaborateur").split(/\s+/)[0];
     const due = new Date(task.due_at).toLocaleString("fr-FR", { timeZone: "Africa/Conakry", dateStyle: "short", timeStyle: "short" });
     const confirmUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/task-reminder-action?token=${reminder.confirmation_token}`;

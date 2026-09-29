@@ -21,7 +21,7 @@ Deno.serve(async (request) => {
         ? `Merci ${firstName} pour ton engagement cette semaine. Continue à faire avancer tes missions et à tenir SmartSell à jour. Ton travail compte pour toute l'équipe.`
         : `Hello ${firstName}, comment vas-tu ? As-tu des tâches en pause ? Pense à mettre tes tâches à jour dans SmartSell avant de terminer ta journée. Merci pour ton engagement.`;
       let status = "SENT", errorMessage: string | null = null;
-      try { if (Deno.env.get("COMMUNICATION_TEST_MODE") !== "false") { if (!Deno.env.get("COMMUNICATION_TEST_PHONE")) throw new Error("Numéro de test SMS manquant"); await sendNimbaSms([Deno.env.get("COMMUNICATION_TEST_PHONE")!], message); } else await sendNimbaSms([profile.phone], message); sent++; }
+      try { if (Deno.env.get("COMMUNICATION_TEST_MODE") === "true") { if (!Deno.env.get("COMMUNICATION_TEST_PHONE")) throw new Error("Numéro de test SMS manquant"); await sendNimbaSms([Deno.env.get("COMMUNICATION_TEST_PHONE")!], message); } else await sendNimbaSms([profile.phone], message); sent++; }
       catch (caught) { status = "FAILED"; errorMessage = caught instanceof Error ? caught.message : "Envoi impossible"; }
       await admin.from("team_digest_deliveries").insert({ profile_id: profile.id, kind, digest_date: dateKey, status, error: errorMessage });
     }

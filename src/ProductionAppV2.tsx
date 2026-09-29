@@ -98,6 +98,7 @@ import {
   deleteService,
   deleteTask,
   executeNextBestAction,
+  askAiAssistant,
   generateAgencyIntelligence,
   getAccessControl,
   getCalendarConnection,
@@ -572,6 +573,9 @@ function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { pro
     [suppliers, setSuppliers] = useState<Supplier[]>([]),
     [team, setTeam] = useState<Profile[]>([]),
     [sessions, setSessions] = useState<UserSession[]>([]),
+    [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]),
+    [salesAdvice, setSalesAdvice] = useState(''),
+    [salesAdviceBusy, setSalesAdviceBusy] = useState(false),
     [loading, setLoading] = useState(true),
     [loadError, setLoadError] = useState(''),
     [briefing,setBriefing]=useState<AgencyBriefing|null>(null),
@@ -592,7 +596,8 @@ function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { pro
       canSuppliers?listSuppliers():Promise.resolve([]),
       canTeam?listProfiles():Promise.resolve([]),
       canTeam?listUserSessions():Promise.resolve([]),
-    ]).then(([a, b, d, e, f, g, h, j, k]) => {
+      canTeam&&roles.includes('SUPER_ADMIN')?listActivityLogs():Promise.resolve([]),
+    ]).then(([a, b, d, e, f, g, h, j, k, l]) => {
       setC(a);
       setP(b);
       setI(d);
@@ -602,6 +607,7 @@ function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { pro
       setSuppliers(h);
       setTeam(j);
       setSessions(k);
+      setActivityLogs(l);
     }).catch((error)=>setLoadError(error instanceof Error?error.message:'Impossible de charger les indicateurs.')).finally(()=>setLoading(false));
     if(canIntelligence)void loadIntelligence();
   }, [accessLoaded,access?.allowed_modules.join('|'),access?.denied_permissions.join('|')]);
@@ -624,6 +630,8 @@ function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { pro
   const chartMax = Math.max(1, ...monthSeries.flatMap((row) => [row.revenue, row.cost]));
   const topClients = useMemo(() => c.map((client) => ({ client, total: i.filter((row) => row.client_id === client.id).reduce((sum, row) => sum + Number(row.total || 0), 0) })).sort((a, b) => b.total - a.total).slice(0, 4), [c, i]);
   const clientRows = topClients.map((row,index)=><div key={row.client.id}><span>{String(index+1).padStart(2,"0")}</span><div><strong>{row.client.name}</strong><small>{row.client.sector||tx.noSector}</small></div>{canInvoices&&<b>{money(row.total)}</b>}</div>);
+  const salesLeads = useMemo(() => team.filter(item=>roles.includes('SUPER_ADMIN')&&item.is_temporary&&item.role==='SUPER_ADMIN').map(item=>{const history=sessions.filter(row=>row.profile_id===item.id),logs=activityLogs.filter(row=>(row as any).actor_id===item.id),actions=logs.length,score=Math.min(100,Math.round((history.length?20:0)+(history.reduce((sum,row)=>sum+Number(row.pages_viewed||0),0)>3?15:0)+(actions?20:0)+(actions>5?20:0)+(actions>15?15:0)+(history.reduce((sum,row)=>sum+Number(row.active_seconds||0),0)>300?10:0)));return {item,score,actions,last:history.sort((a,b)=>new Date(b.last_seen_at).getTime()-new Date(a.last_seen_at).getTime())[0]?.last_seen_at||item.created_at}}).sort((a,b)=>b.score-a.score),[team,sessions,activityLogs,roles]);
+  const loadSalesAdvice=async()=>{if(!salesLeads.length)return;setSalesAdviceBusy(true);try{const context=salesLeads.slice(0,8).map(lead=>`${lead.item.full_name}: score ${lead.score}/100, ${lead.actions} actions, dernier accès ${lead.last||'inconnu'}`).join('\n');setSalesAdvice(await askAiAssistant('Tu es le directeur commercial SaaS de SmartSell. À partir des essais ci-dessous, donne 3 actions de conversion concrètes, priorisées, avec un message de relance court pour le prospect le plus chaud. Réponds en français, de façon concise.\n'+context,'Pipeline des essais autonomes'))}catch(error){setSalesAdvice(error instanceof Error?error.message:'Suggestion IA indisponible')}finally{setSalesAdviceBusy(false)}};
   const metrics = [
     ...(canInvoices?[{ label: tx.billed, value: money(billed), copy: `${i.length} ${tx.invoiceCount}`, icon: ReceiptText, tone: "purple" },{ label: tx.receivable, value: money(receivables), copy: `${overdue.length} ${tx.overdue}`, icon: CircleDollarSign, tone: "yellow" }]:[]),
     ...(canAccounting?[{ label: tx.collected, value: money(collected), copy: `${payments.length} ${tx.paymentCount}`, icon: WalletCards, tone: "green" },{ label: tx.expenses, value: money(spent), copy: `${tx.balance} ${money(collected - spent)}`, icon: Activity, tone: "red" }]:[]),
@@ -647,6 +655,7 @@ function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { pro
         </motion.article>
         <motion.article className="panel next-actions" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} transition={{delay:.08}}><div className="command-panel-head"><div><span className="eyebrow"><i/> NEXT BEST ACTION</span><h2>Les décisions recommandées</h2></div><b>{nextActions.length}</b></div><div className="next-action-list">{nextActions.length?nextActions.map(action=><div key={action.id} className={`next-action priority-${action.priority.toLowerCase()}`}><span className="action-priority">{action.priority}</span><div><strong>{action.title}</strong><small>{action.reason}</small></div><div className="next-action-buttons"><button className="primary-btn compact" onClick={async()=>{await executeNextBestAction(action);setNextActions(rows=>rows.filter(row=>row.id!==action.id));onNavigate(action.target_page as Page,action.client_id)}}>{action.action_type==='COMPLETE_TASK'?'Confirmer terminée':'Ouvrir'}</button><button className="icon-btn" title="Ignorer" onClick={async()=>{await updateNextBestAction(action.id,'IGNOREE');setNextActions(rows=>rows.filter(row=>row.id!==action.id))}}><X/></button></div></div>):<p className="muted">Aucune action urgente. Actualisez le briefing lorsque les données changent.</p>}</div></motion.article>
       </section>}
+      {roles.includes('SUPER_ADMIN')&&<SaaSSalesDashboard leads={salesLeads} advice={salesAdvice} busy={salesAdviceBusy} onSuggest={()=>void loadSalesAdvice()} onOpen={()=>onNavigate('Demandes SaaS')} />}
       <section className="innovation-launchpad">
         {canAccounting&&<button onClick={()=>onNavigate("Jumeau numérique")}><Gauge/><span><small>{tx.forecast}</small><strong>{tx.digitalTwin}</strong><em>{tx.simulate}</em></span><ChevronRight/></button>}
         {canClients&&<button onClick={()=>onNavigate("Radar commercial")}><Target/><span><small>{tx.detect}</small><strong>{tx.commercialRadar}</strong><em>{tx.prioritize}</em></span><ChevronRight/></button>}
@@ -662,6 +671,11 @@ function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { pro
       </section>
     </div>
   );
+}
+
+function SaaSSalesDashboard({leads,advice,busy,onSuggest,onOpen}:{leads:Array<{item:Profile;score:number;actions:number;last?:string|null}>;advice:string;busy:boolean;onSuggest:()=>void;onOpen:()=>void}){
+  const hot=leads.filter(row=>row.score>=71).length, engaged=leads.filter(row=>row.score>=31).length;
+  return <motion.section className="panel saas-sales-dashboard" initial={{opacity:0,y:14}} animate={{opacity:1,y:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> SALES SaaS · PRIVÉ SUPER ADMIN</span><h2>Transformer les essais en clients</h2><p>Les indicateurs d’usage vous indiquent qui contacter et pourquoi.</p></div><div className="saas-sales-actions"><button className="ghost-action" onClick={onOpen}>Voir les demandes</button><button className="primary-btn compact" onClick={onSuggest} disabled={busy}><Sparkles/>{busy?'Analyse IA…':'Suggestions IA'}</button></div></div><div className="saas-sales-kpis"><div><b>{leads.length}</b><span>Essais SaaS</span></div><div><b>{engaged}</b><span>Engagés</span></div><div><b>{hot}</b><span>Prospects chauds</span></div><div><b>{leads.length?Math.round(engaged/leads.length*100):0}%</b><span>Activation</span></div></div>{advice&&<div className="saas-ai-advice"><Sparkles/><div><strong>Recommandations du directeur commercial IA</strong><p>{advice}</p></div></div>}<div className="saas-sales-list">{leads.slice(0,5).map(lead=><div key={lead.item.id}><span className={`saas-score ${lead.score>=71?'hot':lead.score>=31?'warm':''}`}>{lead.score}</span><div><strong>{lead.item.full_name}</strong><small>{lead.actions} actions · dernière activité {fmt(lead.last)}</small></div><em>{lead.score>=71?'À contacter maintenant':lead.score>=31?'À accompagner':'À réactiver'}</em></div>)}{!leads.length&&<p className="muted">Aucune inscription autonome à analyser pour le moment.</p>}</div></motion.section>
 }
 
 function ClientDetail({
@@ -1256,11 +1270,13 @@ function ProjectsPage({ rights, clientFilter, onClearFilter }: { rights: CrudRig
 
 function TasksPage({
   rights,
+  canAssign = false,
   planning = false,
   clientFilter,
   onClearFilter,
 }: {
   rights: CrudRights;
+  canAssign?: boolean;
   planning?: boolean;
   clientFilter?: string | null;
   onClearFilter?: () => void;
@@ -1431,7 +1447,7 @@ function TasksPage({
                   notification_channels: f.getAll(
                     "notification_channels",
                   ) as string[],
-                },f.getAll('assignee_ids').map(String));
+                },canAssign ? f.getAll('assignee_ids').map(String) : []);
                 setOpen(false);
                 load();
               }}
@@ -1450,9 +1466,9 @@ function TasksPage({
                     ))}
                   </select>
                 </Field>
-                <Field label="Personnes assignées (optionnel)" wide>
+                {canAssign ? <Field label="Personnes assignées (optionnel)" wide>
                   <ProfileChecklist profiles={profiles} name="assignee_ids" />
-                </Field>
+                </Field> : <div className="security-note"><ShieldCheck/><span>Vous pouvez créer la tâche. L’attribution à d’autres collaborateurs est réservée aux personnes autorisées dans « Équipe et droits ».</span></div>}
                 <Field label="Priorité">
                   <select name="priority">
                     <option>NORMALE</option>
@@ -1528,7 +1544,7 @@ function TasksPage({
                   status: f.status,
                   priority: f.priority,
                   due_at: f.due_at || null,
-                },formData.getAll('assignee_ids').map(String));
+                },canAssign ? formData.getAll('assignee_ids').map(String) : undefined);
                 setSelected(null);
                 load();
               }}
@@ -1546,9 +1562,9 @@ function TasksPage({
                     <option>BLOQUE</option>
                   </select>
                 </Field>
-                <Field label="Personnes assignées" wide>
+                {canAssign ? <Field label="Personnes assignées" wide>
                   <ProfileChecklist profiles={profiles} name="assignee_ids" selected={selected.task_assignees?.map(member=>member.profile_id) ?? (selected.assignee_id?[selected.assignee_id]:[])}/>
-                </Field>
+                </Field> : <div className="security-note"><ShieldCheck/><span>L’attribution à d’autres collaborateurs nécessite l’autorisation « Attribuer ».</span></div>}
                 <Field label="Priorité">
                   <select name="priority" defaultValue={selected.priority}>
                     <option>NORMALE</option>
@@ -3113,9 +3129,9 @@ function Shell({
               ) : currentPage === "Projets" ? (
                 <ProjectsPage rights={rightsFor('projects')} clientFilter={clientFilter} onClearFilter={()=>navigate("Projets")} />
               ) : currentPage === "Tâches" ? (
-                <TasksPage rights={rightsFor('tasks')} clientFilter={clientFilter} onClearFilter={()=>navigate("Tâches")} />
+                <TasksPage rights={rightsFor('tasks')} canAssign={actionAllowed('tasks.assign')} clientFilter={clientFilter} onClearFilter={()=>navigate("Tâches")} />
               ) : currentPage === "Planning" ? (
-                <TasksPage rights={{view:actionAllowed('planning.view'),create:actionAllowed('planning.create'),update:actionAllowed('planning.update'),delete:actionAllowed('tasks.delete')}} planning />
+                <TasksPage rights={{view:actionAllowed('planning.view'),create:actionAllowed('planning.create'),update:actionAllowed('planning.update'),delete:actionAllowed('tasks.delete')}} canAssign={actionAllowed('tasks.assign')} planning />
               ) : currentPage === "Éditorial" ? (
                 <EditorialV3 />
               ) : currentPage === "Services" ? (

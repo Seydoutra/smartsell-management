@@ -20,7 +20,7 @@ const modules=['Dashboard','Clients','Projets','Tâches','Planning','Éditorial'
 const permissionGroups=[
   {module:'Clients',actions:[['clients.view','Voir les fiches'],['clients.create','Créer'],['clients.update','Modifier'],['clients.delete','Supprimer']]},
   {module:'Projets',actions:[['projects.view','Voir'],['projects.create','Créer'],['projects.update','Modifier'],['projects.delete','Supprimer']]},
-  {module:'Tâches',actions:[['tasks.view','Voir'],['tasks.create','Créer'],['tasks.update','Modifier / terminer'],['tasks.delete','Supprimer']]},
+  {module:'Tâches',actions:[['tasks.view','Voir'],['tasks.create','Créer'],['tasks.assign','Attribuer à d’autres collaborateurs'],['tasks.update','Modifier / terminer'],['tasks.delete','Supprimer']]},
   {module:'Planning',actions:[['planning.view','Voir'],['planning.create','Planifier'],['planning.update','Modifier'],['planning.sync','Synchroniser Agenda']]},
   {module:'Éditorial',actions:[['editorial.view','Voir'],['editorial.create','Créer / importer'],['editorial.update','Modifier / publier'],['editorial.delete','Supprimer']]},
   {module:'Services',actions:[['services.view','Voir'],['services.create','Créer'],['services.update','Modifier'],['services.delete','Supprimer']]},

@@ -1,11 +1,12 @@
 export type Role = 'SUPER_ADMIN'|'ADMIN'|'MANAGER'|'CHEF_DE_PROJET'|'COMMERCIAL'|'COMMUNITY_MANAGER'|'GRAPHISTE'|'VIDEASTE'|'PHOTOGRAPHE'|'DEVELOPPEUR'|'COMPTABLE'|'COLLABORATEUR'|'CLIENT'
-export type Permission = 'users.manage'|'settings.manage'|'finance.read'|'finance.write'|'crm.write'|'projects.write'|'communication.send'|'calls.initiate'|'exports.run'|'audit.read'
+export type Permission = 'users.manage'|'settings.manage'|'finance.read'|'finance.write'|'crm.write'|'projects.write'|'tasks.assign'|'communication.send'|'calls.initiate'|'exports.run'|'audit.read'
 
 const rules: Record<Role, Permission[]> = {
-  SUPER_ADMIN:['users.manage','settings.manage','finance.read','finance.write','crm.write','projects.write','communication.send','calls.initiate','exports.run','audit.read'],
-  ADMIN:['users.manage','finance.read','finance.write','crm.write','projects.write','communication.send','calls.initiate','exports.run','audit.read'],
-  MANAGER:['finance.read','crm.write','projects.write','communication.send','calls.initiate','exports.run'],
-  CHEF_DE_PROJET:['projects.write','exports.run'], COMMERCIAL:['crm.write','communication.send','calls.initiate'],
+  SUPER_ADMIN:['users.manage','settings.manage','finance.read','finance.write','crm.write','projects.write','tasks.assign','communication.send','calls.initiate','exports.run','audit.read'],
+  ADMIN:['users.manage','finance.read','finance.write','crm.write','projects.write','tasks.assign','communication.send','calls.initiate','exports.run','audit.read'],
+  MANAGER:['finance.read','crm.write','projects.write','tasks.assign','communication.send','calls.initiate','exports.run'],
+  CHEF_DE_PROJET:['projects.write','tasks.assign','exports.run'],
+  COMMERCIAL:['crm.write','communication.send','calls.initiate'],
   COMMUNITY_MANAGER:['projects.write','communication.send'], GRAPHISTE:['projects.write'], VIDEASTE:['projects.write'],
   PHOTOGRAPHE:['projects.write'], DEVELOPPEUR:['projects.write'], COMPTABLE:['finance.read','finance.write'], COLLABORATEUR:[], CLIENT:[],
 }
