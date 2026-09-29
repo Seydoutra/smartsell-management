@@ -15,3 +15,9 @@ verify_jwt = false
 
 [functions.create-beta-tester]
 verify_jwt = false
+
+[functions.signup-otp-start]
+verify_jwt = false
+
+[functions.signup-otp-verify]
+verify_jwt = false
