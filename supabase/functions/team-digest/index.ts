@@ -10,7 +10,7 @@ Deno.serve(async (request) => {
     const body = await request.json().catch(() => ({})) as { kind?: "EVENING" | "WEEKLY" };
     const kind = body.kind === "WEEKLY" ? "WEEKLY" : "EVENING";
     const admin = adminClient(); const now = new Date(); const dateKey = now.toISOString().slice(0, 10);
-    const { data: profiles, error } = await admin.from("profiles").select("id,full_name,phone,is_beta_tester").eq("active", true).eq("is_beta_tester", false).not("phone", "is", null);
+    const { data: profiles, error } = await admin.from("profiles").select("id,full_name,phone,is_beta_tester,tenant_owner_id").eq("active", true).eq("is_beta_tester", false).not("phone", "is", null);
     if (error) return json(request, { error: error.message }, 500);
     let sent = 0, skipped = 0;
     for (const profile of profiles || []) {
@@ -21,7 +21,7 @@ Deno.serve(async (request) => {
         ? `Merci ${firstName} pour ton engagement cette semaine. Continue à faire avancer tes missions et à tenir SmartSell à jour. Ton travail compte pour toute l'équipe.`
         : `Hello ${firstName}, comment vas-tu ? As-tu des tâches en pause ? Pense à mettre tes tâches à jour dans SmartSell avant de terminer ta journée. Merci pour ton engagement.`;
       let status = "SENT", errorMessage: string | null = null;
-      try { if (Deno.env.get("COMMUNICATION_TEST_MODE") === "true") { if (!Deno.env.get("COMMUNICATION_TEST_PHONE")) throw new Error("Numéro de test SMS manquant"); await sendNimbaSms([Deno.env.get("COMMUNICATION_TEST_PHONE")!], message); } else await sendNimbaSms([profile.phone], message); sent++; }
+      try { const tenant=profile.tenant_owner_id||profile.id; if (Deno.env.get("COMMUNICATION_TEST_MODE") === "true") { if (!Deno.env.get("COMMUNICATION_TEST_PHONE")) throw new Error("Numéro de test SMS manquant"); await sendNimbaSms([Deno.env.get("COMMUNICATION_TEST_PHONE")!], message,tenant); } else await sendNimbaSms([profile.phone], message,tenant); sent++; }
       catch (caught) { status = "FAILED"; errorMessage = caught instanceof Error ? caught.message : "Envoi impossible"; }
       await admin.from("team_digest_deliveries").insert({ profile_id: profile.id, kind, digest_date: dateKey, status, error: errorMessage });
     }

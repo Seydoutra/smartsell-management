@@ -1,4 +1,5 @@
 import { sendNimbaSms } from "./nimba.ts";
+import { adminClient } from './http.ts';
 
 type WelcomeInput = {
   name: string;
@@ -45,7 +46,9 @@ export async function sendWelcomeSms(input: WelcomeInput): Promise<DeliveryResul
   const phone = cleanPhone(input.phone);
   if (!phone) return { channel: "SMS", status: "SKIPPED", detail: "Numéro SMS absent" };
   const message = `Bonjour ${input.name}, bienvenue sur SmartSell. Identifiant: ${input.email}. Mot de passe temporaire: ${input.temporaryPassword}. Connexion: ${input.loginUrl} Modifiez le mot de passe à la première connexion.`;
-  const provider = await sendNimbaSms([phone], message);
+  const {data:profile,error}=await adminClient().from('profiles').select('id,tenant_owner_id').eq('email',input.email).single();
+  if(error||!profile)throw new Error('Entreprise du destinataire introuvable');
+  const provider = await sendNimbaSms([phone], message,profile.tenant_owner_id||profile.id);
   return { channel: "SMS", status: "SENT", providerMessageId: provider.uid || provider.id, messageCost: provider.message_cost, currency: provider.currency };
 }
 

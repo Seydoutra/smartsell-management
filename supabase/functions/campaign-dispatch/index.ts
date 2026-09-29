@@ -9,9 +9,10 @@ Deno.serve(async (request) => {
     const body = await request.json().catch(() => ({})) as { campaign_id?: string };
     const bearer = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
     const cronAuthorized = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || bearer === Deno.env.get("SUPABASE_ANON_KEY") || request.headers.get("x-cron-secret") === Deno.env.get("CRON_SECRET");
-    if (!cronAuthorized) await authenticated(request);
+    const caller = !cronAuthorized ? await authenticated(request) : null;
     const admin = adminClient(), now = new Date().toISOString();
-    let query = admin.from("campaigns").select("id,name,channel,status,scheduled_at,created_by,communication_templates(subject,body)").in("status", ["QUEUED", "DRAFT"]).lte("scheduled_at", now).order("scheduled_at").limit(10);
+    let query = admin.from("campaigns").select("id,name,channel,status,scheduled_at,created_by,tenant_owner_id,communication_templates(subject,body)").eq("status", "QUEUED").lte("scheduled_at", now).order("scheduled_at").limit(10);
+    if(caller){const {data:profile}=await admin.from('profiles').select('tenant_owner_id').eq('id',caller.user.id).single();query=query.eq('tenant_owner_id',profile?.tenant_owner_id||caller.user.id);}
     if (body.campaign_id) query = query.eq("id", body.campaign_id);
     const { data: campaigns, error } = await query; if (error) throw error;
     let sent = 0, failed = 0;
@@ -22,7 +23,7 @@ Deno.serve(async (request) => {
       const addresses = (rows || []).map((row) => row.address).filter(Boolean);
       if (!addresses.length || !template?.body) { await admin.from("campaigns").update({ status: "FAILED" }).eq("id", campaign.id); failed++; continue; }
       try {
-        if (campaign.channel === "SMS") await sendNimbaSms(addresses, template.body);
+        if (campaign.channel === "SMS") {if(!campaign.tenant_owner_id)throw new Error('Entreprise SMS manquante');await sendNimbaSms(addresses, template.body, campaign.tenant_owner_id);}
         else await sendResendEmail(addresses, template.subject || campaign.name, template.body);
         await admin.from("campaign_recipients").update({ status: "SENT" }).eq("campaign_id", campaign.id).eq("status", "QUEUED");
         await admin.from("communication_logs").insert(addresses.map((recipient) => ({ channel: campaign.channel, recipient, campaign_id: campaign.id, status: "SENT", sent_by: campaign.created_by, metadata: { provider: campaign.channel === "SMS" ? "NIMBA" : "RESEND", scheduled: true } })));

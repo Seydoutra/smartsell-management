@@ -72,6 +72,7 @@ import {
 import { CampaignStudioPage, CommercialRadarPage, DigitalTwinPage } from "./InnovationsV4";
 import { AutopilotPage } from "./AutopilotV5";
 import { NotificationBell, OperationsCenter } from "./OperationsCenter";
+import { SmsSettings } from './SmsSettings';
 import {
   connectGoogleCalendar,
   createCampaign,
@@ -206,6 +207,7 @@ type Page =
   | "RH"
   | "Rapports"
   | "Centre de contrôle"
+  | "Paramètres SMS"
   | "Jumeau numérique"
   | "Radar commercial"
   | "Studio campagnes IA"
@@ -234,6 +236,7 @@ const nav: [Page, typeof LayoutDashboard, Permission?][] = [
   ["RH", BriefcaseBusiness, "users.manage"],
   ["Rapports", Activity, "audit.read"],
   ["Centre de contrôle", ShieldCheck, "audit.read"],
+  ["Paramètres SMS", Settings2],
   ["Jumeau numérique", Gauge, "finance.read"],
   ["Radar commercial", Target, "crm.write"],
   ["Studio campagnes IA", Megaphone, "communication.send"],
@@ -245,7 +248,7 @@ const navGroups:{label:string;pages:Page[]}[]=[
   {label:'Pilotage',pages:['Dashboard']},
   {label:'Production & clients',pages:['Clients','Projets','Tâches','Planning','Éditorial']},
   {label:'Finance & achats',pages:['Services','Fournisseurs','Facturation','Documents','Comptabilité','Matériel']},
-  {label:'Communication',pages:['Communication','Intégrations']},
+  {label:'Communication',pages:['Communication','Intégrations','Paramètres SMS']},
   {label:'Administration',pages:['Équipe','Demandes SaaS','RH','Rapports','Centre de contrôle','Portail client']},
   {label:'Intelligence artificielle',pages:['Jumeau numérique','Radar commercial','Studio campagnes IA','Autopilot IA','Assistant IA']},
 ];
@@ -3070,7 +3073,7 @@ function Shell({
     delete: actionAllowed(`${scope}.delete`),
   });
   const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'finance.read',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Intégrations:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Centre de contrôle':'audit.read','Portail client':'portal.view','Jumeau numérique':'accounting.view','Radar commercial':'clients.view','Studio campagnes IA':'communication.view'};
-  const visible = (n: [Page, typeof LayoutDashboard, Permission?]) => n[0]==='Dashboard'||(n[0]==='Demandes SaaS' ? platformOwner : (
+  const visible = (n: [Page, typeof LayoutDashboard, Permission?]) => n[0]==='Paramètres SMS' ? (profile.is_platform_owner===true||roles.includes('SUPER_ADMIN')) : n[0]==='Dashboard'||(n[0]==='Demandes SaaS' ? platformOwner : (
     (!viewKeys[n[0]] || actionAllowed(viewKeys[n[0]]!)) &&
     (n[0]==='Centre de contrôle' ? actionAllowed('audit.read') : isModuleAllowed(roles,access,accessLoaded,n[0]))));
   const currentPage = nav.some((item)=>item[0]===page&&visible(item)) ? page : 'Dashboard';
@@ -3172,6 +3175,8 @@ function Shell({
                 <HRPage />
               ) : currentPage === "Rapports" ? (
                 <ReportsPage />
+              ) : currentPage === "Paramètres SMS" ? (
+                <SmsSettings />
               ) : currentPage === "Centre de contrôle" ? (
                 <OperationsCenter profile={profile} />
               ) : currentPage === "Jumeau numérique" ? (

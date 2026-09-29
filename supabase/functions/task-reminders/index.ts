@@ -37,7 +37,8 @@ Deno.serve(async (request) => {
     let status = "SENT", providerMessageId: string | null = null, errorMessage: string | null = null;
     try {
       if (!phone) throw new Error("Numéro du collaborateur manquant");
-      const result = await sendNimbaSms([phone], body); providerMessageId = result.uid || result.id || null; sent++;
+      if (!task.tenant_owner_id || task.tenant_owner_id !== profile?.tenant_owner_id) throw new Error('Espace SMS du destinataire invalide');
+      const result = await sendNimbaSms([phone], body, task.tenant_owner_id); providerMessageId = result.uid || result.id || null; sent++;
       await admin.from("notifications").insert({ profile_id: reminder.profile_id, tenant_owner_id: task.tenant_owner_id || profile?.tenant_owner_id || null, channel: "IN_APP", title: `Rappel ${reminder.step}/3 : ${task.title}`, body: `Échéance ${due}.`, entity_type: "task", entity_id: reminder.task_id });
     } catch (caught) { status = "FAILED"; errorMessage = caught instanceof Error ? caught.message : "Envoi SMS impossible"; failed++; }
     await admin.from("task_reminder_schedule").update({ status, sent_at: now.toISOString(), provider_message_id: providerMessageId, error: errorMessage }).eq("id", reminder.id);
