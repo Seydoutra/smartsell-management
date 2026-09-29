@@ -94,7 +94,7 @@ export default function SignupPage({ onBack, onAccess }: Props) {
         <h2>Bienvenue chez SmartSell.</h2>
         <p>Quelques informations suffisent pour commencer.</p>
         <button type="button" className="google-button" onClick={async () => { setError(''); if (isDemoMode) return setError('La connexion Google sera disponible sur la version publiée.'); setBusy(true); try { await signInWithGoogle() } catch (reason) { setError(reason instanceof Error ? reason.message : 'Connexion Google impossible.') } finally { setBusy(false) } }}><b>G</b> Continuer avec Google</button>
-        <div className="signup-divider"><span/>confirmation sécurisée<span/></div>
+        <div className="signup-divider"><span/>inscription sécurisée par SMS<span/></div>
         <div className="signup-fields"><label>Nom complet<input name="fullName" autoComplete="name" required placeholder="Awa Touré"/></label><label>Entreprise<input name="companyName" autoComplete="organization" required placeholder="Votre entreprise"/></label></div>
         <label>Adresse e-mail<input name="email" type="email" autoComplete="email" required placeholder="vous@entreprise.com"/></label>
         {smsMode && <label>Téléphone guinéen<input name="phone" type="tel" autoComplete="tel" required placeholder="+224 620 00 00 00"/></label>}
@@ -103,7 +103,7 @@ export default function SignupPage({ onBack, onAccess }: Props) {
         {error && <div className="signup-error"><LockKeyhole/>{error}</div>}
         <label className="signup-consent"><input type="checkbox" required/><span>J’accepte que SmartSell crée mon espace d’essai et me contacte au sujet de cette demande.</span></label>
         <button className="signup-submit" disabled={busy}>{busy ? (smsMode ? 'Envoi du code…' : 'Création en cours…') : (smsMode ? 'Recevoir mon code SMS' : 'Créer ma démo de 72 h')} <ArrowRight/></button>
-        <button type="button" className="text-button" onClick={() => { setSmsMode(value => !value); setError('') }}>{smsMode ? 'Je préfère recevoir un lien par e-mail' : 'Je préfère recevoir un code par SMS'}</button>
+        {smsMode ? <p className="signup-sms-note">Un code de confirmation sera envoyé par SMS. Votre e-mail servira ensuite d’identifiant de connexion.</p> : <button type="button" className="text-button" onClick={() => { setSmsMode(true); setError('') }}>Utiliser la confirmation par SMS</button>}
         <p className="signup-login">Vous avez déjà un compte ? <button type="button" onClick={onAccess}>Se connecter</button></p>
       </form>
     </section>
