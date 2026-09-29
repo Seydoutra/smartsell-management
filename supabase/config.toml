@@ -30,3 +30,6 @@ verify_jwt = false
 
 [functions.tenant-sms-settings]
 verify_jwt = false
+
+[functions.performance-goals]
+verify_jwt = false

@@ -73,6 +73,7 @@ import { CampaignStudioPage, CommercialRadarPage, DigitalTwinPage } from "./Inno
 import { AutopilotPage } from "./AutopilotV5";
 import { NotificationBell, OperationsCenter } from "./OperationsCenter";
 import { SmsSettings } from './SmsSettings';
+import { PerformanceGoals } from './PerformanceGoals';
 import {
   connectGoogleCalendar,
   createCampaign,
@@ -208,6 +209,7 @@ type Page =
   | "Rapports"
   | "Centre de contrôle"
   | "Paramètres SMS"
+  | "Objectifs & performance"
   | "Jumeau numérique"
   | "Radar commercial"
   | "Studio campagnes IA"
@@ -218,6 +220,7 @@ type Page =
 type CrudRights = { view: boolean; create: boolean; update: boolean; delete: boolean };
 const nav: [Page, typeof LayoutDashboard, Permission?][] = [
   ["Dashboard", LayoutDashboard],
+  ["Objectifs & performance", Target],
   ["Clients", Users, "crm.write"],
   ["Projets", BriefcaseBusiness, "projects.write"],
   ["Tâches", ClipboardList, "projects.write"],
@@ -245,7 +248,7 @@ const nav: [Page, typeof LayoutDashboard, Permission?][] = [
   ["Assistant IA", MessageSquareText],
 ];
 const navGroups:{label:string;pages:Page[]}[]=[
-  {label:'Pilotage',pages:['Dashboard']},
+  {label:'Pilotage',pages:['Dashboard','Objectifs & performance']},
   {label:'Production & clients',pages:['Clients','Projets','Tâches','Planning','Éditorial']},
   {label:'Finance & achats',pages:['Services','Fournisseurs','Facturation','Documents','Comptabilité','Matériel']},
   {label:'Communication',pages:['Communication','Intégrations','Paramètres SMS']},
@@ -689,9 +692,8 @@ function SaaSSalesDashboard({leads,advice,busy,onSuggest,onOpen}:{leads:Array<{i
   return <motion.section className="panel saas-sales-dashboard" initial={{opacity:0,y:14}} animate={{opacity:1,y:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> SALES SaaS · PRIVÉ SUPER ADMIN</span><h2>Transformer les essais en clients</h2><p>Les indicateurs d’usage vous indiquent qui contacter et pourquoi.</p></div><div className="saas-sales-actions"><button className="ghost-action" onClick={onOpen}>Voir les demandes</button><button className="primary-btn compact" onClick={onSuggest} disabled={busy}><Sparkles/>{busy?'Analyse IA…':'Suggestions IA'}</button></div></div><div className="saas-sales-kpis"><div><b>{leads.length}</b><span>Essais SaaS</span></div><div><b>{engaged}</b><span>Engagés</span></div><div><b>{hot}</b><span>Prospects chauds</span></div><div><b>{leads.length?Math.round(engaged/leads.length*100):0}%</b><span>Activation</span></div></div>{advice&&<div className="saas-ai-advice"><Sparkles/><div><strong>Recommandations du directeur commercial IA</strong><p>{advice}</p></div></div>}<div className="saas-sales-list">{leads.slice(0,5).map(lead=><div key={lead.item.id}><span className={`saas-score ${lead.score>=71?'hot':lead.score>=31?'warm':''}`}>{lead.score}</span><div><strong>{lead.item.full_name}</strong><small>{lead.actions} actions · dernière activité {fmt(lead.last)}</small></div><em>{lead.score>=71?'À contacter maintenant':lead.score>=31?'À accompagner':'À réactiver'}</em></div>)}{!leads.length&&<p className="muted">Aucune inscription autonome à analyser pour le moment.</p>}</div></motion.section>
 }
 
-function MonthlyGoalDashboard({goal,busy,onSave}:{goal?:{metric:string;target:number;period:string;plan?:string};busy:boolean;onSave:(goal:{metric:string;target:number;period:string})=>Promise<void>}){
-  const [open,setOpen]=useState(false);
-  return <motion.section className="panel monthly-goal-dashboard" initial={{opacity:0,y:14}} animate={{opacity:1,y:0}}><div className="command-panel-head"><div><span className="eyebrow"><i/> OBJECTIF MENSUEL · IA</span><h2>{goal?`${goal.target.toLocaleString('fr-FR')} ${goal.metric}`:'Fixer un objectif pour l’équipe'}</h2><p>{goal?.period||'L’IA répartit la cible sur quatre semaines et propose les activités à suivre.'}</p></div><button className="primary-btn compact" onClick={()=>setOpen(value=>!value)}>{goal?'Modifier l’objectif':'Définir l’objectif'}</button></div>{goal?.plan&&<div className="goal-plan"><Sparkles/><p>{goal.plan}</p></div>}{open&&<form className="goal-form" onSubmit={async event=>{event.preventDefault();const form=new FormData(event.currentTarget);await onSave({metric:String(form.get('metric')),target:Number(form.get('target')||0),period:String(form.get('period'))});setOpen(false)}}><label>Indicateur<select name="metric" defaultValue={goal?.metric||'GNF de chiffre d’affaires'}><option>GNF de chiffre d’affaires</option><option>clients convertis</option><option>services vendus</option><option>tâches terminées</option><option>campagnes publiées</option></select></label><label>Cible<input name="target" type="number" min="1" required defaultValue={goal?.target||''}/></label><label>Période<input name="period" type="month" required defaultValue={goal?.period||new Date().toISOString().slice(0,7)}/></label><button className="primary-btn compact" disabled={busy}><Sparkles/>{busy?'Calcul IA…':'Enregistrer et répartir'}</button></form>}</motion.section>
+function MonthlyGoalDashboard(_props:{goal?:{metric:string;target:number;period:string;plan?:string};busy:boolean;onSave:(goal:{metric:string;target:number;period:string})=>Promise<void>}){
+  return <motion.section className="panel monthly-goal-dashboard" initial={{opacity:0,y:14}} animate={{opacity:1,y:0}}><span className="eyebrow">PILOTAGE DES ÉQUIPES</span><h2>Objectifs & performance</h2><p>Objectifs mensuels, répartition validée par le manager, responsables, suivi hebdomadaire et bilan.</p><button className="primary-btn compact" onClick={()=>{location.hash='/'+encodeURIComponent('Objectifs & performance')}}>Gérer les objectifs</button></motion.section>
 }
 
 function ClientDetail({
@@ -3073,7 +3075,7 @@ function Shell({
     delete: actionAllowed(`${scope}.delete`),
   });
   const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'finance.read',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Intégrations:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Centre de contrôle':'audit.read','Portail client':'portal.view','Jumeau numérique':'accounting.view','Radar commercial':'clients.view','Studio campagnes IA':'communication.view'};
-  const visible = (n: [Page, typeof LayoutDashboard, Permission?]) => n[0]==='Paramètres SMS' ? (profile.is_platform_owner===true||roles.includes('SUPER_ADMIN')) : n[0]==='Dashboard'||(n[0]==='Demandes SaaS' ? platformOwner : (
+  const visible = (n: [Page, typeof LayoutDashboard, Permission?]) => n[0]==='Objectifs & performance' ? !roles.includes('CLIENT') : n[0]==='Paramètres SMS' ? (profile.is_platform_owner===true||roles.includes('SUPER_ADMIN')) : n[0]==='Dashboard'||(n[0]==='Demandes SaaS' ? platformOwner : (
     (!viewKeys[n[0]] || actionAllowed(viewKeys[n[0]]!)) &&
     (n[0]==='Centre de contrôle' ? actionAllowed('audit.read') : isModuleAllowed(roles,access,accessLoaded,n[0]))));
   const currentPage = nav.some((item)=>item[0]===page&&visible(item)) ? page : 'Dashboard';
@@ -3177,6 +3179,8 @@ function Shell({
                 <ReportsPage />
               ) : currentPage === "Paramètres SMS" ? (
                 <SmsSettings />
+              ) : currentPage === "Objectifs & performance" ? (
+                <PerformanceGoals />
               ) : currentPage === "Centre de contrôle" ? (
                 <OperationsCenter profile={profile} />
               ) : currentPage === "Jumeau numérique" ? (

@@ -42,6 +42,8 @@ Deno.serve(async request => {
   if(readError)throw readError;
   let tenants:unknown[]=[];
   if(actor.is_platform_owner){const {data:profiles,error:profilesError}=await admin.from('profiles').select('id,full_name,tenant_owner_id').order('full_name');if(profilesError)throw profilesError;tenants=(profiles||[]).filter(p=>p.id===p.tenant_owner_id).map(p=>({id:p.id,name:p.full_name}));}
-  return json(request,{can_manage:actor.is_platform_owner,tenant_owner_id:tenant,tenants,settings:settings?{organization_name:settings.organization_name,sender_name:settings.sender_name,status:settings.status,updated_at:settings.updated_at,credentials_saved:!!(settings.sid_secret_id&&settings.token_secret_id)}:null});
+  const {data:trial,error:trialError}=await admin.rpc('trial_sms_status',{p_tenant:tenant});
+  if(trialError)throw trialError;
+  return json(request,{can_manage:actor.is_platform_owner,tenant_owner_id:tenant,tenants,trial,settings:settings?{organization_name:settings.organization_name,sender_name:settings.sender_name,status:settings.status,updated_at:settings.updated_at,credentials_saved:!!(settings.sid_secret_id&&settings.token_secret_id)}:null});
  }catch(error){if(error instanceof Response)return error;return json(request,{error:'Configuration SMS indisponible. Vérifiez que le service et sa migration sont installés.'},500);}
 });

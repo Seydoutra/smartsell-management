@@ -39,7 +39,7 @@ Deno.serve(async (request) => {
     const recipients = testMode ? [body.channel === "SMS" ? Deno.env.get("COMMUNICATION_TEST_PHONE") : Deno.env.get("COMMUNICATION_TEST_EMAIL")].filter(Boolean) as string[] : body.recipients;
     if (!recipients.length) return json(request, { error: "Aucun destinataire de test configuré" }, 400);
     let provider: { uid?: string; id?: string; status?: string; message_cost?: number; currency?: string } | null = null;
-    if (body.channel === "SMS") provider = await sendNimbaSms(recipients, body.message.trim(), profile?.tenant_owner_id||user.id);
+    if (body.channel === "SMS") provider = await sendNimbaSms(recipients, body.message.trim(), profile?.tenant_owner_id||user.id, true);
     else {
       const deliveries = await sendResendEmail(recipients, body.subject?.trim() || "Message de SmartSell", body.message.trim());
       provider = { id: deliveries[0]?.id, status: "SENT" };

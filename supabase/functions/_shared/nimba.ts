@@ -1,4 +1,5 @@
 import { adminClient } from './http.ts';
+import { isSingleSms } from './trialSms.ts';
 export type NimbaMessage = { uid?: string; id?: string; status?: string; message_cost?: number; currency?: string };
 
 const normalizePhone = (value: string) => {
@@ -7,7 +8,7 @@ const normalizePhone = (value: string) => {
   return digits.length === 9 ? `224${digits}` : digits;
 };
 
-export async function sendNimbaSms(recipients: string[], message: string, tenantOwnerId?: string) {
+export async function sendNimbaSms(recipients: string[], message: string, tenantOwnerId?: string, allowTrial=false) {
   let serviceId = Deno.env.get("NIMBA_SERVICE_ID");
   let secretToken = Deno.env.get("NIMBA_SECRET_TOKEN");
   let senderName = Deno.env.get("NIMBA_SENDER_NAME") || "SMARTSELL";
@@ -19,7 +20,15 @@ export async function sendNimbaSms(recipients: string[], message: string, tenant
     else {
       const {data:owner}=await admin.from('profiles').select('is_platform_owner').eq('id',tenantOwnerId).single();
       const {data:settings,error:settingsError}=await admin.from('tenant_sms_settings').select('status').eq('tenant_owner_id',tenantOwnerId).maybeSingle();
-      if(settingsError||settings||!owner?.is_platform_owner)throw new Error('SMS non activés pour cette entreprise. Consultez Paramètres SMS.');
+      if(settingsError||settings?.status==='PAUSED')throw new Error('SMS non activés pour cette entreprise. Consultez Paramètres SMS.');
+      if(settings||!owner?.is_platform_owner){
+        if(!allowTrial)throw new Error('SMS non activés pour cette entreprise. Consultez Paramètres SMS.');
+        if(recipients.length!==1||!isSingleSms(message))throw new Error('Essai : un destinataire et un SMS simple (160 caractères GSM ou 70 Unicode) par envoi.');
+        if(!serviceId||!secretToken)throw new Error('SMS d’essai temporairement indisponibles');
+        const {error:quotaError}=await admin.rpc('reserve_trial_sms',{p_tenant:tenantOwnerId,p_phone:normalizePhone(recipients[0])});
+        if(quotaError)throw new Error('Essai SMS indisponible : utilisez votre numéro vérifié, vérifiez votre quota de 5 SMS et la durée de 72 heures.');
+        senderName='SMARTSELL';
+      }
     }
   }
   if (!serviceId || !secretToken) throw new Error("Identifiants Nimba SMS manquants");
