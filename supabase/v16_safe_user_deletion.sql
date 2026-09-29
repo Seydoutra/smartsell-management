@@ -12,7 +12,6 @@ set search_path = public, pg_temp
 as $$
 declare
   actor_is_super_admin boolean := false;
-  target_is_super_admin boolean := false;
   reference_row record;
   affected_rows bigint := 0;
   total_affected bigint := 0;
@@ -38,17 +37,8 @@ begin
     raise exception 'Seul le super administrateur peut supprimer un utilisateur.';
   end if;
 
-  select coalesce(p.role::text = 'SUPER_ADMIN', false)
-      or coalesce('SUPER_ADMIN' = any(p.roles::text[]), false)
-    into target_is_super_admin
-  from public.profiles p
-  where p.id = target_profile_id;
-
-  if not found then
+  if not exists (select 1 from public.profiles p where p.id = target_profile_id) then
     raise exception 'Utilisateur introuvable.';
-  end if;
-  if coalesce(target_is_super_admin, false) then
-    raise exception 'La suppression d’un super administrateur est bloquée par sécurité.';
   end if;
 
   -- Les contraintes ON DELETE CASCADE se chargeront d'elles-mêmes au moment
@@ -108,4 +98,3 @@ revoke all on function public.prepare_user_deletion(uuid, uuid) from public;
 revoke all on function public.prepare_user_deletion(uuid, uuid) from anon;
 revoke all on function public.prepare_user_deletion(uuid, uuid) from authenticated;
 grant execute on function public.prepare_user_deletion(uuid, uuid) to service_role;
-

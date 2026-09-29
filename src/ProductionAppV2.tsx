@@ -3163,7 +3163,7 @@ function Shell({
               ) : currentPage === "Intégrations" ? (
                 <IntegrationsPage rights={rightsFor('communication')} />
               ) : currentPage === "Équipe" ? (
-                <TeamAccessPage admin={admin} superAdmin={roles.includes("SUPER_ADMIN")} />
+                <TeamAccessPage admin={admin} superAdmin={roles.includes("SUPER_ADMIN")} currentProfileId={profile.id} />
               ) : currentPage === "Demandes SaaS" ? (
                 <SignupRequestsPage />
               ) : currentPage === "RH" ? (

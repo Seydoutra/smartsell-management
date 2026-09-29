@@ -11,9 +11,8 @@ Deno.serve(async (request) => {
     const { data: actor } = await admin.from("profiles").select("role,roles").eq("id",user.id).single();
     const roles = (actor?.roles?.length ? actor.roles : [actor?.role]) as string[];
     if (!roles.includes("SUPER_ADMIN")) return json(request,{error:"Seul le super administrateur peut supprimer un utilisateur."},403);
-    const { data: target } = await admin.from("profiles").select("full_name,role,roles").eq("id",profile_id).single();
-    const targetRoles = (target?.roles?.length ? target.roles : [target?.role]) as string[];
-    if (targetRoles.includes("SUPER_ADMIN")) return json(request,{error:"La suppression d’un autre super administrateur est bloquée par sécurité."},403);
+    const { data: target } = await admin.from("profiles").select("full_name").eq("id",profile_id).single();
+    if (!target) return json(request,{error:"Utilisateur introuvable."},404);
     const { error: prepareError } = await admin.rpc("prepare_user_deletion",{
       target_profile_id: profile_id,
       acting_profile_id: user.id,
