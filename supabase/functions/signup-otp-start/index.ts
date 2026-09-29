@@ -25,7 +25,8 @@ Deno.serve(async (request) => {
     const since = new Date(Date.now() - 15 * 60_000).toISOString();
     const { count } = await admin.from("signup_otp_challenges").select("id", { count: "exact", head: true }).or(`phone.eq.${phone},email.eq.${email}`).gte("created_at", since);
     if ((count || 0) >= 3) return json(request, { error: "Trop de demandes. Réessayez dans 15 minutes." }, 429);
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const random = new Uint32Array(1); crypto.getRandomValues(random);
+    const code = String(100000 + (random[0] % 900000));
     const codeHash = await hashCode(code);
     const { data: challenge, error } = await admin.from("signup_otp_challenges").insert({ phone, email, full_name: fullName, company_name: companyName, code_hash: codeHash, expires_at: new Date(Date.now() + 10 * 60_000).toISOString() }).select("id,expires_at").single();
     if (error || !challenge) throw new Error(error?.message || "Défi OTP impossible");
