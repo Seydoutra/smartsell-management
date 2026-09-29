@@ -24,7 +24,7 @@ Deno.serve(async (request) => {
   if (request.method !== "POST") return json(request, { error: "Méthode non autorisée" }, 405);
   try {
     const { admin, user } = await authenticated(request);
-    const { data: caller } = await admin.from("profiles").select("role,roles,active").eq("id", user.id).single();
+    const { data: caller } = await admin.from("profiles").select("role,roles,active,tenant_owner_id").eq("id", user.id).single();
     const callerRoles = Array.isArray(caller?.roles) && caller.roles.length ? caller.roles : [caller?.role];
     if (!caller?.active || !callerRoles.some((role) => ["SUPER_ADMIN", "ADMIN"].includes(role))) return json(request, { error: "Permission refusée" }, 403);
     const body = await request.json() as { email?: string; password?: string; name?: string; phone?: string; roles?: string[]; role?: string; department_id?: string; trial_days?: number | null; notify_email?: boolean; notify_sms?: boolean };
@@ -39,7 +39,7 @@ Deno.serve(async (request) => {
     const accessExpiresAt = trialDays === null ? null : new Date(Date.now() + trialDays * 86_400_000).toISOString();
     const { data, error } = await admin.auth.admin.createUser({ email, password: body.password, email_confirm: true, user_metadata: { name } });
     if (error || !data.user) return json(request, { error: error?.message || "Création impossible" }, 400);
-    const { error: profileError } = await admin.from("profiles").upsert({ id: data.user.id, full_name: name, email, phone: body.phone?.trim() || null, role, roles: selectedRoles, department_id: body.department_id || null, active: true, must_change_password: true, is_temporary: trialDays !== null, access_expires_at: accessExpiresAt });
+    const { error: profileError } = await admin.from("profiles").upsert({ id: data.user.id, full_name: name, email, phone: body.phone?.trim() || null, role, roles: selectedRoles, department_id: body.department_id || null, active: true, must_change_password: true, is_temporary: trialDays !== null, access_expires_at: accessExpiresAt, tenant_owner_id: caller?.tenant_owner_id || user.id });
     if (profileError) {
       await admin.auth.admin.deleteUser(data.user.id);
       return json(request, { error: `Profil non créé : ${profileError.message}` }, 400);
