@@ -1,0 +1,18 @@
+begin;
+create table if not exists public.password_reset_otp_challenges (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  phone text not null,
+  email text not null,
+  code_hash text not null,
+  attempts smallint not null default 0,
+  max_attempts smallint not null default 5,
+  expires_at timestamptz not null,
+  verified_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists password_reset_otp_phone_created_idx on public.password_reset_otp_challenges(phone,created_at desc);
+create index if not exists password_reset_otp_email_created_idx on public.password_reset_otp_challenges(email,created_at desc);
+alter table public.password_reset_otp_challenges enable row level security;
+revoke all on public.password_reset_otp_challenges from anon, authenticated;
+commit;

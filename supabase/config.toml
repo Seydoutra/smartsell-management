@@ -21,3 +21,9 @@ verify_jwt = false
 
 [functions.signup-otp-verify]
 verify_jwt = false
+
+[functions.password-reset-otp-start]
+verify_jwt = false
+
+[functions.password-reset-otp-verify]
+verify_jwt = false

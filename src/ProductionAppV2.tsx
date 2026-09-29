@@ -131,7 +131,8 @@ import {
   onAuthChange,
   recordPayment,
   recordEquipmentMovement,
-  requestPasswordReset,
+  startPasswordResetOtp,
+  verifyPasswordResetOtp,
   sendCommunication,
   signIn,
   signOut,
@@ -261,6 +262,12 @@ const statusClass = (s?: string | null) => { const value=(s||"").toUpperCase(); 
 function Login({ onSuccess }: { onSuccess: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [resetMode, setResetMode] = useState(false);
+  const [challengeId, setChallengeId] = useState("");
+  const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const submit = async (e: FormEvent) => {
@@ -321,30 +328,17 @@ function Login({ onSuccess }: { onSuccess: () => void }) {
               onChange={(e) => setEmail(e.target.value)}
             />
           </label>
-          <label>
-            Mot de passe
-            <input
-              required
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </label>
-          <button
-            type="button"
-            className="link forgot-link"
-            onClick={async () => {
-              if (!email) return setError("Saisissez votre email.");
-              await requestPasswordReset(email);
-              setError("Lien envoyé par email.");
-            }}
-          >
-            Mot de passe oublié ?
-          </button>
+          {!resetMode && <label>Mot de passe<input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>}
+          {resetMode && <label>Téléphone enregistré<input required type="tel" placeholder="+224 620 12 47 66" value={phone} onChange={(e) => setPhone(e.target.value)} /></label>}
+          {resetMode && challengeId && <><label>Code reçu par SMS<input required inputMode="numeric" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value)} /></label><label>Nouveau mot de passe<input required type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></label></>}
+          {notice && <p className="form-success">{notice}</p>}
+          <button type="button" className="link forgot-link" onClick={async () => { if (!resetMode) { setResetMode(true); setError(""); return; } if (!email || !phone) return setError("Saisissez votre email et le téléphone enregistré."); setBusy(true); setError(""); try { const result = await startPasswordResetOtp({ email, phone }); setChallengeId(result.challenge_id); setNotice("Un code de réinitialisation vient d’être envoyé par SMS."); } catch (err) { setError(err instanceof Error ? err.message : "Envoi impossible"); } finally { setBusy(false); } }}>{resetMode ? "Recevoir le code SMS" : "Mot de passe oublié ?"}</button>
+          {resetMode && challengeId && <button type="button" className="primary-btn" disabled={busy} onClick={async () => { if (!otp || newPassword.length < 8) return setError("Code et mot de passe de 8 caractères minimum requis."); setBusy(true); setError(""); try { await verifyPasswordResetOtp({ challengeId, code: otp, password: newPassword }); setNotice("Mot de passe mis à jour. Vous pouvez vous connecter."); setResetMode(false); setChallengeId(""); setOtp(""); setNewPassword(""); } catch (err) { setError(err instanceof Error ? err.message : "Code invalide ou expiré."); } finally { setBusy(false); } }}>Réinitialiser le mot de passe <span>→</span></button>}
+          {resetMode && <button type="button" className="link" onClick={() => { setResetMode(false); setChallengeId(""); setError(""); setNotice(""); }}>Retour à la connexion</button>}
           {error && <p className="form-error">{error}</p>}
-          <button disabled={busy} className="primary-btn">
+          {!resetMode && <button disabled={busy} className="primary-btn">
             {busy ? "Connexion…" : "Ouvrir mon espace"} <span>→</span>
-          </button>
+          </button>}
         </form>
       </section>
     </main>

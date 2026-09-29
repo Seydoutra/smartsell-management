@@ -52,17 +52,18 @@ export async function startSmsSignupOtp(input:{phone:string;email:string;fullNam
 export async function verifySmsSignupOtp(input:{challengeId:string;code:string;password:string}){
   return invokeEdge<{success:boolean;email:string}>('signup-otp-verify',{challenge_id:input.challengeId,code:input.code,password:input.password});
 }
+export async function startPasswordResetOtp(input:{email:string;phone:string}){
+  return invokeEdge<{challenge_id:string;expires_at:string}>('password-reset-otp-start',{email:input.email,phone:input.phone});
+}
+export async function verifyPasswordResetOtp(input:{challengeId:string;code:string;password:string}){
+  return invokeEdge<{success:boolean}>('password-reset-otp-verify',{challenge_id:input.challengeId,code:input.code,password:input.password});
+}
 export async function signInWithGoogle(){
   const redirectTo=new URL(import.meta.env.BASE_URL,location.origin);redirectTo.hash='app';
   const {data,error}=await db().auth.signInWithOAuth({provider:'google',options:{redirectTo:redirectTo.href,queryParams:{access_type:'offline',prompt:'consent'}}});
   fail(error);return data
 }
 export async function signOut(){const {error}=await db().auth.signOut();fail(error)}
-export async function requestPasswordReset(email:string){
-  const appUrl=new URL(import.meta.env.BASE_URL,location.origin).href;
-  const {error}=await db().auth.resetPasswordForEmail(email,{redirectTo:appUrl});
-  fail(error)
-}
 export async function currentSession(){return (await db().auth.getSession()).data.session}
 export function onAuthChange(callback:()=>void){return db().auth.onAuthStateChange(callback).data.subscription}
 export async function getProfile():Promise<Profile>{const client=db();const {data:{user}}=await client.auth.getUser();if(!user)throw new Error('Session expirée');const {data,error}=await client.from('profiles').select('*').eq('id',user.id).single();fail(error);const profile=data as Profile;if(!profile.active||(profile.access_expires_at&&new Date(profile.access_expires_at).getTime()<=Date.now())){await client.auth.signOut();throw new Error(profile.access_expires_at?'Votre période d’essai est terminée.':'Votre compte est suspendu.')}return profile}
