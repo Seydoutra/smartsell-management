@@ -13,23 +13,26 @@ Deno.serve(async (request) => {
   try {
     const { admin, user } = await authenticated(request);
     const [{ data: profile, error: profileError },{data:access}] = await Promise.all([
-      admin.from("profiles").select("full_name,role,roles").eq("id", user.id).single(),
+      admin.from("profiles").select("full_name,role,roles,tenant_owner_id,is_temporary").eq("id", user.id).single(),
       admin.from("user_access_controls").select("allowed_modules,denied_permissions").eq("profile_id",user.id).maybeSingle()
     ]);
     if (profileError) throw profileError;
+    // Service-role queries bypass RLS, so every intelligence query must be
+    // scoped explicitly to the connected account's tenant.
+    const tenantOwnerId = profile?.tenant_owner_id || user.id;
     const roles = (profile.roles?.length ? profile.roles : [profile.role]) as string[];
     if (!roles.some((role) => ["SUPER_ADMIN","ADMIN","MANAGER"].includes(role))) return json(request, { error: "Le cockpit stratégique est réservé à la direction." }, 403);
     const superAdmin=roles.includes("SUPER_ADMIN"), requiredModules=["Clients","Projets","Tâches","Facturation","Comptabilité"], requiredActions=["clients.view","projects.view","tasks.view","invoices.view","accounting.view"];
     if(!superAdmin&&(!access||requiredModules.some(module=>!access.allowed_modules?.includes(module))||requiredActions.some(action=>access.denied_permissions?.includes(action)))) return json(request,{error:"Le briefing stratégique contient des données sensibles non autorisées pour ce profil."},403);
 
     const [clientsQ, projectsQ, invoicesQ, tasksQ, paymentsQ, expensesQ, prospectsQ] = await Promise.all([
-      admin.from("clients").select("id,name,status"),
-      admin.from("projects").select("id,name,client_id,status,progress,ends_on,clients(name)"),
-      admin.from("invoices").select("id,number,client_id,total,status,due_date,clients(name)"),
-      admin.from("tasks").select("id,title,project_id,status,priority,due_at,projects(name,client_id)"),
-      admin.from("payments").select("amount,paid_at"),
-      admin.from("expenses").select("amount,status,spent_on"),
-      admin.from("prospects").select("id,company,stage,next_follow_up_at")
+      admin.from("clients").select("id,name,status").eq("tenant_owner_id", tenantOwnerId),
+      admin.from("projects").select("id,name,client_id,status,progress,ends_on,clients(name)").eq("tenant_owner_id", tenantOwnerId),
+      admin.from("invoices").select("id,number,client_id,total,status,due_date,clients(name)").eq("tenant_owner_id", tenantOwnerId),
+      admin.from("tasks").select("id,title,project_id,status,priority,due_at,projects(name,client_id)").eq("tenant_owner_id", tenantOwnerId),
+      admin.from("payments").select("amount,paid_at").eq("tenant_owner_id", tenantOwnerId),
+      admin.from("expenses").select("amount,status,spent_on").eq("tenant_owner_id", tenantOwnerId),
+      admin.from("prospects").select("id,company,stage,next_follow_up_at").eq("tenant_owner_id", tenantOwnerId)
     ]);
     for (const query of [clientsQ,projectsQ,invoicesQ,tasksQ,paymentsQ,expensesQ,prospectsQ]) if (query.error) throw query.error;
 
@@ -76,10 +79,13 @@ Deno.serve(async (request) => {
     for (const invoice of overdueInvoices.slice(0,3)) actions.push({owner_id:user.id,source_type:"INVOICE",source_id:invoice.id,client_id:invoice.client_id,title:`Relancer ${invoice.clients?.name||"le client"}`,reason:`La facture ${invoice.number} de ${number(invoice.total).toLocaleString("fr-FR")} GNF est échue.`,priority:"URGENTE",action_type:"NAVIGATE",target_page:"Facturation",action_payload:{client_id:invoice.client_id,invoice_id:invoice.id}});
     for (const task of overdueTasks.slice(0,2)) actions.push({owner_id:user.id,source_type:"TASK",source_id:task.id,client_id:task.projects?.client_id||null,project_id:task.project_id,title:`Finaliser : ${task.title}`,reason:`Échéance dépassée${task.projects?.name?` sur ${task.projects.name}`:""}.`,priority:task.priority==="URGENTE"?"URGENTE":"HAUTE",action_type:"COMPLETE_TASK",target_page:"Tâches",action_payload:{task_id:task.id,client_id:task.projects?.client_id||null}});
     for (const project of riskyProjects.slice(0,2)) actions.push({owner_id:user.id,source_type:"PROJECT",source_id:project.id,client_id:project.client_id,project_id:project.id,title:`Replanifier ${project.name}`,reason:`Échéance dépassée avec ${number(project.progress)}% d’avancement.`,priority:"HAUTE",action_type:"NAVIGATE",target_page:"Projets",action_payload:{client_id:project.client_id,project_id:project.id}});
-    if (!actions.length) actions.push({owner_id:user.id,source_type:"AGENCY",title:"Préparer la revue hebdomadaire",reason:"Les urgences principales sont maîtrisées. Consolidez les priorités de la semaine avec l’équipe.",priority:"NORMALE",action_type:"NAVIGATE",target_page:"Planning",action_payload:{}});
-    const { data: savedActions, error: actionsError } = await admin.from("next_best_actions").insert(actions.slice(0,6)).select();
+    // An empty tenant must remain empty: do not fabricate a recommendation
+    // that looks like data inherited from the platform owner.
+    const { data: savedActions, error: actionsError } = actions.length
+      ? await admin.from("next_best_actions").insert(actions.slice(0,6)).select()
+      : { data: [], error: null };
     if (actionsError) throw actionsError;
-    await admin.from("activity_logs").insert({actor_id:user.id,action:"GENERATE",entity_type:"agency_briefing",entity_id:briefing.id,metadata:{actions:savedActions?.length||0}});
+    await admin.from("activity_logs").insert({actor_id:user.id,tenant_owner_id:tenantOwnerId,action:"GENERATE",entity_type:"agency_briefing",entity_id:briefing.id,metadata:{actions:savedActions?.length||0}});
     return json(request,{briefing,actions:savedActions||[]});
   } catch (error) { return edgeError(request,error); }
 });
