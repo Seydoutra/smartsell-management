@@ -1,4 +1,4 @@
-export type Client = { id:string; name:string; legal_name:string|null; sector:string|null; phone:string|null; whatsapp:string|null; email:string|null; address:string|null; website?:string|null; notes?:string|null; status:string; created_at:string }
+export type Client = { id:string; name:string; legal_name:string|null; sector:string|null; phone:string|null; whatsapp:string|null; email:string|null; address:string|null; website?:string|null; notes?:string|null; avatar_url?:string|null; status:string; created_at:string }
 export type ProjectMember = { profile_id:string; role:string|null; profiles?:{full_name:string}|null }
 export type TaskAssignee = { profile_id:string; profiles?:{full_name:string}|null }
 export type Project = { id:string; name:string; type:string|null; client_id:string|null; manager_id:string|null; starts_on:string|null; ends_on:string|null; budget:number; currency:string; status:string; priority:string; progress:number; description:string|null; created_at?:string; clients?:{name:string}|null; profiles?:{full_name:string}|null; project_members?:ProjectMember[] }

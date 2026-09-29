@@ -149,6 +149,7 @@ import {
   updateService,
   updateTask,
   updateNextBestAction,
+  uploadClientAvatar,
 } from "./services/repository";
 import type {
   AccessControl,
@@ -680,6 +681,7 @@ function ClientDetail({
       ReturnType<typeof getClientWorkspace>
     > | null>(null),
     [edit, setEdit] = useState(false),
+    [photoBusy, setPhotoBusy] = useState(false),
     [error, setError] = useState("");
   const load = () =>
     getClientWorkspace(id)
@@ -706,8 +708,10 @@ function ClientDetail({
           className="entity-form"
           onSubmit={async (e) => {
             e.preventDefault();
-            const f = Object.fromEntries(new FormData(e.currentTarget));
+            const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, unknown>;
+            const photo=f.avatar_file; delete f.avatar_file;
             await updateClient(id, f);
+            if(photo instanceof File && photo.size){setPhotoBusy(true);try{await updateClient(id,{avatar_url:await uploadClientAvatar(photo)})}finally{setPhotoBusy(false)}}
             setEdit(false);
             load();
             onChanged();
@@ -733,6 +737,10 @@ function ClientDetail({
             <Field label="Adresse" wide>
               <input name="address" defaultValue={data.client.address || ""} />
             </Field>
+            <Field label="Photo du client" wide>
+              <input name="avatar_file" type="file" accept="image/png,image/jpeg,image/webp" disabled={photoBusy} />
+              <small className="muted">Image facultative, visible dans le CRM et la fiche client.</small>
+            </Field>
             <Field label="Notes" wide>
               <textarea name="notes" defaultValue={data.client.notes || ""} />
             </Field>
@@ -742,8 +750,8 @@ function ClientDetail({
       ) : (
         <>
           <div className="detail-hero">
-            <div className="record-avatar large">
-              {data.client.name.slice(0, 2).toUpperCase()}
+            <div className="record-avatar large client-photo-avatar">
+              {data.client.avatar_url ? <img src={data.client.avatar_url} alt={`Photo de ${data.client.name}`} /> : data.client.name.slice(0, 2).toUpperCase()}
             </div>
             <div>
               <h3>{data.client.legal_name || data.client.name}</h3>
@@ -881,8 +889,8 @@ function ClientsPage({ rights, onNavigate }: { rights: CrudRights; onNavigate: (
               onClick={() => setSelected(r.id)}
             >
               <div className="record-main">
-                <span className="record-avatar">
-                  {r.name.slice(0, 2).toUpperCase()}
+                <span className="record-avatar client-list-avatar">
+                  {r.avatar_url ? <img src={r.avatar_url} alt={`Photo de ${r.name}`} /> : r.name.slice(0, 2).toUpperCase()}
                 </span>
                 <div>
                   <strong>{r.name}</strong>
@@ -908,11 +916,10 @@ function ClientsPage({ rights, onNavigate }: { rights: CrudRights; onNavigate: (
               onSubmit={async (e) => {
                 e.preventDefault();
                 try {
-                  await createClient(
-                    Object.fromEntries(
-                      new FormData(e.currentTarget),
-                    ) as Partial<Client>,
-                  );
+                  const form=new FormData(e.currentTarget);
+                  const created=await createClient(Object.fromEntries(form) as Partial<Client>);
+                  const photo=form.get('avatar_file');
+                  if(photo instanceof File && photo.size) await updateClient(created.id,{avatar_url:await uploadClientAvatar(photo)});
                   setOpen(false);
                   load();
                 } catch (x) {
@@ -941,6 +948,10 @@ function ClientsPage({ rights, onNavigate }: { rights: CrudRights; onNavigate: (
                 </Field>
                 <Field label="Adresse" wide>
                   <input name="address" />
+                </Field>
+                <Field label="Photo du client" wide>
+                  <input name="avatar_file" type="file" accept="image/png,image/jpeg,image/webp" />
+                  <small className="muted">PNG, JPG ou WEBP. Facultatif.</small>
                 </Field>
               </div>
               <button className="primary-btn compact">Enregistrer</button>
