@@ -5,7 +5,7 @@ import type { AgencyScenario, CampaignAiDraft, CommercialRadar, DigitalTwinSnaps
 
 const money=(value:number,currency='GNF')=>new Intl.NumberFormat('fr-FR',{style:'currency',currency,maximumFractionDigits:currency==='GNF'?0:2}).format(Number(value||0))
 
-function Loading({label}:{label:string}){return <div className="innovation-loading"><Sparkles/><strong>{label}</strong><span>L’analyse utilise uniquement les données disponibles dans SmartSell.</span></div>}
+function Loading({label}:{label:string}){return <div className="innovation-loading"><Sparkles/><strong>{label}</strong><span>L’analyse utilise uniquement les données disponibles dans Smartsell Management.</span></div>}
 function ErrorBox({message}:{message:string}){return message?<div className="error-banner">{message}</div>:null}
 
 export function DigitalTwinPage(){

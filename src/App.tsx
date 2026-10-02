@@ -12,6 +12,8 @@ import { isDemoMode } from './services/supabase'
 import ProductionApp from './ProductionAppV2'
 import LandingPage from './LandingPage'
 import ReferralLandingPage from './ReferralLandingPage'
+import MarketingPage from './MarketingPage'
+import { marketingPath, marketingRouteFromPath, marketingRoutes, type MarketingRoute } from './lib/marketingRoutes'
 import SignupPage from './SignupPage'
 import LegalPage from './LegalPage'
 import { applyBrandTheme, readBrandTheme } from './lib/brandTheme'
@@ -212,17 +214,18 @@ function DemoApp(){
 
 export default function App(){
   useEffect(() => { applyBrandTheme(readBrandTheme()) }, [])
-  type Route = 'landing'|'app'|'signup'|'referral'|'privacy'|'terms'
-  const getRoute=():Route=>window.location.hash==='#app'?'app':window.location.hash.startsWith('#signup')?'signup':window.location.hash==='#parrainage'?'referral':window.location.hash==='#privacy'?'privacy':window.location.hash==='#terms'?'terms':'landing'
+  type Route = 'landing'|'app'|'signup'|'referral'|'privacy'|'terms'|MarketingRoute
+  const getRoute=():Route=>{const hash=window.location.hash;const page=hash.slice(2) as MarketingRoute;const pathRoute=marketingRouteFromPath(window.location.pathname);return hash==='#app'?'app':hash.startsWith('#signup')?'signup':hash==='#privacy'?'privacy':hash==='#terms'?'terms':pathRoute==='parrainage'||hash==='#parrainage'?'referral':pathRoute||hash.startsWith('#/')&&marketingRoutes.includes(page)&&page||'landing'}
   const [route,setRoute]=useState<Route>(getRoute)
   useEffect(()=>{
     const sync=()=>{setRoute(getRoute());window.scrollTo({top:0})}
     window.addEventListener('hashchange',sync)
     return()=>window.removeEventListener('hashchange',sync)
   },[])
-  const navigate=(next:Route)=>{window.location.hash=next==='landing'?'':next;setRoute(next);window.scrollTo({top:0})}
+  const navigate=(next:Route)=>{const destination=next==='landing'?import.meta.env.BASE_URL:next==='referral'?marketingPath('parrainage'):marketingRoutes.includes(next as MarketingRoute)?marketingPath(next as MarketingRoute):`${import.meta.env.BASE_URL}#${next}`;if(location.pathname+location.hash!==destination){location.assign(destination);return}setRoute(next);window.scrollTo({top:0})}
   if(route==='privacy'||route==='terms')return <LegalPage kind={route} onBack={()=>navigate('landing')}/>
   if(route==='referral')return <ReferralLandingPage onBack={()=>navigate('landing')} onSignUp={()=>navigate('signup')} onLogin={()=>navigate('app')}/>
+  if(marketingRoutes.includes(route as MarketingRoute))return <MarketingPage route={route as MarketingRoute} onHome={()=>navigate('landing')} onSignUp={()=>navigate('signup')} onLogin={()=>navigate('app')}/>
   if(route==='signup')return <SignupPage onBack={()=>navigate('landing')} onAccess={()=>navigate('app')}/>
   if(route==='app')return isDemoMode?<DemoApp/>:<ProductionApp/>
   return <LandingPage onOpenApp={()=>navigate('app')} onSignUp={()=>navigate('signup')}/>

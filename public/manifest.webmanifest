@@ -1,7 +1,7 @@
 {
-  "name": "SmartSell Apps V3",
-  "short_name": "SmartSell",
-  "description": "Plateforme de gestion interne SmartSell",
+  "name": "Smartsell Management",
+  "short_name": "Smartsell",
+  "description": "Plateforme de gestion Smartsell Management",
   "start_url": "/smartsell-management/",
   "scope": "/smartsell-management/",
   "display": "standalone",

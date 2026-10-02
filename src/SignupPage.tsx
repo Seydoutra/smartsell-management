@@ -46,7 +46,7 @@ export default function SignupPage({ onBack, onAccess }: Props) {
     const confirmation = String(form.get('confirmation') || '')
     if (password !== confirmation) return setError('Les deux mots de passe ne correspondent pas.')
     if (password.length < 10 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) return setError('Choisissez au moins 10 caractères avec une majuscule, une minuscule et un chiffre.')
-    if (isDemoMode) return setError('L’inscription sécurisée est disponible sur la version publiée de SmartSell.')
+    if (isDemoMode) return setError('L’inscription sécurisée est disponible sur la version publiée de Smartsell Management.')
     setBusy(true)
     try {
       if (smsMode) {
@@ -100,14 +100,14 @@ export default function SignupPage({ onBack, onAccess }: Props) {
   return <main className="signup-page">
     <section className="signup-story">
       <button className="signup-back" onClick={onBack}><ArrowLeft/> Retour au site</button>
-      <img src={companyProfile.logo_light} alt="SmartSell"/>
+      <img src={companyProfile.logo_light} alt="Smartsell Management"/>
       <div className="signup-story-copy"><span><Sparkles/> DÉMO PERSONNALISÉE</span><h1>72 heures pour reprendre le contrôle.</h1><p>Créez votre accès, explorez la plateforme et découvrez comment chaque métier avance dans le même espace.</p><div className="signup-benefits"><span><Check/> Les modules essentiels disponibles</span><span><Check/> Un espace sécurisé à votre nom</span><span><Check/> Aucun paiement avant votre décision</span></div></div>
       <small><ShieldCheck/> L’accès est suspendu automatiquement après 72 heures sans activation d’une offre.</small>
     </section>
     <section className="signup-panel">
       <form className="signup-card" onSubmit={submit}>
         <span className="signup-eyebrow"><i/> CRÉER MON ESPACE</span>
-        <h2>Bienvenue chez SmartSell.</h2>
+        <h2>Bienvenue chez Smartsell Management.</h2>
         <p>Quelques informations suffisent pour commencer.</p>
         {referralCode&&<p className="signup-referral-note">Votre parrainage est associé à ce compte. La réduction sera appliquée sur votre premier paiement mensuel confirmé.</p>}
         <button type="button" className="google-button" onClick={async () => { setError(''); if (isDemoMode) return setError('La connexion Google sera disponible sur la version publiée.'); setBusy(true); try { await signInWithGoogle() } catch (reason) { setError(reason instanceof Error ? reason.message : 'Connexion Google impossible.') } finally { setBusy(false) } }}><b>G</b> Continuer avec Google</button>
@@ -119,7 +119,7 @@ export default function SignupPage({ onBack, onAccess }: Props) {
         <label>Mot de passe<div className="password-field"><input name="password" type={showPassword ? 'text' : 'password'} minLength={10} autoComplete="new-password" required placeholder="10 caractères minimum"/><button type="button" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}>{showPassword ? <EyeOff/> : <Eye/>}</button></div><small>Majuscule, minuscule et chiffre requis.</small></label>
         <label>Confirmer le mot de passe<input name="confirmation" type={showPassword ? 'text' : 'password'} minLength={10} autoComplete="new-password" required/></label>
         {error && <div className="signup-error"><LockKeyhole/>{error}</div>}
-        <label className="signup-consent"><input type="checkbox" required/><span>J’accepte que SmartSell crée mon espace d’essai et me contacte au sujet de cette demande.</span></label>
+        <label className="signup-consent"><input type="checkbox" required/><span>J’accepte que Smartsell Management crée mon espace d’essai et me contacte au sujet de cette demande.</span></label>
         <button className="signup-submit" disabled={busy}>{busy ? (smsMode ? 'Envoi du code…' : 'Création en cours…') : (smsMode ? 'Recevoir mon code SMS' : 'Créer ma démo de 72 h')} <ArrowRight/></button>
         {smsMode ? <p className="signup-sms-note">Un code de confirmation sera envoyé par SMS. Votre e-mail servira ensuite d’identifiant de connexion.</p> : <button type="button" className="text-button" onClick={() => { setSmsMode(true); setError('') }}>Utiliser la confirmation par SMS</button>}
         <p className="signup-login">Vous avez déjà un compte ? <button type="button" onClick={onAccess}>Se connecter</button></p>

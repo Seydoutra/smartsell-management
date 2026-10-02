@@ -69,7 +69,7 @@ export default function BetaSandboxApp({ profile, onLogout }: { profile: Profile
   return <div className="beta-sandbox app-shell">
     <AnimatePresence>{mobileOpen && <motion.button className="scrim" aria-label="Fermer" onClick={() => setMobileOpen(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />}</AnimatePresence>
     <aside className={mobileOpen ? "mobile-open" : ""}>
-      <div className="side-head"><img src={companyProfile.logo_light} alt="SmartSell" /><button className="mobile-close" onClick={() => setMobileOpen(false)}><X /></button></div>
+      <div className="side-head"><img src={companyProfile.logo_light} alt="Smartsell Management" /><button className="mobile-close" onClick={() => setMobileOpen(false)}><X /></button></div>
       <div className="beta-side-label"><ShieldCheck size={16} /><span>MODE BÊTA ISOLÉ</span></div>
       <nav><small>TOUS LES MODULES</small>{nav.map((item) => <button key={item.label} className={page === item.label ? "active" : ""} onClick={() => { setPage(item.label); setQuery(""); setMobileOpen(false); }}><item.icon /><span>{item.label}</span></button>)}</nav>
       <div className="side-bottom"><div className="user-avatar">BT</div><div><strong>{profile.full_name}</strong><small>Bêta testeur · Tous droits</small></div><button onClick={onLogout}><LogOut size={18} /></button></div>
