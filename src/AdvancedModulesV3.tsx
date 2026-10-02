@@ -113,11 +113,11 @@ export function BillingCreateForm({kind,clients,projects,services,clientFilter,o
     const values=new FormData(form)
     const prepared=items.map(item=>({...item,description:item.description.trim(),tax_rate:taxEnabled?item.tax_rate:0}))
     const discount=Number(values.get('discount')||0)
-    const validation=validateBillingItems(prepared,discount)
-    if(validation){setError(validation);return}
     if(!clientId){setError('Sélectionnez un client.');return}
     const date=String(values.get('date')||'')
     if(!date){setError('Renseignez la date du document.');return}
+    const validation=validateBillingItems(prepared,discount)
+    if(validation){setError(validation);return}
     setError('')
     setBusy(true)
     try{
@@ -127,7 +127,7 @@ export function BillingCreateForm({kind,clients,projects,services,clientFilter,o
     }catch(cause){setError(cause instanceof Error?cause.message:'La création a échoué. Réessayez après avoir vérifié votre connexion.')}
     finally{setBusy(false)}
   }
-  return <form className="entity-form billing-create-form" onSubmit={submit} aria-busy={busy}>
+  return <form className="entity-form billing-create-form" onSubmit={submit} noValidate aria-busy={busy}>
     <div className="form-grid">
       <Field label="Client"><select name="client_id" required value={clientId} onChange={event=>setClientId(event.target.value)}><option value="">Choisir un client…</option>{clients.map(client=><option value={client.id} key={client.id}>{client.name}</option>)}</select></Field>
       <Field label="Projet"><select name="project_id" key={clientId}><option value="">Sans projet</option>{projects.filter(project=>project.client_id===clientId).map(project=><option value={project.id} key={project.id}>{project.name}</option>)}</select></Field>

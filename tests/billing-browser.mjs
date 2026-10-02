@@ -25,6 +25,7 @@ try {
     await page.evaluate(theme => { document.documentElement.dataset.theme = theme }, theme)
     await page.getByRole('button', { name: 'Générer' }).click()
     if (await page.evaluate(() => window.__billingCalls) !== 0) throw Error('A form was sent without required data')
+    await page.getByRole('alert').getByText('Sélectionnez un client.').waitFor()
     await page.getByLabel('Client').selectOption('client-1')
     await page.getByLabel('Échéance').fill('2026-10-30')
     await page.getByLabel('Prestation').fill('Conseil digital')
