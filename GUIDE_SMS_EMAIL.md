@@ -12,12 +12,17 @@ Les messages réels passent uniquement par les fonctions serveur. Les clés ne s
 6. Gardez `COMMUNICATION_TEST_MODE=true` pendant les essais et renseignez `COMMUNICATION_TEST_PHONE`.
 7. Dans Smartsell, ouvrez **Communication** puis faites un premier essai vers le numéro de test.
 
-## Email
+## E-mails avec Resend
 
-1. Récupérez les paramètres SMTP ou la clé API de votre fournisseur email.
-2. Ajoutez dans les secrets Supabase `EMAIL_PROVIDER`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` et `EMAIL_FROM`.
-3. Gardez le mode test actif et renseignez `COMMUNICATION_TEST_EMAIL`.
-4. Testez un email depuis le module Communication.
+Deux configurations distinctes sont nécessaires : les Edge Functions envoient les messages de bienvenue, les messages de Communication et les campagnes ; **Supabase Auth** envoie les confirmations d'inscription et les liens de récupération.
+
+1. Dans Resend, ajoutez un domaine que vous contrôlez et vérifiez les enregistrements DNS demandés (SPF/DKIM). Une adresse Gmail personnelle ne peut pas servir d'expéditeur pour un domaine vérifié qui ne vous appartient pas.
+2. Créez une clé API Resend avec le droit d'envoi. Ne la mettez jamais dans une variable `VITE_`, dans GitHub Pages, ni dans le dépôt.
+3. Dans **Supabase → Edge Functions → Secrets**, définissez `RESEND_API_KEY` avec cette clé et `EMAIL_FROM` avec une adresse du domaine vérifié, par exemple `Smartsell Management <no-reply@votre-domaine.fr>`.
+4. Pour les confirmations et les mots de passe oubliés, activez l'intégration **Resend** dans Supabase, ou configurez **Authentication → SMTP** avec l'hôte `smtp.resend.com`, le port `465`, l'utilisateur `resend` et la clé API comme mot de passe. Utilisez un expéditeur du domaine vérifié. Cette étape est indépendante des secrets Edge Functions.
+5. Gardez `COMMUNICATION_TEST_MODE=true` pendant les essais et définissez `COMMUNICATION_TEST_EMAIL` avec une boîte que vous contrôlez. Testez d'abord l'inscription, puis « mot de passe oublié », un e-mail de bienvenue et un e-mail dans Communication. Vérifiez la livraison dans le journal Resend.
+
+Ne désactivez le mode test qu'après avoir confirmé la livraison et le comportement des quotas. Pour les campagnes, recueillez le consentement des destinataires et offrez une désinscription.
 
 Avant une campagne réelle, définissez `COMMUNICATION_TEST_MODE=false` dans Supabase. L’application demande toujours une confirmation indiquant le canal et le nombre de destinataires.
 

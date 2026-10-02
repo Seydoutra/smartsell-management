@@ -1,10 +1,11 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
-import { BarChart3, CalendarDays, CheckCircle2, FileSpreadsheet, Mail, Phone, Plus, Save, Send, Upload, Users, X } from "lucide-react";
+import { BarChart3, CalendarDays, CheckCircle2, FileSpreadsheet, Mail, MessageCircle, Phone, Plus, Save, Send, Upload, Users, X } from "lucide-react";
+import TeamChat from './TeamChat';
 import { contactsFromFile, ImportedContact } from "./lib/contactImport";
 import { createCallList, createCampaign, createCommunicationTemplate, createContactGroup, finishCall, listCallListContacts, listCallLists, listCallLogs, listCampaigns, listClients, listCommunicationTemplates, listContactGroups, listProspects, sendCommunication, startCall, updateCampaignApproval } from "./services/repository";
 import type { CallList, CallListContact, CallLog, Campaign, Client, CommunicationTemplate, ContactGroup, Prospect } from "./types/models";
 
-type Tool="MESSAGE"|"CAMPAIGNS"|"CALLS";
+type Tool="MESSAGE"|"CAMPAIGNS"|"CALLS"|"CHAT";
 const starterTemplates:CommunicationTemplate[] = [
   ['SMS','Bienvenue nouveau client','', 'Bonjour {{nom}}, bienvenue chez Smartsell. Votre espace Smartsell est prêt : {{lien}}'],
   ['SMS','Confirmation de rendez-vous','', 'Bonjour {{nom}}, votre rendez-vous est confirmé le {{date}} à {{heure}}. Répondez à ce SMS si besoin.'],
@@ -50,8 +51,9 @@ export default function CommunicationHub({onBack,onOpenIntegrations,canApprove=f
   const chooseGroup=(id:string)=>{const group=groups.find(item=>item.id===id);setCampaignRecipients(Array.from(new Set((group?.contact_group_members||[]).map(member=>channel==="SMS"?member.phone:member.email).filter(Boolean) as string[])).join("\n"))};
   return <section className="communication-hub">
     <div className="module-head"><div><span className="eyebrow"><i/> COMMUNICATION & PROSPECTION</span><h1>Campagnes et centre d’appels</h1><p>Diffusez vos messages par personne ou groupe, puis mesurez chaque appel commercial.</p></div><div className="head-actions">{onOpenIntegrations&&<button className="ghost-action" onClick={onOpenIntegrations}><BarChart3/> Réseaux sociaux & connecteurs</button>}<button className="ghost-action" onClick={onBack}>← Retour</button></div></div>
-    <div className="communication-mode-tabs"><button className={tool==="MESSAGE"?"active":""} onClick={()=>setTool("MESSAGE")}><Mail/>Message rapide</button><button className={tool==="CAMPAIGNS"?"active":""} onClick={()=>setTool("CAMPAIGNS")}><Send/>Campagnes</button><button className={tool==="CALLS"?"active":""} onClick={()=>setTool("CALLS")}><Phone/>Call center</button></div>
+    <div className="communication-mode-tabs"><button className={tool==="MESSAGE"?"active":""} onClick={()=>setTool("MESSAGE")}><Mail/>Message rapide</button><button className={tool==="CAMPAIGNS"?"active":""} onClick={()=>setTool("CAMPAIGNS")}><Send/>Campagnes</button><button className={tool==="CALLS"?"active":""} onClick={()=>setTool("CALLS")}><Phone/>Call center</button><button className={tool==="CHAT"?"active":""} onClick={()=>setTool("CHAT")}><MessageCircle/>Chat équipe</button></div>
     {notice&&<button className="beta-notice" onClick={()=>setNotice("")}>{notice}<X size={15}/></button>}
+    {tool==="CHAT"&&<TeamChat/>}
     {tool==="MESSAGE"&&<form className="panel communication-compose hub-compose" onSubmit={async event=>{event.preventDefault();setBusy(true);try{const response=await sendCommunication({channel,recipients:to.split(/[;,\n]/).map(v=>v.trim()).filter(Boolean),subject,message});setNotice(`Envoi accepté pour ${response.recipientCount} destinataire(s).`)}catch(error){setNotice(error instanceof Error?error.message:"Envoi impossible")}finally{setBusy(false)}}}>
       <div className="channel-tabs"><button type="button" className={channel==="SMS"?"active":""} onClick={()=>setChannel("SMS")}>SMS</button><button type="button" className={channel==="EMAIL"?"active":""} onClick={()=>setChannel("EMAIL")}>E-mail</button></div>
       <div className="template-picker"><div><strong>Modèles SMS et e-mail</strong><small>{availableTemplates.filter(item=>item.channel===channel).length} modèles disponibles · vous pouvez aussi créer les vôtres.</small></div><select value="" onChange={e=>{const template=availableTemplates.find(item=>item.id===e.target.value);if(template){setChannel(template.channel);setSubject(template.subject||'');setMessage(template.body)}}}><option value="">Choisir un modèle</option>{availableTemplates.filter(item=>item.channel===channel).map(template=><option value={template.id} key={template.id}>{template.name}</option>)}</select><button type="button" className="ghost-action" onClick={()=>setTemplateOpen(true)}><Save/>Créer un modèle</button></div>

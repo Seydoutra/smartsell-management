@@ -49,6 +49,7 @@ import { commercialDrafts, commercialKindNames, commercialPdfFile } from './lib/
 import { useOnlineStatus } from "./lib/network";
 import BetaSandboxApp from "./BetaSandboxApp";
 import CommunicationHub from "./CommunicationHub";
+import { ClientConversationDesk, ClientPortalExperience } from "./ClientPortalExperience";
 import { contactsFromCsv, contactsFromFile, googleSheetCsvUrl, ImportedContact } from "./lib/contactImport";
 import { can, Permission, Role } from "./lib/permissions";
 import { isActionAllowed, isModuleAllowed } from "./lib/access";
@@ -64,7 +65,6 @@ import {
   AiAssistantPage,
   BillingV3,
   ClientPortalAdmin,
-  ClientPortalView,
   EditorialV3,
   HRPage,
   SignupRequestsPage,
@@ -3098,7 +3098,7 @@ function Shell({
   const roles = (profile.roles?.length ? profile.roles : [profile.role]) as Role[],
     admin = roles.some((item) => ["SUPER_ADMIN", "ADMIN"].includes(item)),
     platformOwner = profile.is_platform_owner===true;
-  if (roles.includes("CLIENT")) return <ClientPortalView onLogout={onLogout} />;
+  if (roles.includes("CLIENT")) return <ClientPortalExperience onLogout={onLogout} />;
   if (!accessLoaded&&!roles.includes("SUPER_ADMIN")) return <div className="app-loading"><img src={companyProfile.logo_dark}/><span>Vérification de vos autorisations…</span></div>;
   const actionAllowed = (key: string) => isActionAllowed(roles,access,accessLoaded,key);
   const navNotificationCount = (name: Page) => {
@@ -3238,7 +3238,7 @@ function Shell({
               ) : currentPage === "Autopilot IA" ? (
                 <AutopilotPage onNavigate={target=>navigate(target as Page)} />
               ) : currentPage === "Portail client" ? (
-                <ClientPortalAdmin />
+                <><ClientPortalAdmin /><ClientConversationDesk /></>
               ) : (
                 <AiAssistantPage />
               )}

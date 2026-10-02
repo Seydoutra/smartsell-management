@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, ArrowRight, Check, ChevronDown, ChevronRight, ExternalLink, Globe2, Mail, Menu, MessageCircle, Moon, Phone, ShieldCheck, Sparkles, Sun, Upload, X } from 'lucide-react'
 import { companyProfile } from './lib/companyProfile'
-import { features, featuresEn, plans, plansEn } from './LandingPage'
+import { features, featuresEn, plans, plansEn, ProductPreview } from './LandingPage'
 import { marketingPath, type MarketingRoute } from './lib/marketingRoutes'
 import SiteFooter from './SiteFooter'
 import './marketing-pages.css'
@@ -90,6 +90,20 @@ function Contact({language,onSignUp,reduced}:{language:'fr'|'en';onSignUp:()=>vo
 
 function Cta({language,onSignUp}:{language:'fr'|'en';onSignUp:()=>void}){return <section className="mp-final"><div className="mp-final-ring" aria-hidden="true"/><span><ShieldCheck/> {language==='fr'?'VOTRE PROCHAINE ÉTAPE':'YOUR NEXT STEP'}</span><h2>{language==='fr'?'Votre entreprise, en mouvement.':'Your company, in motion.'}</h2><p>{language==='fr'?'Découvrez votre espace Smartsell Management personnalisé pendant 72 heures.':'Discover your personalized Smartsell Management workspace for 72 hours.'}</p><button onClick={onSignUp}>{language==='fr'?'Commencer l’essai gratuit':'Start the free trial'} <ArrowRight/></button></section>}
 
+const showcaseWords:Record<MarketingRoute,{fr:string[];en:string[]}>= {
+  solutions:{fr:['vos clients','vos projets','vos finances'],en:['your clients','your projects','your finances']},
+  fonctionnement:{fr:['vos équipes','vos processus','vos décisions'],en:['your teams','your workflows','your decisions']},
+  personnalisation:{fr:['votre marque','vos couleurs','votre univers'],en:['your brand','your colors','your world']},
+  tarifs:{fr:['votre croissance','votre essai','votre activité'],en:['your growth','your trial','your business']},
+  contact:{fr:['vos questions','vos idées','vos ambitions'],en:['your questions','your ideas','your goals']},
+}
+function ProductShowcase({route,language,reduced}:{route:MarketingRoute;language:'fr'|'en';reduced:boolean}){
+  const [index,setIndex]=useState(0)
+  const words=showcaseWords[route][language]
+  useEffect(()=>{if(reduced)return;const timer=window.setInterval(()=>setIndex(value=>(value+1)%words.length),3000);return()=>window.clearInterval(timer)},[route,language,reduced,words.length])
+  return <section className="mp-product-showcase"><motion.div className="mp-showcase-copy" initial={reduced?false:{opacity:0,y:35}} whileInView={{opacity:1,y:0}} viewport={{once:true,amount:.35}} transition={{duration:.65}}><span><Sparkles/> {language==='fr'?'APERÇU DE LA PLATEFORME':'PLATFORM PREVIEW'}</span><h2>{language==='fr'?'Une seule plateforme pour piloter':'One platform to manage'} <AnimatePresence mode="wait"><motion.em key={`${route}-${language}-${index}`} initial={reduced?false:{opacity:0,y:18,filter:'blur(6px)'}} animate={{opacity:1,y:0,filter:'blur(0px)'}} exit={reduced?undefined:{opacity:0,y:-16,filter:'blur(6px)'}} transition={{duration:.36}}>{words[index]}.</motion.em></AnimatePresence></h2><p>{language==='fr'?'Explorez une interface où vos équipes gardent le même cap, sur ordinateur comme sur mobile.':'Explore an interface that keeps your team aligned, on desktop and mobile.'}</p></motion.div><div className="mp-showcase-visual"><ProductPreview language={language}/></div></section>
+}
+
 export default function MarketingPage({route,onHome,onSignUp,onLogin}:Props){
   const [language,setLanguage]=useState<'fr'|'en'>(()=>localStorage.getItem('smartsell-language')==='en'?'en':'fr')
   const [theme,setTheme]=useState<'dark'|'light'>(()=>localStorage.getItem('smartsell-landing-theme')==='light'?'light':'dark')
@@ -100,5 +114,5 @@ export default function MarketingPage({route,onHome,onSignUp,onLogin}:Props){
   useEffect(()=>{setMenu(false);document.title=`${labels[language][routes.indexOf(route)]} · Smartsell Management`},[route,language])
   useEffect(()=>{if(!menu)return;const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape')setMenu(false)};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)},[menu])
   useEffect(()=>()=>{document.title='Smartsell Management'},[])
-  return <div className={`mp-page ${theme==='light'?'light':''}`}><PageHeader route={route} language={language} toggleLanguage={()=>setLanguage(language==='fr'?'en':'fr')} theme={theme} toggleTheme={()=>setTheme(theme==='dark'?'light':'dark')} menu={menu} setMenu={setMenu} onHome={onHome} onSignUp={onSignUp} onLogin={onLogin}/><main key={route}>{route==='solutions'?<Solutions language={language} onSignUp={onSignUp} reduced={reduced}/>:route==='fonctionnement'?<Workflow language={language} onSignUp={onSignUp} reduced={reduced}/>:route==='personnalisation'?<Customization language={language} onSignUp={onSignUp} reduced={reduced}/>:route==='tarifs'?<Pricing language={language} onSignUp={onSignUp} reduced={reduced}/>:<Contact language={language} onSignUp={onSignUp} reduced={reduced}/>}</main><SiteFooter language={language} onHome={onHome} onSignUp={onSignUp} onLogin={onLogin}/></div>
+  return <div className={`mp-page ${theme==='light'?'light':''}`}><PageHeader route={route} language={language} toggleLanguage={()=>setLanguage(language==='fr'?'en':'fr')} theme={theme} toggleTheme={()=>setTheme(theme==='dark'?'light':'dark')} menu={menu} setMenu={setMenu} onHome={onHome} onSignUp={onSignUp} onLogin={onLogin}/><main key={route}>{route==='solutions'?<Solutions language={language} onSignUp={onSignUp} reduced={reduced}/>:route==='fonctionnement'?<Workflow language={language} onSignUp={onSignUp} reduced={reduced}/>:route==='personnalisation'?<Customization language={language} onSignUp={onSignUp} reduced={reduced}/>:route==='tarifs'?<Pricing language={language} onSignUp={onSignUp} reduced={reduced}/>:<Contact language={language} onSignUp={onSignUp} reduced={reduced}/>}<ProductShowcase route={route} language={language} reduced={reduced}/></main><SiteFooter language={language} onHome={onHome} onSignUp={onSignUp} onLogin={onLogin}/></div>
 }

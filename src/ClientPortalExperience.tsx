@@ -1,0 +1,82 @@
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { CalendarDays, Check, ChevronLeft, ChevronRight, FileText, LogOut, MessageCircle, Send, Sparkles } from 'lucide-react'
+import { getMyClientPortal, listClientPortalMessages, listPortalAccess, respondCreativeApproval, sendClientPortalMessage } from './services/repository'
+import { supabase } from './services/supabase'
+import type { ClientPortalMessage, ClientPortalWorkspace, CreativeApproval, EditorialItem, Project, PortalAccess } from './types/models'
+import './client-portal.css'
+
+type PortalTab = 'aperçu' | 'calendrier' | 'projets' | 'messages' | 'créations' | 'factures'
+const dateLabel=(value?:string|null)=>value?new Date(value).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}):'Date à définir'
+const timeLabel=(value:string)=>new Date(value).toLocaleString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})
+const monthKey=(value:string)=>value.slice(0,7)
+const dayKey=(value:string)=>value.slice(0,10)
+const status=(value:string)=>value.replaceAll('_',' ').toLowerCase()
+
+type CalendarEvent={id:string;date:string;kind:'Publication'|'Début de projet'|'Échéance de projet';title:string;subtitle:string}
+export function portalCalendarEvents(projects:Project[],editorial:EditorialItem[]):CalendarEvent[]{
+  return [
+    ...editorial.filter(item=>item.publish_at).map(item=>({id:`e-${item.id}`,date:item.publish_at!,kind:'Publication' as const,title:item.title,subtitle:(item.platforms||[item.platform]).filter(Boolean).join(' · ')||'Éditorial'})),
+    ...projects.filter(item=>item.starts_on).map(item=>({id:`s-${item.id}`,date:item.starts_on!,kind:'Début de projet' as const,title:item.name,subtitle:status(item.status)})),
+    ...projects.filter(item=>item.ends_on).map(item=>({id:`d-${item.id}`,date:item.ends_on!,kind:'Échéance de projet' as const,title:item.name,subtitle:status(item.status)})),
+  ].sort((a,b)=>a.date.localeCompare(b.date))
+}
+
+function Conversation({clientId,canSend,title}:{clientId:string;canSend:boolean;title:string}){
+  const [messages,setMessages]=useState<ClientPortalMessage[]>([])
+  const [draft,setDraft]=useState('')
+  const [myId,setMyId]=useState('')
+  const [error,setError]=useState('')
+  const [busy,setBusy]=useState(false)
+  const endRef=useRef<HTMLDivElement>(null)
+  useEffect(()=>{let active=true;setMessages([]);setError('');void supabase?.auth.getUser().then(({data})=>{if(active)setMyId(data.user?.id||'')});const load=()=>listClientPortalMessages(clientId).then(rows=>{if(active)setMessages(rows)}).catch(reason=>{if(active)setError(reason instanceof Error?reason.message:'Messagerie indisponible')});void load();const timer=window.setInterval(()=>void load(),15000);return()=>{active=false;window.clearInterval(timer)}},[clientId])
+  useEffect(()=>{endRef.current?.scrollIntoView({behavior:'smooth',block:'end'})},[messages.length])
+  const send=async(event:FormEvent)=>{event.preventDefault();if(!draft.trim()||busy)return;setBusy(true);setError('');try{const row=await sendClientPortalMessage(clientId,draft);setMessages(current=>[...current,row]);setDraft('')}catch(reason){setError(reason instanceof Error?reason.message:'Envoi impossible')}finally{setBusy(false)}}
+  return <section className="portal-conversation" aria-label={title}><div className="portal-conversation-head"><MessageCircle/><div><h2>{title}</h2><p>Conversation privée liée à ce client. Actualisation automatique toutes les 15 secondes.</p></div></div>{error&&<p role="alert" className="portal-error">{error}</p>}<div className="portal-message-list" aria-live="polite">{messages.length?messages.map(item=><article key={item.id} className={item.sender_id===myId?'mine':''}><small>{item.profiles?.full_name||'Équipe'} · {timeLabel(item.created_at)}</small><p>{item.body}</p></article>):<div className="portal-empty"><MessageCircle/><p>Aucun message pour le moment. Commencez la conversation ici.</p></div>}<div ref={endRef}/></div>{canSend?<form className="portal-compose" onSubmit={send}><label htmlFor={`message-${clientId}`}>Votre message</label><div><textarea id={`message-${clientId}`} value={draft} onChange={event=>setDraft(event.target.value)} maxLength={4000} rows={2} placeholder="Écrivez à propos du projet, d’une validation ou d’une question…"/><button type="submit" disabled={busy||!draft.trim()} aria-label="Envoyer le message"><Send/></button></div><small>{draft.length}/4 000 caractères</small></form>:<p className="portal-readonly">Cet accès est en lecture seule. Contactez votre interlocuteur pour écrire ici.</p>}</section>
+}
+
+function Calendar({data}:{data:ClientPortalWorkspace}){
+  const [month,setMonth]=useState(()=>new Date().toISOString().slice(0,7))
+  const [selected,setSelected]=useState<string|null>(null)
+  const events=useMemo(()=>portalCalendarEvents(data.projects,data.editorial),[data.projects,data.editorial])
+  const first=new Date(`${month}-01T12:00:00`)
+  const count=new Date(first.getFullYear(),first.getMonth()+1,0).getDate()
+  const offset=(first.getDay()+6)%7
+  const shift=(step:number)=>setMonth(new Date(first.getFullYear(),first.getMonth()+step,1).toISOString().slice(0,7))
+  const visible=events.filter(item=>monthKey(item.date)===month)
+  const shown=selected?visible.filter(item=>dayKey(item.date)===selected):visible
+  return <section className="portal-card portal-calendar"><div className="portal-section-head"><div><span>VOS RENDEZ-VOUS DE PRODUCTION</span><h2>Calendrier partagé</h2><p>Publications, démarrages et échéances des projets qui vous concernent.</p></div><div className="portal-month-actions"><button onClick={()=>shift(-1)} aria-label="Mois précédent"><ChevronLeft/></button><strong>{first.toLocaleDateString('fr-FR',{month:'long',year:'numeric'})}</strong><button onClick={()=>shift(1)} aria-label="Mois suivant"><ChevronRight/></button></div></div><div className="portal-weekdays">{['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'].map(day=><span key={day}>{day}</span>)}</div><div className="portal-calendar-grid">{Array.from({length:offset},(_,index)=><span key={`blank-${index}`} aria-hidden="true"/>)}{Array.from({length:count},(_,index)=>{const day=`${month}-${String(index+1).padStart(2,'0')}`,daily=visible.filter(item=>dayKey(item.date)===day);return <button key={day} onClick={()=>setSelected(selected===day?null:day)} className={`${selected===day?'selected':''} ${day===new Date().toISOString().slice(0,10)?'today':''}`} aria-pressed={selected===day}><b>{index+1}</b>{daily.slice(0,2).map(event=><small key={event.id} className={event.kind==='Publication'?'editorial':'project'}>{event.title}</small>)}{daily.length>2&&<em>+{daily.length-2}</em>}</button>})}</div><div className="portal-calendar-agenda"><h3>{selected?`Événements du ${dateLabel(selected)}`:'Événements du mois'}</h3>{shown.length?shown.map(item=><div key={item.id}><time>{dateLabel(item.date)}</time><span className={item.kind==='Publication'?'editorial':'project'}>{item.kind}</span><strong>{item.title}</strong><small>{item.subtitle}</small></div>):<p>Aucun événement prévu pour cette période.</p>}</div></section>
+}
+
+function Projects({data}:{data:ClientPortalWorkspace}){
+  const [selected,setSelected]=useState<string|null>(null)
+  return <section className="portal-card"><div className="portal-section-head"><div><span>VISIBILITÉ SUR VOTRE TRAVAIL</span><h2>Mes projets</h2><p>Avancement, échéances et publications liées à chaque projet.</p></div></div><div className="portal-project-grid">{data.projects.length?data.projects.map(project=>{const linked=data.editorial.filter(item=>item.project_id===project.id);const open=selected===project.id;return <article key={project.id} className={open?'open':''}><button onClick={()=>setSelected(open?null:project.id)} aria-expanded={open}><span className="portal-project-icon">{project.name.slice(0,2).toUpperCase()}</span><span><strong>{project.name}</strong><small>{status(project.status)} · {project.type||'Projet'}</small></span><ChevronRight/></button><div className="portal-progress"><i style={{width:`${Math.max(0,Math.min(100,project.progress||0))}%`}}/></div><p>{project.progress||0}% terminé · Échéance : {dateLabel(project.ends_on)}</p>{open&&<div className="portal-project-detail"><p>{project.description||'Aucune description détaillée pour le moment.'}</p><dl><div><dt>Début</dt><dd>{dateLabel(project.starts_on)}</dd></div><div><dt>Livraison prévue</dt><dd>{dateLabel(project.ends_on)}</dd></div><div><dt>Publications liées</dt><dd>{linked.length}</dd></div></dl>{linked.length>0&&<ul>{linked.map(item=><li key={item.id}>{item.title}<small>{dateLabel(item.publish_at)}</small></li>)}</ul>}</div>}</article>}):<div className="portal-empty"><FileText/><p>Aucun projet n’est encore lié à votre compte.</p></div>}</div></section>
+}
+
+function CreativeRoom({data,onRefresh}:{data:ClientPortalWorkspace;onRefresh:()=>Promise<void>}){
+  const [comments,setComments]=useState<Record<string,string>>({})
+  const [busy,setBusy]=useState('')
+  const [notice,setNotice]=useState('')
+  const decide=async(item:CreativeApproval,decision:'APPROUVE'|'MODIFICATIONS_DEMANDEES')=>{setBusy(item.id);setNotice('');try{await respondCreativeApproval(item.id,decision,comments[item.id]||'');setNotice(decision==='APPROUVE'?'Création approuvée. Merci !':'Votre demande de modification a été transmise.');await onRefresh()}catch(reason){setNotice(reason instanceof Error?reason.message:'Réponse impossible')}finally{setBusy('')}}
+  return <section className="portal-card"><div className="portal-section-head"><div><span>VALIDATIONS</span><h2>Créations à examiner</h2><p>Consultez les visuels et transmettez votre décision à l’équipe.</p></div></div>{notice&&<p role="status" className="portal-notice">{notice}</p>}<div className="portal-creative-grid">{data.approvals.length?data.approvals.map(item=><article key={item.id}><div className="portal-asset">{item.asset_type==='VIDEO'?<video src={item.asset_url} controls/>:item.asset_type==='DOCUMENT'?<a href={item.asset_url} target="_blank" rel="noreferrer">Ouvrir le document</a>:<img src={item.asset_url} alt={item.title}/>}</div><div><h3>{item.title}</h3><p>{item.description||'Création transmise pour validation.'}</p><span>{status(item.status)} · version {item.version}</span>{item.status==='A_VALIDER'&&data.access.can_comment&&<><textarea value={comments[item.id]||''} onChange={event=>setComments(value=>({...value,[item.id]:event.target.value}))} placeholder="Votre retour (facultatif pour approuver)"/><div className="portal-decision"><button disabled={busy===item.id} onClick={()=>void decide(item,'APPROUVE')}><Check/> Approuver</button><button disabled={busy===item.id} onClick={()=>void decide(item,'MODIFICATIONS_DEMANDEES')}>Demander une modification</button></div></>}</div></article>):<div className="portal-empty"><Sparkles/><p>Aucune création en attente pour le moment.</p></div>}</div></section>
+}
+
+export function ClientPortalExperience({onLogout}:{onLogout:()=>void}){
+  const [data,setData]=useState<ClientPortalWorkspace|null>(null)
+  const [tab,setTab]=useState<PortalTab>('aperçu')
+  const [error,setError]=useState('')
+  const refresh=async()=>{try{setData(await getMyClientPortal());setError('')}catch(reason){setError(reason instanceof Error?reason.message:'Portail indisponible')}}
+  useEffect(()=>{void refresh()},[])
+  if(error&&!data)return <main className="portal-experience"><p role="alert" className="portal-error">{error}</p><button onClick={onLogout}>Se déconnecter</button></main>
+  if(!data)return <main className="portal-experience portal-loading">Chargement de votre espace client…</main>
+  const tabs:PortalTab[]=data.access.can_view_finance?['aperçu','calendrier','projets','messages','créations','factures']:['aperçu','calendrier','projets','messages','créations']
+  const events=portalCalendarEvents(data.projects,data.editorial)
+  return <main className="portal-experience"><header className="portal-hero"><div><span>SMARTSELL MANAGEMENT · ESPACE CLIENT</span><h1>Bonjour, {data.client.name}.</h1><p>Vos projets, votre calendrier et vos échanges avec notre équipe au même endroit.</p></div><button onClick={onLogout}><LogOut/> Se déconnecter</button></header><nav className="portal-tabs" aria-label="Navigation du portail client">{tabs.map(name=><button key={name} onClick={()=>setTab(name)} aria-current={tab===name?'page':undefined}>{name==='calendrier'?<CalendarDays/>:name==='messages'?<MessageCircle/>:name==='projets'?<FileText/>:name==='créations'?<Sparkles/>:null}{name}</button>)}</nav>{error&&<p role="alert" className="portal-error">{error}</p>}{tab==='aperçu'&&<><section className="portal-summary"><article><span>Projets en cours</span><strong>{data.projects.filter(item=>!['TERMINE','ANNULE'].includes(item.status)).length}</strong><small>{data.projects.length} projet(s) au total</small></article><article><span>Prochains événements</span><strong>{events.filter(item=>item.date>=new Date().toISOString().slice(0,10)).length}</strong><small>calendrier partagé</small></article><article><span>Créations à valider</span><strong>{data.approvals.filter(item=>item.status==='A_VALIDER').length}</strong><small>votre retour est attendu</small></article></section><section className="portal-card portal-next"><div className="portal-section-head"><div><span>À VENIR</span><h2>Votre prochain rendez-vous</h2></div><button onClick={()=>setTab('calendrier')}>Voir le calendrier <ChevronRight/></button></div>{events.find(item=>item.date>=new Date().toISOString().slice(0,10))?<p>{dateLabel(events.find(item=>item.date>=new Date().toISOString().slice(0,10))?.date)} · {events.find(item=>item.date>=new Date().toISOString().slice(0,10))?.title}</p>:<p>Rien n’est encore planifié. Les nouvelles publications et échéances apparaîtront ici.</p>}</section><div className="portal-quick"><button onClick={()=>setTab('projets')}><FileText/> Suivre mes projets <ChevronRight/></button><button onClick={()=>setTab('messages')}><MessageCircle/> Écrire à l’équipe <ChevronRight/></button></div></>}{tab==='calendrier'&&<Calendar data={data}/>}{tab==='projets'&&<Projects data={data}/>}{tab==='messages'&&<Conversation clientId={data.client.id} canSend={data.access.can_comment} title="Échanger avec votre équipe"/>}{tab==='créations'&&<CreativeRoom data={data} onRefresh={refresh}/>}{tab==='factures'&&data.access.can_view_finance&&<section className="portal-card"><div className="portal-section-head"><div><span>FINANCES</span><h2>Vos factures</h2><p>Vos documents financiers liés à ce compte.</p></div></div><div className="portal-invoices">{data.invoices.length?data.invoices.map(item=><article key={item.id}><strong>{item.number}</strong><span>{dateLabel(item.issue_date)}</span><span>{status(item.status)}</span><b>{new Intl.NumberFormat('fr-FR').format(item.total)} {item.currency}</b></article>):<p>Aucune facture disponible.</p>}</div></section>}</main>
+}
+
+export function ClientConversationDesk(){
+  const [access,setAccess]=useState<PortalAccess[]>([])
+  const [selected,setSelected]=useState('')
+  const [error,setError]=useState('')
+  useEffect(()=>{void listPortalAccess().then(rows=>{setAccess(rows.filter(item=>item.active));setSelected(current=>current||rows.find(item=>item.active)?.client_id||'')}).catch(reason=>setError(reason instanceof Error?reason.message:'Accès clients indisponibles'))},[])
+  return <section className="portal-desk portal-card"><div className="portal-section-head"><div><span>RELATION CLIENT</span><h2>Messagerie du portail</h2><p>Une conversation distincte par client, visible uniquement par votre équipe autorisée et ce client.</p></div><label>Client<select value={selected} onChange={event=>setSelected(event.target.value)}><option value="">Choisir un client</option>{access.map(item=><option key={item.client_id} value={item.client_id}>{item.clients?.name||item.client_id}</option>)}</select></label></div>{error&&<p role="alert" className="portal-error">{error}</p>}{selected?<Conversation clientId={selected} canSend title={`Échange avec ${access.find(item=>item.client_id===selected)?.clients?.name||'le client'}`}/>:<div className="portal-empty"><MessageCircle/><p>Créez un accès client pour commencer à échanger.</p></div>}</section>
+}

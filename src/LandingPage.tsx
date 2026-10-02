@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { companyProfile } from './lib/companyProfile'
 import SiteFooter from './SiteFooter'
+import SocialProof from './SocialProof'
 import { marketingPath, type MarketingRoute } from './lib/marketingRoutes'
 import './landing.css'
 
@@ -125,7 +126,7 @@ function RotatingHeadline({ language }: { language: Language }) {
   </h1>
 }
 
-function ProductPreview({ language }: { language: Language }) {
+export function ProductPreview({ language }: { language: Language }) {
   const en = language === 'en'
   return <motion.div className="landing-product" initial={{ opacity: 0, y: 28 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .7, delay: .15 }}>
     <div className="landing-product-top"><div className="landing-dots"><i/><i/><i/></div><span>{en ? 'Overview' : 'Vue d’ensemble'}</span><div className="landing-live"><i/> {en ? 'Activity synchronized' : 'Activité synchronisée'}</div></div>
@@ -271,6 +272,8 @@ export default function LandingPage({ onOpenApp, onSignUp }: { onOpenApp: () => 
       <section className="landing-hero" id="accueil"><div className="landing-orb landing-orb-one"/><div className="landing-orb landing-orb-two"/><motion.div className="landing-hero-copy" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .6 }}><div className="landing-kicker"><Sparkles/> {en ? 'Your entire company. One platform.' : 'Toute votre entreprise. Une seule plateforme.'}</div><RotatingHeadline language={language}/><p>{en ? 'Smartsell Management brings clients, projects, planning, production, teams, communication and finance together to turn every day into clear decisions.' : 'Smartsell Management réunit clients, projets, planning, production, équipe, communication et finances pour transformer chaque journée en décisions claires.'}</p><div className="landing-hero-actions"><button className="landing-primary" onClick={onSignUp}>{en ? 'Start my 72-hour demo' : 'Créer mon compte · essai gratuit 72 h'} <ArrowRight/></button><button className="landing-secondary" onClick={() => go('demo-produit')}><Play/> {en ? 'See the platform in action' : 'Voir la plateforme en action'}</button></div><p className="landing-existing">{en ? 'Already have an account?' : 'Vous avez déjà un compte ?'} <button onClick={onOpenApp}>{en ? 'Log in' : 'Se connecter'}</button></p><div className="landing-trust"><span><Check/> {en ? '100% tailored to your brand' : '100% à votre image'}</span><span><Check/> {en ? 'All your operations' : 'Toutes vos opérations'}</span><span><Check/> {en ? '72-hour trial access' : 'Accès d’essai limité à 72 h'}</span></div></motion.div><ProductPreview language={language}/><div className="landing-marquee"><span>CRM</span><i/><span>{en ? 'PROJECTS' : 'PROJETS'}</span><i/><span>{en ? 'PLANNING' : 'PLANNING'}</span><i/><span>{en ? 'PRODUCTION' : 'PRODUCTION'}</span><i/><span>{en ? 'BILLING' : 'FACTURATION'}</span><i/><span>HR</span><i/><span>AI</span></div></section>
 
       <ProductCinema language={language}/>
+
+      <SocialProof language={language} onTrial={onSignUp}/>
 
       <section className="landing-trial-band" aria-label={en ? 'Start your free trial' : 'Commencer votre essai gratuit'}><div><span>{en ? 'READY TO EXPLORE?' : 'PRÊT À ESSAYER ?'}</span><h2>{en ? 'Your own workspace is one step away.' : 'Votre propre espace est à un clic.'}</h2><p>{en ? 'Create an account and explore Smartsell Management free for 72 hours.' : 'Créez votre compte et découvrez Smartsell Management gratuitement pendant 72 heures.'}</p></div><div className="landing-trial-band-actions"><button className="landing-primary" onClick={onSignUp}>{en ? 'Create my free account' : 'Créer mon compte d’essai'} <ArrowRight/></button><button className="landing-trial-login" onClick={onOpenApp}>{en ? 'Already registered? Log in' : 'Déjà inscrit ? Se connecter'}</button></div></section>
 
