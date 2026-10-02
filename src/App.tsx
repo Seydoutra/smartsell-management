@@ -11,6 +11,7 @@ import { endSession, getDemoActivity, pulseSession, startSession, trackActivity 
 import { isDemoMode } from './services/supabase'
 import ProductionApp from './ProductionAppV2'
 import LandingPage from './LandingPage'
+import ReferralLandingPage from './ReferralLandingPage'
 import SignupPage from './SignupPage'
 import LegalPage from './LegalPage'
 import { applyBrandTheme, readBrandTheme } from './lib/brandTheme'
@@ -211,8 +212,8 @@ function DemoApp(){
 
 export default function App(){
   useEffect(() => { applyBrandTheme(readBrandTheme()) }, [])
-  type Route = 'landing'|'app'|'signup'|'privacy'|'terms'
-  const getRoute=():Route=>window.location.hash==='#app'?'app':window.location.hash==='#signup'?'signup':window.location.hash==='#privacy'?'privacy':window.location.hash==='#terms'?'terms':'landing'
+  type Route = 'landing'|'app'|'signup'|'referral'|'privacy'|'terms'
+  const getRoute=():Route=>window.location.hash==='#app'?'app':window.location.hash.startsWith('#signup')?'signup':window.location.hash==='#parrainage'?'referral':window.location.hash==='#privacy'?'privacy':window.location.hash==='#terms'?'terms':'landing'
   const [route,setRoute]=useState<Route>(getRoute)
   useEffect(()=>{
     const sync=()=>{setRoute(getRoute());window.scrollTo({top:0})}
@@ -221,6 +222,7 @@ export default function App(){
   },[])
   const navigate=(next:Route)=>{window.location.hash=next==='landing'?'':next;setRoute(next);window.scrollTo({top:0})}
   if(route==='privacy'||route==='terms')return <LegalPage kind={route} onBack={()=>navigate('landing')}/>
+  if(route==='referral')return <ReferralLandingPage onBack={()=>navigate('landing')} onSignUp={()=>navigate('signup')} onLogin={()=>navigate('app')}/>
   if(route==='signup')return <SignupPage onBack={()=>navigate('landing')} onAccess={()=>navigate('app')}/>
   if(route==='app')return isDemoMode?<DemoApp/>:<ProductionApp/>
   return <LandingPage onOpenApp={()=>navigate('app')} onSignUp={()=>navigate('signup')}/>

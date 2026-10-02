@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useState } from 'react'
+import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   ArrowRight, ArrowUp, BarChart3, Bot, BriefcaseBusiness, CalendarDays, Camera, Check,
@@ -73,16 +73,55 @@ const productScenesEn = [
 ]
 
 const plans = [
-  { name: 'Essentiel', eyebrow: 'STRUCTURER', monthly: '800 000', annual: '8 640 000', copy: 'Pour centraliser les opérations d’une petite équipe.', users: 'Jusqu’à 5 utilisateurs', items: ['CRM clients & prospects', 'Projets, tâches et planning', 'Devis, factures et paiements', 'Documents et tableaux de bord'] },
-  { name: 'Croissance', eyebrow: 'ACCÉLÉRER', monthly: '1 500 000', annual: '16 200 000', copy: 'Pour coordonner ventes, production et communication.', users: 'Jusqu’à 20 utilisateurs', items: ['Tout Essentiel', 'SMS, e-mail et campagnes', 'Portail client et validations', 'Production, éditorial, IA et automatisations'], featured: true },
-  { name: 'Entreprise', eyebrow: 'DÉPLOYER', monthly: '2 500 000', annual: '27 000 000', copy: 'Pour les organisations exigeantes ou multi-équipes.', users: 'Jusqu’à 50 utilisateurs', items: ['Tout Croissance', 'Multi-espaces et droits avancés', 'Domaine, intégrations et quotas sur mesure', 'Accompagnement prioritaire'] },
+  { name: 'Essentiel', eyebrow: 'STRUCTURER', monthly: '300 000', annual: '3 240 000', copy: 'Pour centraliser les opérations d’une petite équipe.', users: 'Jusqu’à 5 utilisateurs', items: ['CRM clients & prospects', 'Projets, tâches et planning', 'Devis, factures et paiements', 'Documents et tableaux de bord'] },
+  { name: 'Croissance', eyebrow: 'ACCÉLÉRER', monthly: '700 000', annual: '7 560 000', copy: 'Pour coordonner ventes, production et communication.', users: 'Jusqu’à 20 utilisateurs', items: ['Tout Essentiel', 'SMS, e-mail et campagnes', 'Portail client et validations', 'Production, éditorial, IA et automatisations'], featured: true },
+  { name: 'Entreprise', eyebrow: 'DÉPLOYER', monthly: '1 000 000', annual: '10 800 000', copy: 'Pour les organisations exigeantes ou multi-équipes.', users: 'Jusqu’à 50 utilisateurs', items: ['Tout Croissance', 'Multi-espaces et droits avancés', 'Domaine, intégrations et quotas sur mesure', 'Accompagnement prioritaire'] },
 ]
 
 const plansEn = [
-  { name: 'Essential', eyebrow: 'ORGANIZE', monthly: '800,000', annual: '8,640,000', copy: 'For centralizing the operations of a small team.', users: 'Up to 5 users', items: ['Client & lead CRM', 'Projects, tasks and planning', 'Quotes, invoices and payments', 'Documents and dashboards'] },
-  { name: 'Growth', eyebrow: 'ACCELERATE', monthly: '1,500,000', annual: '16,200,000', copy: 'For coordinating sales, production and communication.', users: 'Up to 20 users', items: ['Everything in Essential', 'SMS, email and campaigns', 'Client portal and approvals', 'Production, editorial, AI and automation'], featured: true },
-  { name: 'Enterprise', eyebrow: 'SCALE', monthly: '2,500,000', annual: '27,000,000', copy: 'For demanding or multi-team organizations.', users: 'Up to 50 users', items: ['Everything in Growth', 'Multiple workspaces and advanced permissions', 'Custom domain, integrations and quotas', 'Priority support'] },
+  { name: 'Essential', eyebrow: 'ORGANIZE', monthly: '300,000', annual: '3,240,000', copy: 'For centralizing the operations of a small team.', users: 'Up to 5 users', items: ['Client & lead CRM', 'Projects, tasks and planning', 'Quotes, invoices and payments', 'Documents and dashboards'] },
+  { name: 'Growth', eyebrow: 'ACCELERATE', monthly: '700,000', annual: '7,560,000', copy: 'For coordinating sales, production and communication.', users: 'Up to 20 users', items: ['Everything in Essential', 'SMS, email and campaigns', 'Client portal and approvals', 'Production, editorial, AI and automation'], featured: true },
+  { name: 'Enterprise', eyebrow: 'SCALE', monthly: '1,000,000', annual: '10,800,000', copy: 'For demanding or multi-team organizations.', users: 'Up to 50 users', items: ['Everything in Growth', 'Multiple workspaces and advanced permissions', 'Custom domain, integrations and quotas', 'Priority support'] },
 ]
+
+const heroPhrases: Record<Language, string[]> = {
+  fr: ['vos projets.', 'votre comptabilité.', 'votre communication.', 'vos clients.', 'vos équipes.'],
+  en: ['your projects.', 'your finances.', 'your communication.', 'your clients.', 'your team.'],
+}
+
+function RotatingHeadline({ language }: { language: Language }) {
+  const phrases = heroPhrases[language]
+  const [index, setIndex] = useState(0)
+  const [length, setLength] = useState(phrases[0].length)
+  const [deleting, setDeleting] = useState(false)
+  const [reducedMotion, setReducedMotion] = useState(false)
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const update = () => setReducedMotion(media.matches)
+    update()
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
+  useEffect(() => { setIndex(0); setLength(heroPhrases[language][0].length); setDeleting(false) }, [language])
+  useEffect(() => {
+    if (reducedMotion) return
+    const phrase = phrases[index]
+    const delay = deleting ? (length === 0 ? 280 : 42) : (length === phrase.length ? 1900 : 70)
+    const timeout = window.setTimeout(() => {
+      if (!deleting && length === phrase.length) setDeleting(true)
+      else if (deleting && length === 0) { setIndex((index + 1) % phrases.length); setDeleting(false) }
+      else setLength(value => value + (deleting ? -1 : 1))
+    }, delay)
+    return () => window.clearTimeout(timeout)
+  }, [deleting, index, length, phrases, reducedMotion])
+
+  const visible = reducedMotion ? phrases[0] : phrases[index].slice(0, length)
+  return <h1 aria-label={language === 'en' ? 'One account to manage your projects, finances, communication, clients and team.' : 'Un seul compte pour piloter vos projets, votre comptabilité, votre communication, vos clients et vos équipes.'}>
+    <span className="landing-hero-fixed">{language === 'en' ? 'One account to manage' : 'Un seul compte pour piloter'}</span>
+    <span className={`landing-hero-rotator ${deleting ? 'is-deleting' : ''}`} aria-hidden="true"><em>{visible || '\u00a0'}</em></span>
+  </h1>
+}
 
 function ProductPreview({ language }: { language: Language }) {
   const en = language === 'en'
@@ -132,6 +171,7 @@ function OperationsVisual({ onAction, language }: { onAction: () => void; langua
 }
 
 export default function LandingPage({ onOpenApp, onSignUp }: { onOpenApp: () => void; onSignUp: () => void }) {
+  const pageRef = useRef<HTMLDivElement>(null)
   const [language, setLanguage] = useState<Language>(() => (localStorage.getItem('smartsell-language') === 'en' ? 'en' : 'fr'))
   const [theme, setTheme] = useState<LandingTheme>(() => {
     const saved = localStorage.getItem('smartsell-landing-theme')
@@ -153,6 +193,44 @@ export default function LandingPage({ onOpenApp, onSignUp }: { onOpenApp: () => 
   useEffect(() => { localStorage.setItem('smartsell-landing-theme', theme) }, [theme])
   useEffect(() => { document.body.style.overflow = selectedFeature || demoOpen ? 'hidden' : ''; return () => { document.body.style.overflow = '' } }, [selectedFeature, demoOpen])
   useEffect(() => {
+    const page = pageRef.current
+    if (!page || !('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const selector = [
+      '.landing-showcase-head h2', '.landing-showcase-head p',
+      '.landing-trial-band h2', '.landing-trial-band p',
+      '.landing-section-head > *', '.landing-feature-grid article > h3', '.landing-feature-grid article > p',
+      '.landing-workflow-copy > .landing-label', '.landing-workflow-copy > h2', '.landing-workflow-copy > p',
+      '.landing-steps strong', '.landing-steps p', '.brand-copy > .landing-label', '.brand-copy > h2', '.brand-copy > p',
+      '.brand-list b', '.brand-list small', '.pricing-head > *', '.purchase-card h3', '.purchase-card p',
+      '.subscription-heading h3', '.pricing-grid > article h3', '.pricing-grid > article p',
+      '.landing-security h2', '.landing-security > p', '.landing-final > span', '.landing-final > h2', '.landing-final > p',
+    ].join(',')
+    const texts = [...page.querySelectorAll<HTMLElement>(selector)]
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return
+        entry.target.classList.add('is-visible')
+        observer.unobserve(entry.target)
+      })
+    }, { threshold: 0.08, rootMargin: '0px 0px -24px 0px' })
+    texts.forEach((element, index) => {
+      element.classList.add('landing-reveal-text')
+      element.dataset.revealMode = index % 3 === 1 ? 'zoom' : 'rise'
+      element.style.setProperty('--reveal-delay', `${(index % 3) * 55}ms`)
+      observer.observe(element)
+    })
+    page.classList.add('motion-ready')
+    return () => {
+      observer.disconnect()
+      page.classList.remove('motion-ready')
+      texts.forEach(element => {
+        element.classList.remove('landing-reveal-text', 'is-visible')
+        delete element.dataset.revealMode
+        element.style.removeProperty('--reveal-delay')
+      })
+    }
+  }, [])
+  useEffect(() => {
     const update = () => {
       setScrolled(window.scrollY > 24)
       const available = document.documentElement.scrollHeight - window.innerHeight
@@ -171,13 +249,14 @@ export default function LandingPage({ onOpenApp, onSignUp }: { onOpenApp: () => 
   const toggleTheme = () => setTheme(value => value === 'dark' ? 'light' : 'dark')
   const whatsappHref = `https://wa.me/224620619064?text=${encodeURIComponent(en ? 'Hello SmartSell, I would like to learn more about the solution and request a personalized demo.' : 'Bonjour SmartSell, je souhaite en savoir plus sur la solution et demander une démonstration personnalisée.')}`
 
-  return <div className={`landing-page theme-${theme}`}>
+  return <div ref={pageRef} className={`landing-page theme-${theme}`}>
     <header className={`landing-header ${scrolled ? 'is-scrolled' : ''}`}>
       <div className="header-aurora"/><div className="header-grid"/>
       <a className="landing-brand" href="#accueil" onClick={() => setActiveSection('accueil')} aria-label={en ? 'SmartSell, home' : 'SmartSell, accueil'}><span className="brand-orbit"><i/><img src={theme === 'light' ? `${import.meta.env.BASE_URL}brand/wordmark-purple.png` : companyProfile.logo_light} alt="SmartSell"/></span><span>Management<small>BUSINESS OS</small></span></a>
       <nav className={menuOpen ? 'open' : ''} aria-label={en ? 'Main navigation' : 'Navigation principale'}>
         {(en ? [['solution', 'Features'], ['fonctionnement', 'How it works'], ['personnalisation', 'Customization'], ['tarifs', 'Pricing']] : [['solution', 'Fonctionnalités'], ['fonctionnement', 'Fonctionnement'], ['personnalisation', 'Personnalisation'], ['tarifs', 'Tarifs']]).map(([id, label]) => <button key={id} className={activeSection === id ? 'active' : ''} onClick={() => go(id)}><span>{label}</span><i/></button>)}
         <button className="mobile-signup" onClick={onSignUp}>{en ? 'Create an account · 72-hour trial' : 'Créer un compte · essai gratuit 72 h'}</button>
+        <a href="#parrainage" onClick={()=>setMenuOpen(false)}>{en ? 'Referral program' : 'Parrainage · 10 % chacun'}</a>
         <button className="mobile-login" onClick={onOpenApp}>{en ? 'Already registered? Log in' : 'Déjà inscrit ? Se connecter'}</button>
       </nav>
       <div className="landing-header-actions"><div className="landing-preferences"><button onClick={toggleLanguage} aria-label={en ? 'Passer en français' : 'Switch to English'} title={en ? 'Français' : 'English'}><Globe2/><span>{en ? 'FR' : 'EN'}</span></button><button onClick={toggleTheme} aria-label={theme === 'dark' ? (en ? 'Enable light mode' : 'Activer le mode jour') : (en ? 'Enable dark mode' : 'Activer le mode nuit')} title={theme === 'dark' ? (en ? 'Light mode' : 'Mode jour') : (en ? 'Dark mode' : 'Mode nuit')}>{theme === 'dark' ? <Sun/> : <Moon/>}</button></div><a className="header-whatsapp" href={whatsappHref} target="_blank" rel="noreferrer" aria-label={en ? 'Chat on WhatsApp' : 'Discuter sur WhatsApp'}><MessageCircle/></a><button className="landing-login" onClick={onOpenApp}>{en ? 'Log in' : 'Se connecter'}</button><button className="landing-nav-cta" onClick={onSignUp}><span>{en ? 'Sign up' : 'S’inscrire'}</span><small>{en ? 'Free 72-hour trial' : 'Essai gratuit 72 h'}</small><ArrowRight/></button></div>
@@ -186,7 +265,7 @@ export default function LandingPage({ onOpenApp, onSignUp }: { onOpenApp: () => 
     </header>
 
     <main>
-      <section className="landing-hero" id="accueil"><div className="landing-orb landing-orb-one"/><div className="landing-orb landing-orb-two"/><motion.div className="landing-hero-copy" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .6 }}><div className="landing-kicker"><Sparkles/> {en ? 'Your entire company. One platform.' : 'Toute votre entreprise. Une seule plateforme.'}</div><h1>{en ? <>One workspace.<br/><em>Your entire business.</em></> : <>Un seul espace.<br/><em>Toute votre activité.</em></>}</h1><p>{en ? 'SmartSell brings clients, projects, planning, production, teams, communication and finance together to turn every day into clear decisions.' : 'SmartSell réunit clients, projets, planning, production, équipe, communication et finances pour transformer chaque journée en décisions claires.'}</p><div className="landing-hero-actions"><button className="landing-primary" onClick={onSignUp}>{en ? 'Start my 72-hour demo' : 'Créer mon compte · essai gratuit 72 h'} <ArrowRight/></button><button className="landing-secondary" onClick={() => go('demo-produit')}><Play/> {en ? 'See the platform in action' : 'Voir la plateforme en action'}</button></div><p className="landing-existing">{en ? 'Already have an account?' : 'Vous avez déjà un compte ?'} <button onClick={onOpenApp}>{en ? 'Log in' : 'Se connecter'}</button></p><div className="landing-trust"><span><Check/> {en ? '100% tailored to your brand' : '100% à votre image'}</span><span><Check/> {en ? 'All your operations' : 'Toutes vos opérations'}</span><span><Check/> {en ? '72-hour trial access' : 'Accès d’essai limité à 72 h'}</span></div></motion.div><ProductPreview language={language}/><div className="landing-marquee"><span>CRM</span><i/><span>{en ? 'PROJECTS' : 'PROJETS'}</span><i/><span>{en ? 'PLANNING' : 'PLANNING'}</span><i/><span>{en ? 'PRODUCTION' : 'PRODUCTION'}</span><i/><span>{en ? 'BILLING' : 'FACTURATION'}</span><i/><span>HR</span><i/><span>AI</span></div></section>
+      <section className="landing-hero" id="accueil"><div className="landing-orb landing-orb-one"/><div className="landing-orb landing-orb-two"/><motion.div className="landing-hero-copy" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .6 }}><div className="landing-kicker"><Sparkles/> {en ? 'Your entire company. One platform.' : 'Toute votre entreprise. Une seule plateforme.'}</div><RotatingHeadline language={language}/><p>{en ? 'SmartSell brings clients, projects, planning, production, teams, communication and finance together to turn every day into clear decisions.' : 'SmartSell réunit clients, projets, planning, production, équipe, communication et finances pour transformer chaque journée en décisions claires.'}</p><div className="landing-hero-actions"><button className="landing-primary" onClick={onSignUp}>{en ? 'Start my 72-hour demo' : 'Créer mon compte · essai gratuit 72 h'} <ArrowRight/></button><button className="landing-secondary" onClick={() => go('demo-produit')}><Play/> {en ? 'See the platform in action' : 'Voir la plateforme en action'}</button></div><p className="landing-existing">{en ? 'Already have an account?' : 'Vous avez déjà un compte ?'} <button onClick={onOpenApp}>{en ? 'Log in' : 'Se connecter'}</button></p><div className="landing-trust"><span><Check/> {en ? '100% tailored to your brand' : '100% à votre image'}</span><span><Check/> {en ? 'All your operations' : 'Toutes vos opérations'}</span><span><Check/> {en ? '72-hour trial access' : 'Accès d’essai limité à 72 h'}</span></div></motion.div><ProductPreview language={language}/><div className="landing-marquee"><span>CRM</span><i/><span>{en ? 'PROJECTS' : 'PROJETS'}</span><i/><span>{en ? 'PLANNING' : 'PLANNING'}</span><i/><span>{en ? 'PRODUCTION' : 'PRODUCTION'}</span><i/><span>{en ? 'BILLING' : 'FACTURATION'}</span><i/><span>HR</span><i/><span>AI</span></div></section>
 
       <ProductCinema language={language}/>
 
@@ -203,7 +282,7 @@ export default function LandingPage({ onOpenApp, onSignUp }: { onOpenApp: () => 
         <article className="purchase-card"><div><span>{en ? 'OPTION 01 · PURCHASE' : 'OPTION 01 · ACHAT'}</span><h3>{en ? 'Your solution, permanently.' : 'Votre solution, définitivement.'}</h3><p>{en ? 'Perpetual license, deployment and complete adaptation to your operations.' : 'Licence perpétuelle, déploiement et adaptation complète à vos opérations.'}</p></div><div className="purchase-items"><span><Check/> {en ? 'Installation and setup' : 'Installation et configuration'}</span><span><Check/> {en ? 'Complete customization' : 'Personnalisation complète'}</span><span><Check/> {en ? 'Team training' : 'Formation de votre équipe'}</span><span><Check/> {en ? 'Optional maintenance' : 'Maintenance disponible en option'}</span></div><div className="purchase-price"><small>{en ? 'CUSTOM PROJECT' : 'PROJET SUR MESURE'}</small><strong>{en ? 'On request' : 'Sur devis'}</strong><a className="whatsapp-quote" href={whatsappHref} target="_blank" rel="noreferrer"><MessageCircle/> {en ? 'Request via WhatsApp' : 'Demander sur WhatsApp'}</a></div></article>
         <div className="subscription-heading"><div><span>{en ? 'OPTION 02 · SUBSCRIPTION' : 'OPTION 02 · ABONNEMENT'}</span><h3>{en ? 'A plan that grows with you.' : 'Une formule qui évolue avec vous.'}</h3></div><div className="billing-toggle" aria-label={en ? 'Billing period' : 'Période de facturation'}><button className={billing === 'monthly' ? 'active' : ''} onClick={() => setBilling('monthly')}>{en ? 'Monthly' : 'Mensuel'}</button><button className={billing === 'annual' ? 'active' : ''} onClick={() => setBilling('annual')}>{en ? 'Annual' : 'Annuel'} <span>−10%</span></button></div></div>
         <div className="pricing-grid">{localizedPlans.map(plan => <article key={plan.name} className={plan.featured ? 'featured' : ''}>{plan.featured && <span className="popular">{en ? 'MOST POPULAR' : 'LE PLUS CHOISI'}</span>}<small>{plan.eyebrow}</small><h3>{plan.name}</h3><p>{plan.copy}</p><div className="plan-price"><strong>{billing === 'monthly' ? plan.monthly : plan.annual}</strong><span>GNF / {billing === 'monthly' ? (en ? 'month' : 'mois') : (en ? 'year' : 'an')}</span></div>{billing === 'annual' && <em className="annual-saving">{en ? '10% discount' : '10 % de réduction'}</em>}<b className="plan-users">{plan.users}</b><ul>{plan.items.map(item => <li key={item}><Check/>{item}</li>)}</ul><button onClick={plan.featured ? onSignUp : openDemo}>{plan.featured ? (en ? 'Try for 72 hours' : 'Tester pendant 72 h') : (en ? 'Choose this plan' : 'Choisir cette offre')} <ArrowRight/></button></article>)}</div>
-        <p className="trial-note"><ShieldCheck/> {en ? 'The demo lasts 72 hours. After that, access is suspended until you purchase the solution or activate a subscription.' : 'La démo dure 72 heures. À son terme, l’accès est suspendu jusqu’à l’achat de la solution ou l’activation d’un abonnement.'}</p>
+        <p className="trial-note"><ShieldCheck/> {en ? 'The demo lasts 72 hours. Your data remains visible afterwards, while paid actions require a subscription.' : 'La démo dure 72 heures. Ensuite, vos données restent visibles ; les actions payantes nécessitent un abonnement.'}</p>
       </section>
 
       <section className="landing-security" id="securite"><div className="landing-security-icon"><ShieldCheck/></div><div><span>{en ? 'SECURE BY DESIGN' : 'SÉCURITÉ PAR CONCEPTION'}</span><h2>{en ? 'The right information, for the right people.' : 'Les bonnes informations, aux bonnes personnes.'}</h2></div><p>{en ? 'Precise roles, action history and separate workspaces let your organization grow without losing control.' : 'Des rôles précis, un historique des actions et des espaces séparés permettent à votre organisation de grandir sans perdre le contrôle.'}</p><div className="landing-security-tags"><span>{en ? 'Role-based access' : 'Accès par rôle'}</span><span>{en ? 'Activity log' : 'Journal d’activité'}</span><span>{en ? 'Isolated workspaces' : 'Espaces isolés'}</span><span>{en ? 'Temporary accounts' : 'Comptes temporaires'}</span></div></section>
@@ -214,7 +293,7 @@ export default function LandingPage({ onOpenApp, onSignUp }: { onOpenApp: () => 
     <footer className="landing-footer">
       <div className="footer-aurora"/><div className="footer-grid"/>
       <a className="footer-bar-brand" href="#accueil" onClick={() => go('accueil')}><span><i/><img src={theme === 'light' ? `${import.meta.env.BASE_URL}brand/wordmark-purple.png` : companyProfile.logo_light} alt="SmartSell"/></span><small>© {new Date().getFullYear()} · MANAGEMENT</small></a>
-      <nav className="footer-bar-nav" aria-label={en ? 'Footer navigation' : 'Navigation du pied de page'}><button onClick={() => go('solution')}>{en ? 'Features' : 'Fonctionnalités'}</button><button onClick={() => go('personnalisation')}>{en ? 'Customization' : 'Personnalisation'}</button><button onClick={() => go('tarifs')}>{en ? 'Pricing' : 'Tarifs'}</button><a href="#privacy">{en ? 'Privacy' : 'Confidentialité'}</a></nav>
+      <nav className="footer-bar-nav" aria-label={en ? 'Footer navigation' : 'Navigation du pied de page'}><button onClick={() => go('solution')}>{en ? 'Features' : 'Fonctionnalités'}</button><button onClick={() => go('personnalisation')}>{en ? 'Customization' : 'Personnalisation'}</button><button onClick={() => go('tarifs')}>{en ? 'Pricing' : 'Tarifs'}</button><a href="#parrainage">{en ? 'Referral program' : 'Parrainage'}</a><a href="#privacy">{en ? 'Privacy' : 'Confidentialité'}</a></nav>
       <div className="footer-bar-actions"><button className="footer-auth" onClick={onOpenApp}>{en ? 'Log in' : 'Se connecter'}</button><button className="footer-auth footer-signup" onClick={onSignUp}>{en ? 'Free trial' : 'Essai gratuit 72 h'}</button><span className="footer-status"><i/> {en ? 'Systems operational' : 'Systèmes opérationnels'}</span><a href={whatsappHref} target="_blank" rel="noreferrer"><MessageCircle/> WhatsApp</a><button onClick={() => go('accueil')} aria-label={en ? 'Back to top' : 'Retour en haut'}><ArrowUp/></button></div>
     </footer>
 

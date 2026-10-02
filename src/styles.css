@@ -229,3 +229,42 @@ html,body,#root{max-width:100%;overflow-x:hidden}.app-shell,.app-main,.app-main 
 @media(max-width:760px){.saas-sales-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.saas-sales-dashboard .command-panel-head{flex-direction:column}.saas-sales-actions{width:100%}.saas-sales-actions button{flex:1;justify-content:center}.saas-sales-list>div{grid-template-columns:30px minmax(0,1fr) auto}}
 .monthly-goal-dashboard{grid-column:1/-1;padding:22px;background:linear-gradient(135deg,rgba(35,168,106,.08),rgba(250,238,53,.1))}.monthly-goal-dashboard .command-panel-head{align-items:flex-start}.monthly-goal-dashboard .command-panel-head p{margin:5px 0 0;color:var(--text-secondary);font-size:.61rem}.goal-plan{display:flex;gap:10px;margin:14px 0 0;padding:12px;border:1px solid rgba(35,168,106,.2);border-radius:11px;background:rgba(255,255,255,.44)}.goal-plan p{margin:0;white-space:pre-line;font-size:.59rem;line-height:1.55;color:var(--text-secondary)}.goal-form{display:grid;grid-template-columns:1.3fr .8fr .9fr auto;gap:10px;align-items:end;margin-top:16px}.goal-form label{display:grid;gap:5px;font-size:.57rem;font-weight:700}.goal-form input,.goal-form select{min-width:0;padding:10px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text-primary);font:inherit;font-size:.62rem}@media(max-width:760px){.monthly-goal-dashboard .command-panel-head{flex-direction:column}.goal-form{grid-template-columns:1fr}.goal-form button{justify-content:center}}
 .lead-contact-data{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0;padding:11px 13px;border:1px solid var(--border);border-radius:10px;background:rgba(106,43,133,.04);font-size:.62rem}.lead-contact-data strong{color:var(--brand-primary)}.lead-contact-data span{color:var(--text-secondary)}.lead-contact-form{display:grid;gap:10px;margin-top:15px;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}.lead-contact-form>strong{font-size:.68rem}.lead-contact-form .form-grid{margin:0}.lead-contact-form .primary-btn{justify-self:start}
+
+/* Billing sheet: stable contrast on the dark mobile modal, including form headings. */
+.modal:has(.billing-create-form){background:#17161c;color:#f7f5f9;border-color:#514957}
+.modal:has(.billing-create-form) .modal-head{background:#17161c;color:#f7f5f9}
+.modal:has(.billing-create-form) .billing-create-form label,.modal:has(.billing-create-form) .billing-create-form .service-picker>span,.modal:has(.billing-create-form) .billing-create-form .toggle-line,.modal:has(.billing-create-form) .billing-create-form .form-actions strong{color:#f7f5f9!important}
+.modal:has(.billing-create-form) .billing-create-form input:not([type=checkbox]),.modal:has(.billing-create-form) .billing-create-form select,.modal:has(.billing-create-form) .billing-create-form textarea{background:#f8f7fa!important;color:#17131b!important;-webkit-text-fill-color:#17131b!important;border-color:#d9d3de}
+.modal:has(.billing-create-form) .billing-create-form input::placeholder{color:#605965!important;opacity:1}
+.modal:has(.billing-create-form) .billing-create-form input:disabled{background:#c9c6cc!important;color:#4a444e!important;-webkit-text-fill-color:#4a444e!important}
+.modal:has(.billing-create-form) .billing-create-form .service-picker button{color:#ead6f3;border-color:#765183;background:#33213b}
+.modal:has(.billing-create-form) .billing-create-form .invoice-lines{border-color:#514957}
+.modal:has(.billing-create-form) .billing-create-form .invoice-line{border-color:#514957}
+.modal:has(.billing-create-form) .billing-create-form .ghost-action{color:#f7f5f9;border-color:#766a7d}
+.modal:has(.billing-create-form) .billing-create-form .error-banner{color:#ffb1ba;background:#3b2029;border-color:#9c4c59}
+
+/* A generic header selector must not turn nested goal cards into app bars. */
+.app-main .performance-goals>.module-head,.app-main .performance-goals .goal-card>header{position:static;height:auto;min-height:0;width:auto;padding:0;background:transparent;border:0;backdrop-filter:none;box-shadow:none}
+.app-main .performance-goals .goal-card>header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.performance-goals .goal-card>header>div,.performance-goals .goal-card>header>strong{min-width:0;overflow-wrap:anywhere}
+
+.notification-popover{max-height:min(70dvh,620px);overflow-y:auto;overscroll-behavior:contain}
+.notification-head .notification-close{flex:none;min-width:32px;height:32px;display:grid;place-items:center;padding:6px}
+.notification-head .notification-close svg{width:16px}
+
+@media(max-width:760px){
+  .command-dashboard,.agency-intelligence,.agency-briefing,.next-actions{width:100%;min-width:0;max-width:100%}
+  .command-hero{width:100%;min-width:0;overflow:hidden}
+  .command-copy{min-width:0;max-width:100%;overflow:hidden}
+  .command-copy h1{font-size:clamp(1.8rem,8vw,2.8rem);line-height:1.12;white-space:normal;overflow-wrap:anywhere}
+  .command-copy p,.briefing-summary,.agency-ai-head h2,.next-action strong{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+  .agency-ai-head{grid-template-columns:42px minmax(0,1fr)}
+  .agency-ai-head>div:nth-child(2){min-width:0}
+  .agency-ai-head h2{font-size:clamp(.88rem,4.5vw,1.08rem);line-height:1.3}
+  .notification-popover{position:fixed;left:8px;right:8px;top:70px;width:auto;max-height:min(67dvh,560px)}
+  .performance-goals .goal-kpis,.performance-goals .goal-step-list{grid-template-columns:minmax(0,1fr)}
+  .performance-goals .goal-card{overflow:hidden}
+  .performance-goals .goal-card>header{display:block}
+  .performance-goals .goal-card>header>strong{display:block;margin-top:12px;font-size:clamp(.85rem,4vw,1.1rem)}
+  .performance-goals .goal-actions>*{max-width:100%;white-space:normal}
+}

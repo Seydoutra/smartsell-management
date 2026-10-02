@@ -18,6 +18,7 @@ import {
   FileSpreadsheet,
   FileText,
   Gauge,
+  Gift,
   LayoutDashboard,
   LogOut,
   Mail,
@@ -44,6 +45,7 @@ import {
   X,
 } from "lucide-react";
 import { companyProfile } from "./lib/companyProfile";
+import { commercialDrafts, commercialKindNames, commercialPdfFile } from './lib/commercialPdf';
 import { useOnlineStatus } from "./lib/network";
 import BetaSandboxApp from "./BetaSandboxApp";
 import CommunicationHub from "./CommunicationHub";
@@ -74,6 +76,8 @@ import { AutopilotPage } from "./AutopilotV5";
 import { NotificationBell, OperationsCenter } from "./OperationsCenter";
 import { SmsSettings } from './SmsSettings';
 import { PerformanceGoals } from './PerformanceGoals';
+import TrialPaywall from './TrialPaywall';
+import ReferralDashboard from './ReferralDashboard';
 import {
   connectGoogleCalendar,
   createCampaign,
@@ -104,8 +108,10 @@ import {
   generateAgencyIntelligence,
   getAccessControl,
   getCalendarConnection,
+  getCompanySettings,
   getClientWorkspace,
   getProfile,
+  getTenantTrialStatus,
   getProjectWorkspace,
   getAppSetting,
   finishCall,
@@ -166,6 +172,7 @@ import type {
   CallLog,
   Campaign,
   Client,
+  CompanySettings,
   CommercialDocument,
   CommercialRadar,
   ContactGroup,
@@ -210,6 +217,7 @@ type Page =
   | "Centre de contrôle"
   | "Paramètres SMS"
   | "Objectifs & performance"
+  | "Parrainage"
   | "Jumeau numérique"
   | "Radar commercial"
   | "Studio campagnes IA"
@@ -221,6 +229,7 @@ type CrudRights = { view: boolean; create: boolean; update: boolean; delete: boo
 const nav: [Page, typeof LayoutDashboard, Permission?][] = [
   ["Dashboard", LayoutDashboard],
   ["Objectifs & performance", Target],
+  ["Parrainage", Gift],
   ["Clients", Users, "crm.write"],
   ["Projets", BriefcaseBusiness, "projects.write"],
   ["Tâches", ClipboardList, "projects.write"],
@@ -248,7 +257,7 @@ const nav: [Page, typeof LayoutDashboard, Permission?][] = [
   ["Assistant IA", MessageSquareText],
 ];
 const navGroups:{label:string;pages:Page[]}[]=[
-  {label:'Pilotage',pages:['Dashboard','Objectifs & performance']},
+  {label:'Pilotage',pages:['Dashboard','Objectifs & performance','Parrainage']},
   {label:'Production & clients',pages:['Clients','Projets','Tâches','Planning','Éditorial']},
   {label:'Finance & achats',pages:['Services','Fournisseurs','Facturation','Documents','Comptabilité','Matériel']},
   {label:'Communication',pages:['Communication','Intégrations','Paramètres SMS']},
@@ -562,7 +571,7 @@ function TrendCurve({rows,showRevenue,showCost}:{rows:Array<{label:string;revenu
 
 function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { profile: Profile; access:AccessControl|null; accessLoaded:boolean; onNavigate:(page:Page,clientId?:string|null)=>void; english:boolean }) {
   const roles=(profile.roles?.length?profile.roles:[profile.role]) as Role[];
-  const platformOwner=roles.includes('SUPER_ADMIN')&&!profile.is_temporary;
+  const platformOwner=profile.is_platform_owner===true;
   const allowed=(action:string)=>isActionAllowed(roles,access,accessLoaded,action);
   const canClients=allowed('clients.view'), canProjects=allowed('projects.view'), canTasks=allowed('tasks.view'),
     canInvoices=allowed('invoices.view'), canAccounting=allowed('accounting.view'), canSuppliers=allowed('suppliers.view'),
@@ -2346,6 +2355,11 @@ function DocumentsPage({rights}:{rights:CrudRights}) {
   const [rows, setRows] = useState<CommercialDocument[]>([]),
     [clients, setClients] = useState<Client[]>([]),
     [projects, setProjects] = useState<Project[]>([]),
+    [company,setCompany] = useState<CompanySettings|null>(null),
+    [kind,setKind] = useState('BON_COMMANDE'),
+    [notes,setNotes] = useState(''),
+    [documentError,setDocumentError] = useState(''),
+    [pdfBusy,setPdfBusy] = useState(false),
     [open, setOpen] = useState(false),
     [selected, setSelected] = useState<CommercialDocument | null>(null);
   const load = () =>
@@ -2353,22 +2367,37 @@ function DocumentsPage({rights}:{rights:CrudRights}) {
       listCommercialDocuments(),
       listClients(),
       listProjects(),
-    ]).then(([a, b, c]) => {
+      getCompanySettings(),
+    ]).then(([a, b, c, d]) => {
       setRows(a);
       setClients(b);
       setProjects(c);
+      setCompany(d);
     });
+  const pdfAction=async(share:boolean)=>{
+    if(!selected||pdfBusy)return
+    setPdfBusy(true);setDocumentError('')
+    try{
+      const file=await commercialPdfFile(selected,company)
+      if(share&&navigator.canShare?.({files:[file]})){await navigator.share({files:[file],title:selected.number,text:commercialKindNames[selected.kind]||selected.kind});return}
+      const url=URL.createObjectURL(file),anchor=document.createElement('a')
+      anchor.href=url;anchor.download=file.name;anchor.click();window.setTimeout(()=>URL.revokeObjectURL(url),60_000)
+      if(share)setDocumentError('Le partage de fichier n’est pas pris en charge sur cet appareil. Le PDF a été téléchargé pour que vous puissiez l’envoyer.')
+    }catch(error){if((error as DOMException).name!=='AbortError')setDocumentError(error instanceof Error?error.message:'PDF indisponible')}
+    finally{setPdfBusy(false)}
+  }
   useEffect(() => {
     void load();
   }, []);
   return (
     <>
       <Header
-        title="Documents commerciaux"
-        copy="Bons de commande, livraison, vente, sortie et entrée de matériel."
+        title="Générateur de documents"
+        copy="Bons, offres, ordres de mission et projets de contrats : créez, téléchargez et partagez vos PDF."
         onAdd={rights.create?() => setOpen(true):undefined}
-        add="Nouveau bon"
+        add="Nouveau document"
       />
+      {documentError&&<div className="error-banner" role="status">{documentError}</div>}
       <div className="records panel">
         {!rows.length ? (
           <Empty name="document" onAdd={rights.create?() => setOpen(true):undefined} />
@@ -2384,7 +2413,7 @@ function DocumentsPage({rights}:{rights:CrudRights}) {
                 <div>
                   <strong>{r.number}</strong>
                   <small>
-                    {label(r.kind)} · {r.clients?.name}
+                    {commercialKindNames[r.kind]||label(r.kind)} · {r.clients?.name}
                   </small>
                 </div>
               </div>
@@ -2407,22 +2436,25 @@ function DocumentsPage({rights}:{rights:CrudRights}) {
                 const f = Object.fromEntries(
                   new FormData(e.currentTarget),
                 ) as Record<string, string>;
-                await createCommercialDocument({
-                  ...f,
-                  total: Number(f.total),
-                } as Partial<CommercialDocument>);
-                setOpen(false);
-                load();
+                try{
+                  setDocumentError('')
+                  await createCommercialDocument({...f,kind,notes,total:Number(f.total)} as Partial<CommercialDocument>);
+                  setOpen(false);setNotes('');setKind('BON_COMMANDE');await load();
+                }catch(error){setDocumentError(error instanceof Error?error.message:'Création impossible')}
               }}
             >
               <div className="form-grid">
                 <Field label="Type">
-                  <select name="kind">
+                  <select name="kind" value={kind} onChange={event=>{const next=event.target.value;setKind(next);setNotes(commercialDrafts[next]||'')}}>
                     <option value="BON_COMMANDE">Bon de commande</option>
                     <option value="BON_LIVRAISON">Bon de livraison</option>
                     <option value="BON_VENTE">Bon de vente</option>
                     <option value="BON_SORTIE">Bon de sortie matériel</option>
                     <option value="BON_ENTREE">Bon d’entrée matériel</option>
+                    <option value="CONTRAT_CLIENT">Projet de contrat client</option>
+                    <option value="OFFRE_COMMUNICATION">Offre de communication</option>
+                    <option value="ORDRE_MISSION">Ordre de mission</option>
+                    <option value="PROPOSITION_COMMERCIALE">Proposition commerciale</option>
                   </select>
                 </Field>
                 <Field label="Client">
@@ -2458,8 +2490,8 @@ function DocumentsPage({rights}:{rights:CrudRights}) {
                     <option>USD</option>
                   </select>
                 </Field>
-                <Field label="Notes" wide>
-                  <textarea name="notes" />
+                <Field label="Contenu / clauses / détails" wide>
+                  <textarea name="notes" rows={12} value={notes} onChange={event=>setNotes(event.target.value)} placeholder="Décrivez la prestation, les livrables et les conditions du document…" />
                 </Field>
               </div>
               <button className="primary-btn compact">Générer</button>
@@ -2470,7 +2502,7 @@ function DocumentsPage({rights}:{rights:CrudRights}) {
           <Modal title={selected.number} onClose={() => setSelected(null)}>
             <div className="document-preview">
               <span className="eyebrow">
-                <i /> {label(selected.kind)}
+                <i /> {commercialKindNames[selected.kind]||label(selected.kind)}
               </span>
               <h2>{selected.number}</h2>
               <p>
@@ -2483,14 +2515,16 @@ function DocumentsPage({rights}:{rights:CrudRights}) {
                 <strong>Montant :</strong>{" "}
                 {money(selected.total, selected.currency)}
               </p>
-              <p>{selected.notes}</p>
+              <p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{selected.notes}</p>
               <div className="form-actions">
                 <button
                   className="primary-btn compact"
-                  onClick={() => window.print()}
+                  disabled={pdfBusy}
+                  onClick={() => void pdfAction(false)}
                 >
-                  Imprimer / PDF
+                  {pdfBusy?'Préparation du PDF…':'Télécharger le PDF'}
                 </button>
+                <button className="ghost-action" disabled={pdfBusy} onClick={()=>void pdfAction(true)}><Send/>Partager le PDF</button>
                 {rights.update&&<button
                   className="ghost-action"
                   onClick={async () => {
@@ -3005,7 +3039,13 @@ function Shell({
     [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null),
     [installed, setInstalled] = useState(() => window.matchMedia('(display-mode: standalone)').matches),
     [notificationRows, setNotificationRows] = useState<Notification[]>([]),
-    [englishDashboard, setEnglishDashboard] = useState(false);
+    [englishDashboard, setEnglishDashboard] = useState(false),
+    [paywallOpen,setPaywallOpen] = useState(false),
+    [trialClock,setTrialClock] = useState(Date.now()),
+    [tenantTrial,setTenantTrial] = useState({is_temporary:Boolean(profile.is_temporary),access_expires_at:profile.access_expires_at||null});
+  const expiredTrial=Boolean(tenantTrial.is_temporary&&!profile.is_platform_owner&&tenantTrial.access_expires_at&&new Date(tenantTrial.access_expires_at).getTime()<=trialClock);
+  useEffect(()=>{const timer=window.setInterval(()=>setTrialClock(Date.now()),30_000);return()=>window.clearInterval(timer)},[]);
+  useEffect(()=>{void getTenantTrialStatus(profile).then(setTenantTrial).catch(()=>undefined)},[profile.id,profile.tenant_owner_id,profile.access_expires_at]);
   const navigate = (next: Page, clientId: string | null = null) => {
     const hash = `#/${encodeURIComponent(next)}${clientId ? `?client=${encodeURIComponent(clientId)}` : ""}`;
     history.pushState({}, "", hash);
@@ -3050,11 +3090,14 @@ function Shell({
     const target = event.target as HTMLElement;
     const control = target.closest('button, a, [role="button"]');
     if (!control || (control as HTMLButtonElement).disabled) return;
+    if(expiredTrial && control.closest('.app-main main') && !control.closest('.trial-expired-banner')){
+      event.preventDefault();event.stopPropagation();setPaywallOpen(true);return;
+    }
     playUiTone(control.classList.contains('primary-btn') ? 'confirm' : 'tap');
-  }, []);
+  }, [expiredTrial]);
   const roles = (profile.roles?.length ? profile.roles : [profile.role]) as Role[],
     admin = roles.some((item) => ["SUPER_ADMIN", "ADMIN"].includes(item)),
-    platformOwner = roles.includes("SUPER_ADMIN") && !profile.is_temporary;
+    platformOwner = profile.is_platform_owner===true;
   if (roles.includes("CLIENT")) return <ClientPortalView onLogout={onLogout} />;
   if (!accessLoaded&&!roles.includes("SUPER_ADMIN")) return <div className="app-loading"><img src={companyProfile.logo_dark}/><span>Vérification de vos autorisations…</span></div>;
   const actionAllowed = (key: string) => isActionAllowed(roles,access,accessLoaded,key);
@@ -3075,12 +3118,12 @@ function Shell({
     delete: actionAllowed(`${scope}.delete`),
   });
   const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'finance.read',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Intégrations:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Centre de contrôle':'audit.read','Portail client':'portal.view','Jumeau numérique':'accounting.view','Radar commercial':'clients.view','Studio campagnes IA':'communication.view'};
-  const visible = (n: [Page, typeof LayoutDashboard, Permission?]) => n[0]==='Objectifs & performance' ? !roles.includes('CLIENT') : n[0]==='Paramètres SMS' ? (profile.is_platform_owner===true||roles.includes('SUPER_ADMIN')) : n[0]==='Dashboard'||(n[0]==='Demandes SaaS' ? platformOwner : (
+  const visible = (n: [Page, typeof LayoutDashboard, Permission?]) => n[0]==='Parrainage' ? (profile.tenant_owner_id||profile.id)===profile.id : n[0]==='Objectifs & performance' ? !roles.includes('CLIENT') : n[0]==='Paramètres SMS' ? (profile.is_platform_owner===true||roles.includes('SUPER_ADMIN')) : n[0]==='Dashboard'||(n[0]==='Demandes SaaS' ? platformOwner : (
     (!viewKeys[n[0]] || actionAllowed(viewKeys[n[0]]!)) &&
     (n[0]==='Centre de contrôle' ? actionAllowed('audit.read') : isModuleAllowed(roles,access,accessLoaded,n[0]))));
   const currentPage = nav.some((item)=>item[0]===page&&visible(item)) ? page : 'Dashboard';
   return (
-    <div className="app-shell production-shell v2-shell" onClickCapture={handleUiClick}>
+    <div className="app-shell production-shell v2-shell" onClickCapture={handleUiClick} onSubmitCapture={event=>{if(expiredTrial){event.preventDefault();event.stopPropagation();setPaywallOpen(true)}}}>
       <aside className={mobile ? "mobile-open" : ""}>
         <div className="side-head">
           <img src={companyProfile.logo_light} />
@@ -3132,6 +3175,7 @@ function Shell({
             <NotificationBell onRowsChange={setNotificationRows} />
           </div>
         </header>
+        {expiredTrial&&<div className="trial-expired-banner" role="status"><span>Votre essai est terminé. Vos données restent visibles, mais les actions sont désactivées.</span><button type="button" onClick={()=>setPaywallOpen(true)}>Choisir un abonnement</button></div>}
         <main>
           {!online&&<div className="offline-banner" role="status"><strong>Mode hors connexion</strong><span>Les écrans déjà chargés restent disponibles. Attendez le retour du réseau avant d’enregistrer une modification.</span></div>}
           <AnimatePresence mode="wait">
@@ -3181,6 +3225,8 @@ function Shell({
                 <SmsSettings />
               ) : currentPage === "Objectifs & performance" ? (
                 <PerformanceGoals />
+              ) : currentPage === "Parrainage" ? (
+                <ReferralDashboard />
               ) : currentPage === "Centre de contrôle" ? (
                 <OperationsCenter profile={profile} />
               ) : currentPage === "Jumeau numérique" ? (
@@ -3200,6 +3246,7 @@ function Shell({
           </AnimatePresence>
         </main>
       </div>
+      {expiredTrial&&<TrialPaywall open={paywallOpen} onClose={()=>setPaywallOpen(false)} expiredAt={tenantTrial.access_expires_at!} canRequest={(profile.tenant_owner_id||profile.id)===profile.id}/>}
     </div>
   );
 }

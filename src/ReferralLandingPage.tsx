@@ -1,0 +1,12 @@
+import { ArrowLeft, ArrowRight, CheckCircle2, Gift, Link2, ShieldCheck } from 'lucide-react'
+import './referral.css'
+
+export default function ReferralLandingPage({onBack,onSignUp,onLogin}:{onBack:()=>void;onSignUp:()=>void;onLogin:()=>void}){
+  return <main className="referral-page">
+    <header className="referral-header"><button onClick={onBack}><ArrowLeft/> Retour au site</button><strong>SMARTSELL <span>· PARRAINAGE</span></strong><button onClick={onLogin}>Se connecter</button></header>
+    <section className="referral-hero"><span><Gift/> INVITEZ UNE ENTREPRISE, GRANDISSEZ ENSEMBLE</span><h1>Votre réseau mérite<br/><em>de vrais avantages.</em></h1><p>Faites découvrir SmartSell à une entreprise. Elle profite de 10 % sur son premier paiement mensuel ; vous recevez 10 % en crédit sur votre prochaine mensualité, après confirmation de son premier paiement.</p><div className="referral-actions"><button onClick={onSignUp}>Créer mon espace gratuit <ArrowRight/></button><button onClick={onLogin}>Obtenir mon lien de parrainage <Link2/></button></div></section>
+    <section className="referral-steps" aria-label="Comment fonctionne le parrainage"><article><b>01</b><h2>Partagez votre lien</h2><p>Depuis votre espace SmartSell, copiez votre lien personnel et transmettez-le à l’entreprise que vous recommandez.</p></article><article><b>02</b><h2>Votre filleul s’inscrit</h2><p>Il crée son propre espace, indépendant du vôtre, et peut tester la solution pendant 72 heures.</p></article><article><b>03</b><h2>Le paiement valide les avantages</h2><p>À son premier paiement mensuel confirmé, sa réduction de 10 % s’applique et votre crédit de 10 % devient disponible pour votre prochaine mensualité.</p></article></section>
+    <section className="referral-terms"><ShieldCheck/><div><h2>Des règles simples et transparentes</h2><p><CheckCircle2/> Aucun avantage n’est déclenché par une simple inscription ou une demande de paiement.</p><p><CheckCircle2/> L’offre concerne les mensualités uniquement ; elle ne se cumule pas avec la remise annuelle.</p><p><CheckCircle2/> Un filleul ne peut utiliser qu’une seule recommandation et chaque premier paiement ne génère qu’un crédit parrain.</p><p>Le paiement mobile est en cours de raccordement : vous pouvez déjà partager votre lien et suivre les inscriptions, mais les crédits ne seront acquis qu’après confirmation effective d’un paiement.</p></div></section>
+    <footer><button onClick={onBack}>Retour à SmartSell</button><button onClick={onSignUp}>Essayer gratuitement <ArrowRight/></button></footer>
+  </main>
+}

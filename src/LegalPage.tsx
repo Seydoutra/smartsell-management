@@ -15,7 +15,7 @@ const privacy = [
 
 const terms = [
   ['Objet', 'SmartSell est une plateforme de gestion d’entreprise réunissant notamment CRM, projets, planning, production, éditorial, finance, équipe, documents et automatisations.'],
-  ['Essai de 72 heures', 'L’accès d’essai est disponible pendant 72 heures à compter de l’activation du compte. À son terme, l’accès peut être suspendu jusqu’à l’achat ou l’activation d’un abonnement.'],
+  ['Essai de 72 heures', 'L’accès d’essai est disponible pendant 72 heures à compter de l’activation du compte, sauf prolongation accordée par SmartSell. À son terme, les données restent consultables, mais les modifications et envois sont suspendus jusqu’à l’activation d’un abonnement.'],
   ['Abonnement ou licence', 'L’utilisation au-delà de l’essai dépend de l’offre souscrite. Les fonctions, quotas, utilisateurs inclus, services d’intégration et conditions de maintenance sont précisés dans la proposition commerciale.'],
   ['Utilisation acceptable', 'L’utilisateur s’engage à protéger ses accès, à respecter les droits des tiers et à ne pas utiliser le service à des fins illicites, frauduleuses ou susceptibles de compromettre sa sécurité.'],
   ['Données et propriété', 'Le client reste propriétaire de ses données. SmartSell conserve les droits relatifs au logiciel, à son architecture et à ses composants, sauf disposition différente convenue par écrit.'],

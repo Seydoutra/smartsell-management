@@ -33,12 +33,12 @@ export async function signIn(email:string,password:string){
   const {data:profile, error:profileError}=await client.from('profiles').select('active,access_expires_at').eq('id',data.user.id).single();
   if(profileError){await client.auth.signOut();throw new Error('Profil utilisateur introuvable.');}
   if(!profile.active){await client.auth.signOut();throw new Error('Ce compte est suspendu. Contactez le Super Admin.');}
-  if(profile.access_expires_at&&new Date(profile.access_expires_at).getTime()<=Date.now()){await client.auth.signOut();throw new Error('La période d’essai de ce compte est terminée. Contactez SmartSell pour poursuivre.');}
+  // An expired SaaS trial stays signed in so the workspace remains readable.
   return data;
 }
-export async function signUpWithPassword(input:{email:string;password:string;fullName:string;companyName:string}){
+export async function signUpWithPassword(input:{email:string;password:string;fullName:string;companyName:string;referralCode?:string}){
   const redirectTo=new URL(import.meta.env.BASE_URL,location.origin);redirectTo.hash='app';
-  const {data,error}=await db().auth.signUp({email:input.email,password:input.password,options:{emailRedirectTo:redirectTo.href,data:{name:input.fullName,full_name:input.fullName,company_name:input.companyName,trial_hours:72}}});
+  const {data,error}=await db().auth.signUp({email:input.email,password:input.password,options:{emailRedirectTo:redirectTo.href,data:{name:input.fullName,full_name:input.fullName,company_name:input.companyName,trial_hours:72,referral_code:input.referralCode||null}}});
   fail(error);return data
 }
 export async function resendConfirmationEmail(email:string){
@@ -49,8 +49,8 @@ export async function resendConfirmationEmail(email:string){
 export async function startSmsSignupOtp(input:{phone:string;email:string;fullName:string;companyName:string}){
   return invokeEdge<{challenge_id:string;expires_at:string}>('signup-otp-start',{phone:input.phone,email:input.email,full_name:input.fullName,company_name:input.companyName});
 }
-export async function verifySmsSignupOtp(input:{challengeId:string;code:string;password:string}){
-  return invokeEdge<{success:boolean;email:string}>('signup-otp-verify',{challenge_id:input.challengeId,code:input.code,password:input.password});
+export async function verifySmsSignupOtp(input:{challengeId:string;code:string;password:string;referralCode?:string}){
+  return invokeEdge<{success:boolean;email:string}>('signup-otp-verify',{challenge_id:input.challengeId,code:input.code,password:input.password,referral_code:input.referralCode||null});
 }
 export async function startPasswordResetOtp(input:{email:string;phone:string}){
   return invokeEdge<{challenge_id:string;expires_at:string}>('password-reset-otp-start',{email:input.email,phone:input.phone});
@@ -66,7 +66,22 @@ export async function signInWithGoogle(){
 export async function signOut(){const {error}=await db().auth.signOut();fail(error)}
 export async function currentSession(){return (await db().auth.getSession()).data.session}
 export function onAuthChange(callback:()=>void){return db().auth.onAuthStateChange(callback).data.subscription}
-export async function getProfile():Promise<Profile>{const client=db();const {data:{user}}=await client.auth.getUser();if(!user)throw new Error('Session expirée');const {data,error}=await client.from('profiles').select('*').eq('id',user.id).single();fail(error);const profile=data as Profile;if(!profile.active||(profile.access_expires_at&&new Date(profile.access_expires_at).getTime()<=Date.now())){await client.auth.signOut();throw new Error(profile.access_expires_at?'Votre période d’essai est terminée.':'Votre compte est suspendu.')}return profile}
+export async function getProfile():Promise<Profile>{
+  const client=db(),{data:{user}}=await client.auth.getUser()
+  if(!user)throw new Error('Session expirée')
+  const {data,error}=await client.from('profiles').select('*').eq('id',user.id).single();fail(error)
+  const profile=data as Profile
+  if(!profile.active){await client.auth.signOut();throw new Error('Votre compte est suspendu.')}
+  const code=String(user.user_metadata?.referral_code||localStorage.getItem('smartsell-referral-code')||'').toUpperCase()
+  if(/^[A-F0-9]{10}$/.test(code)){
+    void client.rpc('claim_referral_code',{p_code:code}).then(({error:claimError})=>{if(!claimError)localStorage.removeItem('smartsell-referral-code')})
+  }
+  return profile
+}
+export async function getReferralSummary():Promise<{code:string;signups:number;converted:number;credits_available:number;credits_redeemed:number}>{const {data,error}=await db().rpc('my_referral_summary');fail(error);return data as {code:string;signups:number;converted:number;credits_available:number;credits_redeemed:number}}
+export async function getOrCreateReferralCode():Promise<string>{const {data,error}=await db().rpc('get_or_create_referral_code');fail(error);return data as string}
+export async function getTenantTrialStatus(profile:Profile):Promise<{is_temporary:boolean;access_expires_at:string|null}>{const ownerId=profile.tenant_owner_id||profile.id;if(ownerId===profile.id)return {is_temporary:Boolean(profile.is_temporary),access_expires_at:profile.access_expires_at||null};const {data,error}=await db().from('profiles').select('is_temporary,access_expires_at').eq('id',ownerId).single();fail(error);if(!data)throw new Error('Espace introuvable');return {is_temporary:Boolean(data.is_temporary),access_expires_at:data.access_expires_at}}
+export async function createSubscriptionRequest(input:{plan:'ESSENTIEL'|'CROISSANCE'|'ENTREPRISE';billing_period:'MONTHLY'|'ANNUAL';payment_method:'ORANGE_MONEY'|'MOBILE_MONEY';phone:string}){const {data,error}=await db().rpc('create_subscription_request',{p_plan:input.plan,p_billing_period:input.billing_period,p_payment_method:input.payment_method,p_phone:input.phone.trim()});fail(error);return data as {id:string;base_amount_gnf:number;discount_gnf:number;discount_kind:'NONE'|'FILLEUL'|'PARRAIN';amount_gnf:number}}
 
 export async function listClients():Promise<Client[]>{return cached('clients',async()=>{const {data,error}=await db().from('clients').select('*').order('created_at',{ascending:false});fail(error);return data as Client[]})}
 export async function createClient(input:Partial<Client>){const {data,error}=await db().from('clients').insert({name:input.name,legal_name:input.legal_name||null,sector:input.sector||null,phone:input.phone||null,whatsapp:input.whatsapp||null,email:input.email||null,address:input.address||null,avatar_url:input.avatar_url||null,status:'ACTIVE'}).select().single();fail(error);invalidate('clients');return data as Client}
@@ -118,8 +133,8 @@ export async function listEquipmentMovements(equipmentId?:string):Promise<Equipm
 export async function recordEquipmentMovement(input:{equipment_id:string;movement_type:'SORTIE'|'ENTREE'|'RETOUR';condition_notes?:string;reason?:string}){const {data,error}=await db().rpc('record_equipment_movement',{p_equipment_id:input.equipment_id,p_movement_type:input.movement_type,p_condition_notes:input.condition_notes||null,p_reason:input.reason||null});fail(error);return data}
 export async function listActivityLogs():Promise<ActivityLog[]>{const {data,error}=await db().from('activity_logs').select('*,profiles:actor_id(full_name)').order('created_at',{ascending:false}).limit(200);fail(error);return data as ActivityLog[]}
 export async function listUserSessions():Promise<UserSession[]>{const {data,error}=await db().from('user_sessions').select('*,profiles:profile_id(full_name)').order('last_seen_at',{ascending:false}).limit(200);fail(error);return data as UserSession[]}
-export async function listNotifications():Promise<Notification[]>{const {data,error}=await db().from('notifications').select('*,profiles:profile_id(full_name)').order('created_at',{ascending:false}).limit(100);fail(error);return data as Notification[]}
-export async function markNotificationRead(id:string){const {data,error}=await db().from('notifications').update({read_at:new Date().toISOString()}).eq('id',id).select().single();fail(error);return data as Notification}
+export async function listNotifications():Promise<Notification[]>{const client=db(),{data:{user}}=await client.auth.getUser();if(!user)throw new Error('Session expirée');const {data,error}=await client.from('notifications').select('*,profiles:profile_id(full_name)').eq('profile_id',user.id).order('created_at',{ascending:false}).limit(100);fail(error);return data as Notification[]}
+export async function markNotificationRead(id:string){const client=db(),{data:{user}}=await client.auth.getUser();if(!user)throw new Error('Session expirée');const {data,error}=await client.from('notifications').update({read_at:new Date().toISOString()}).eq('id',id).eq('profile_id',user.id).select().single();fail(error);return data as Notification}
 export async function markAllNotificationsRead(){const {data:{user}}=await db().auth.getUser();if(!user)throw new Error('Session expirée');const {error}=await db().from('notifications').update({read_at:new Date().toISOString()}).eq('profile_id',user.id).is('read_at',null);fail(error)}
 export async function getCompanySettings():Promise<CompanySettings|null>{const {data,error}=await db().from('company_profile').select('*').limit(1).maybeSingle();fail(error);return data as CompanySettings|null}
 export async function updateCompanySettings(input:Partial<CompanySettings>){const current=await getCompanySettings();const query=current?db().from('company_profile').update(input).eq('id',current.id):db().from('company_profile').insert(input);const {data,error}=await query.select().single();fail(error);return data as CompanySettings}

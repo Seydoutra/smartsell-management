@@ -124,3 +124,16 @@
 .theme-light .landing-header-actions .landing-login{border-color:rgba(74,39,84,.35);background:#fff;color:#542361}
 .theme-light .landing-existing{color:#524a58!important}
 @media(max-width:740px){.landing-header-actions{display:flex}.landing-header-actions .landing-login{display:inline-flex}.landing-header-actions .landing-nav-cta{display:grid}.landing-header-actions .landing-preferences,.landing-header-actions .header-whatsapp{display:none}.landing-menu{margin-left:0}.landing-header nav .mobile-login{display:block}}
+
+/* Fixed promise + changing business use cases; keep the line stable while typing. */
+.landing-hero-fixed,.landing-hero-rotator{display:block}
+.landing-hero-rotator{min-height:1.12em;color:var(--lp-yellow);overflow-wrap:anywhere}
+.landing-hero-rotator em{font-style:normal}
+.landing-hero-rotator em:after{content:"";display:inline-block;width:.055em;height:.8em;margin-left:.08em;background:currentColor;vertical-align:-.06em;animation:landingCaret .7s step-end infinite}
+@keyframes landingCaret{50%{opacity:0}}
+.landing-reveal-text{opacity:0;transform:translateY(20px);filter:blur(4px);transition:opacity .65s ease,transform .75s cubic-bezier(.2,.8,.2,1),filter .75s ease}
+.landing-reveal-text[data-reveal-mode=zoom]{transform:scale(.96)}
+.landing-reveal-text.is-visible{opacity:1;transform:none;filter:none}
+@media(max-width:700px){.landing-hero h1{font-size:clamp(2.15rem,9vw,3.5rem);line-height:1.04}.landing-footer{grid-template-columns:minmax(0,1fr) auto;max-width:calc(100vw - 16px);gap:8px}.landing-footer .footer-bar-nav{min-width:0;max-width:100%;overflow-x:auto;scrollbar-width:thin}.landing-footer .footer-bar-actions{min-width:0}.footer-bar-brand{min-width:0}.footer-bar-brand img{max-width:100%;height:auto}}
+@media(max-width:390px){.landing-footer{grid-template-columns:minmax(0,1fr);padding:10px}.landing-footer .footer-bar-actions{grid-row:2;justify-self:stretch;justify-content:space-between}.landing-footer .footer-bar-nav{grid-row:3}.landing-footer .footer-bar-actions>a{font-size:.54rem;width:auto;padding:0 9px}}
+@media(prefers-reduced-motion:reduce){.landing-hero-rotator em:after{animation:none}.landing-reveal-text{opacity:1;transform:none;filter:none;transition:none}}

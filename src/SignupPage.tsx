@@ -10,6 +10,11 @@ import { persistBrandTheme, readBrandTheme } from './lib/brandTheme'
 type Props = { onBack: () => void; onAccess: () => void }
 
 export default function SignupPage({ onBack, onAccess }: Props) {
+  const [referralCode] = useState(() => {
+    const code = new URLSearchParams(window.location.hash.split('?')[1] || '').get('ref')?.trim().toUpperCase() || ''
+    if (/^[A-F0-9]{10}$/.test(code)) localStorage.setItem('smartsell-referral-code', code)
+    return /^[A-F0-9]{10}$/.test(code) ? code : localStorage.getItem('smartsell-referral-code') || ''
+  })
   const [showPassword, setShowPassword] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -50,7 +55,7 @@ export default function SignupPage({ onBack, onAccess }: Props) {
         setSmsChallenge({ id: result.challenge_id, email, password })
         setError('')
       } else {
-        const result = await signUpWithPassword({ email, password, fullName, companyName })
+        const result = await signUpWithPassword({ email, password, fullName, companyName, referralCode })
         if (result.session) {
           persistBrandTheme(brandTheme)
           sessionStorage.setItem('smartsell-show-welcome', '1')
@@ -83,7 +88,7 @@ export default function SignupPage({ onBack, onAccess }: Props) {
       <span>CONFIRMATION PAR SMS</span>
       <h1>Entrez le code reçu.</h1>
       <p>Un code à 6 chiffres a été envoyé par Nimba au numéro indiqué. Il est valable 10 minutes.</p>
-      <form onSubmit={async event => { event.preventDefault(); setBusy(true); setError(''); try { await verifySmsSignupOtp({ challengeId: smsChallenge.id, code: String(new FormData(event.currentTarget).get('code') || ''), password: smsChallenge.password }); persistBrandTheme(brandTheme); sessionStorage.setItem('smartsell-show-welcome', '1'); onAccess(); } catch (reason) { setError(humanizeSignupError(reason)) } finally { setBusy(false) } }}>
+      <form onSubmit={async event => { event.preventDefault(); setBusy(true); setError(''); try { await verifySmsSignupOtp({ challengeId: smsChallenge.id, code: String(new FormData(event.currentTarget).get('code') || ''), password: smsChallenge.password, referralCode }); persistBrandTheme(brandTheme); sessionStorage.setItem('smartsell-show-welcome', '1'); onAccess(); } catch (reason) { setError(humanizeSignupError(reason)) } finally { setBusy(false) } }}>
         <label>Code reçu par SMS<input name="code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" required placeholder="000000"/></label>
         {error && <div className="signup-error"><LockKeyhole/>{error}</div>}
         <button className="signup-submit" disabled={busy}>{busy ? 'Vérification…' : 'Valider et créer mon espace'} <ArrowRight/></button>
@@ -104,6 +109,7 @@ export default function SignupPage({ onBack, onAccess }: Props) {
         <span className="signup-eyebrow"><i/> CRÉER MON ESPACE</span>
         <h2>Bienvenue chez SmartSell.</h2>
         <p>Quelques informations suffisent pour commencer.</p>
+        {referralCode&&<p className="signup-referral-note">Votre parrainage est associé à ce compte. La réduction sera appliquée sur votre premier paiement mensuel confirmé.</p>}
         <button type="button" className="google-button" onClick={async () => { setError(''); if (isDemoMode) return setError('La connexion Google sera disponible sur la version publiée.'); setBusy(true); try { await signInWithGoogle() } catch (reason) { setError(reason instanceof Error ? reason.message : 'Connexion Google impossible.') } finally { setBusy(false) } }}><b>G</b> Continuer avec Google</button>
         <div className="signup-divider"><span/>inscription sécurisée par SMS<span/></div>
         <div className="signup-fields"><label>Nom complet<input name="fullName" autoComplete="name" required placeholder="Awa Touré"/></label><label>Entreprise<input name="companyName" autoComplete="organization" required placeholder="Votre entreprise"/></label></div>
