@@ -7,6 +7,7 @@ export type CanvaWorkspaceProfile = {
 export type CanvaWorkspacePermissions = {
   allowed_modules: string[] | null
   denied_permissions: string[] | null
+  canva_access: boolean | null
 } | null
 
 export function resolveCanvaWorkspace(profileId: string, profile: CanvaWorkspaceProfile, permissions: CanvaWorkspacePermissions) {
@@ -14,8 +15,8 @@ export function resolveCanvaWorkspace(profileId: string, profile: CanvaWorkspace
   const isOwner = tenantOwnerId === profileId
   const roles = profile.roles || []
   const isClient = profile.role === 'CLIENT' || roles.includes('CLIENT')
-  const isSuperAdmin = profile.role === 'SUPER_ADMIN' || roles.includes('SUPER_ADMIN')
-  const canView = !isClient && (isOwner || isSuperAdmin || Boolean(
+  const canView = !isClient && (isOwner || Boolean(
+    permissions?.canva_access &&
     permissions?.allowed_modules?.includes('Éditorial') &&
     !permissions?.denied_permissions?.includes('editorial.view')
   ))

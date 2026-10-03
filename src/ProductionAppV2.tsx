@@ -3232,7 +3232,7 @@ function Shell({
               ) : currentPage === "Demandes SaaS" ? (
                 <SignupRequestsPage />
               ) : currentPage === "RH" ? (
-                <HRPage />
+                <HRPage currentProfileId={profile.id} />
               ) : currentPage === "Rapports" ? (
                 <ReportsPage />
               ) : currentPage === "Paramètres SMS" ? (

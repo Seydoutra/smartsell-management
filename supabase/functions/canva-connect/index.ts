@@ -18,7 +18,7 @@ async function accessToken(connection:Connection){if(new Date(connection.token_e
 async function workspaceAccess(admin:ReturnType<typeof adminClient>,profileId:string){
   const {data:profile,error}=await admin.from('profiles').select('tenant_owner_id,role,roles').eq('id',profileId).single()
   if(error||!profile)throw new Error('Espace Canva introuvable')
-  const {data:access,error:accessError}=await admin.from('user_access_controls').select('allowed_modules,denied_permissions').eq('profile_id',profileId).maybeSingle()
+  const {data:access,error:accessError}=await admin.from('user_access_controls').select('allowed_modules,denied_permissions,canva_access').eq('profile_id',profileId).maybeSingle()
   if(accessError)throw accessError
   return resolveCanvaWorkspace(profileId,profile,access)
 }
@@ -44,8 +44,36 @@ Deno.serve(async(request)=>{
   if(request.method!=='POST')return json(request,{error:'Méthode non autorisée'},405)
   try{
     const {admin,user}=await authenticated(request)
-    const {action,design_id}=await request.json() as {action:'start'|'status'|'designs'|'design'|'disconnect';design_id?:string}
+    const {action,design_id,target_profile_id,enabled}=await request.json() as {action:'start'|'status'|'designs'|'design'|'disconnect'|'permissions'|'set-access';design_id?:string;target_profile_id?:string;enabled?:boolean}
     const workspace=await workspaceAccess(admin,user.id)
+    if(action==='permissions'){
+      if(!workspace.isOwner)return json(request,{error:'Seul le propriétaire peut gérer les accès Canva.'},403)
+      const [{data:members,error:memberError},{data:grants,error:grantError}]=await Promise.all([
+        admin.from('profiles').select('id').eq('tenant_owner_id',workspace.tenantOwnerId),
+        admin.from('user_access_controls').select('profile_id,canva_access,allowed_modules,denied_permissions').eq('tenant_owner_id',workspace.tenantOwnerId),
+      ])
+      if(memberError||grantError)throw memberError||grantError
+      const memberIds=new Set((members||[]).map(item=>item.id))
+      return json(request,{items:(grants||[]).filter(item=>memberIds.has(item.profile_id)).map(item=>({profileId:item.profile_id,enabled:item.canva_access===true,editorialAccess:(item.allowed_modules||[]).includes('Éditorial')&&!(item.denied_permissions||[]).includes('editorial.view')}))})
+    }
+    if(action==='set-access'){
+      if(!workspace.isOwner)return json(request,{error:'Seul le propriétaire peut modifier les accès Canva.'},403)
+      if(typeof target_profile_id!=='string'||typeof enabled!=='boolean')return json(request,{error:'Demande invalide'},400)
+      const {data:target,error:targetError}=await admin.from('profiles').select('id,tenant_owner_id,role,roles').eq('id',target_profile_id).maybeSingle()
+      if(targetError)throw targetError
+      if(!target||target.tenant_owner_id!==workspace.tenantOwnerId||target.id===workspace.tenantOwnerId||target.role==='CLIENT'||(target.roles||[]).includes('CLIENT'))return json(request,{error:'Collaborateur de cet espace introuvable.'},403)
+      const {data:existing,error:existingError}=await admin.from('user_access_controls').select('profile_id,allowed_modules,denied_permissions').eq('profile_id',target.id).maybeSingle()
+      if(existingError)throw existingError
+      const editorialGrant=enabled?{
+        allowed_modules:Array.from(new Set([...(existing?.allowed_modules||[]),'Éditorial'])),
+        denied_permissions:(existing?.denied_permissions||[]).filter((permission:string)=>permission!=='editorial.view'),
+      }:{}
+      const result=existing
+        ?await admin.from('user_access_controls').update({canva_access:enabled,...editorialGrant,updated_by:user.id,updated_at:new Date().toISOString()}).eq('profile_id',target.id)
+        :await admin.from('user_access_controls').insert({profile_id:target.id,tenant_owner_id:workspace.tenantOwnerId,canva_access:enabled,...editorialGrant,updated_by:user.id})
+      if(result.error)throw result.error
+      return json(request,{profileId:target.id,enabled})
+    }
     if(action==='start'){
       if(!workspace.isOwner)return json(request,{error:'Seul le propriétaire de cet espace peut connecter Canva.'},403)
       const clientId=required('CANVA_CLIENT_ID');required('CANVA_CLIENT_SECRET');required('CANVA_TOKEN_ENCRYPTION_KEY')
@@ -57,7 +85,7 @@ Deno.serve(async(request)=>{
     }
     const {data:connection,error}=await admin.from('canva_connections').select('*').eq('profile_id',workspace.tenantOwnerId).maybeSingle()
     if(error)throw error
-    if(action==='status')return json(request,{connected:workspace.canView&&!!connection,configured:!!(Deno.env.get('CANVA_CLIENT_ID')&&Deno.env.get('CANVA_CLIENT_SECRET')&&Deno.env.get('CANVA_TOKEN_ENCRYPTION_KEY')),canManage:workspace.isOwner,shared:!workspace.isOwner})
+    if(action==='status')return json(request,{connected:workspace.canView&&!!connection,sharedConnected:!!connection,accessGranted:workspace.canView,configured:!!(Deno.env.get('CANVA_CLIENT_ID')&&Deno.env.get('CANVA_CLIENT_SECRET')&&Deno.env.get('CANVA_TOKEN_ENCRYPTION_KEY')),canManage:workspace.isOwner,shared:!workspace.isOwner})
     if(action==='disconnect'){
       if(!workspace.isOwner)return json(request,{error:'Seul le propriétaire de cet espace peut déconnecter Canva.'},403)
       if(connection){const {error:removeError}=await admin.from('canva_connections').delete().eq('profile_id',workspace.tenantOwnerId);if(removeError)throw removeError}
