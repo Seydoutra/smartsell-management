@@ -50,6 +50,8 @@ import { commercialDrafts, commercialKindNames, commercialPdfFile } from './lib/
 import { useOnlineStatus } from "./lib/network";
 import BetaSandboxApp from "./BetaSandboxApp";
 import CommunicationHub from "./CommunicationHub";
+import TeamChat from "./TeamChat";
+import TeamActivityDashboard from "./TeamActivityDashboard";
 import CanvaIntegrationPanel from "./CanvaIntegrationPanel";
 import PlanningCalendar from "./PlanningCalendar";
 import { ClientConversationDesk, ClientPortalExperience } from "./ClientPortalExperience";
@@ -145,6 +147,7 @@ import {
   listServices,
   listSuppliers,
   listTasks,
+  listTeamChatMessages,
   listUserSessions,
   onAuthChange,
   recordPayment,
@@ -199,6 +202,7 @@ import type {
   Supplier,
   SocialIntegration,
   Task,
+  TeamChatMessage,
   UserSession,
 } from "./types/models";
 
@@ -1170,13 +1174,14 @@ function ProjectDetail({
     </Modal>
   );
 }
-function ProjectsPage({ rights, clientFilter, onClearFilter }: { rights: CrudRights; clientFilter?: string | null; onClearFilter?: () => void }) {
+function ProjectsPage({ rights, currentProfileId, clientFilter, onClearFilter }: { rights: CrudRights; currentProfileId: string; clientFilter?: string | null; onClearFilter?: () => void }) {
   const [rows, setRows] = useState<Project[]>([]),
     [clients, setClients] = useState<Client[]>([]),
     [profiles, setProfiles] = useState<Profile[]>([]),
     [open, setOpen] = useState(false),
     [selected, setSelected] = useState<string | null>(null),
     [view, setView] = useState<'BOARD'|'LIST'>('BOARD'),
+    [scope, setScope] = useState<'MINE'|'ALL'>('MINE'),
     [dragId, setDragId] = useState<string | null>(null),
     [error, setError] = useState("");
   const load = () => listProjects().then(setRows).catch((e) => setError(e.message));
@@ -1190,7 +1195,8 @@ function ProjectsPage({ rights, clientFilter, onClearFilter }: { rights: CrudRig
   useEffect(() => {
     void load();
   }, []);
-  const displayedRows = clientFilter ? rows.filter((row) => row.client_id === clientFilter) : rows;
+  const scopedRows = scope === 'MINE' ? rows.filter(row => row.manager_id === currentProfileId || row.project_members?.some(member => member.profile_id === currentProfileId)) : rows;
+  const displayedRows = clientFilter ? scopedRows.filter((row) => row.client_id === clientFilter) : scopedRows;
   return (
     <>
       <Header
@@ -1205,6 +1211,7 @@ function ProjectsPage({ rights, clientFilter, onClearFilter }: { rights: CrudRig
         </div>
       </Header>
       {clientFilter && <div className="filter-banner"><span>Affichage des projets du client sélectionné.</span><button type="button" onClick={onClearFilter}>Afficher tous les projets</button></div>}
+      <div className="work-scope-tabs" role="group" aria-label="Portée des projets"><button type="button" className={scope==='MINE'?'active':''} onClick={()=>setScope('MINE')}>Mes projets <span>{rows.filter(row=>row.manager_id===currentProfileId||row.project_members?.some(member=>member.profile_id===currentProfileId)).length}</span></button><button type="button" className={scope==='ALL'?'active':''} onClick={()=>setScope('ALL')}>Tous les projets <span>{rows.length}</span></button></div>
       <ErrorBar value={error} />
       {view==='BOARD' ? <section className="kanban-board project-kanban-board">{(['PLANIFIE','EN_COURS','EN_ATTENTE','TERMINE'] as const).map(status=><div className="kanban-column" key={status} onDragOver={event=>event.preventDefault()} onDrop={async()=>{if(!dragId||!rights.update)return;try{await updateProject(dragId,{status});setDragId(null);await load()}catch(e){setError(e instanceof Error?e.message:'Déplacement impossible')}}}><header><strong>{label(status)}</strong><span>{displayedRows.filter(row=>row.status===status).length}</span></header>{displayedRows.filter(row=>row.status===status).map(project=><article className="kanban-card project-kanban-card" key={project.id} draggable={rights.update} onDragStart={()=>setDragId(project.id)} onClick={()=>{setSelected(project.id);loadReferences()}}><div className="record-main"><span className="record-avatar">PR</span><div><strong>{project.name}</strong><small>{project.clients?.name||'Sans client'}</small></div></div><small>{project.project_members?.map(member=>member.profiles?.full_name).filter(Boolean).join(', ')||project.profiles?.full_name||'Sans équipe'}</small><footer><span className={`status ${statusTone(project.priority)}`}>{label(project.priority)}</span><time>{project.progress}% · {fmt(project.ends_on)}</time></footer><i className="mini-progress"><b style={{width:`${project.progress}%`}}/></i></article>)}</div>)}</section> : <div className="records panel">
         {!displayedRows.length ? (
@@ -1307,12 +1314,14 @@ function ProjectsPage({ rights, clientFilter, onClearFilter }: { rights: CrudRig
 
 function TasksPage({
   rights,
+  currentProfileId,
   canAssign = false,
   planning = false,
   clientFilter,
   onClearFilter,
 }: {
   rights: CrudRights;
+  currentProfileId: string;
   canAssign?: boolean;
   planning?: boolean;
   clientFilter?: string | null;
@@ -1327,6 +1336,7 @@ function TasksPage({
       useState<CalendarConnection | null>(null),
     [calendarBusy, setCalendarBusy] = useState(false),
     [view,setView]=useState<'LIST'|'KANBAN'>('LIST'),
+    [scope,setScope]=useState<'MINE'|'ALL'>('MINE'),
     [planningView,setPlanningView]=useState<'CALENDAR'|'LIST'>('CALENDAR'),
     [dragId,setDragId]=useState<string|null>(null),
     [error, setError] = useState("");
@@ -1368,7 +1378,9 @@ function TasksPage({
     const g = (d: Date) => d.toISOString().replace(/[-:]|\.\d{3}/g, "");
     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(t.title)}&dates=${g(start)}/${g(end)}&details=${encodeURIComponent(t.description || "Tâche Smartsell")}`;
   };
-  const displayedRows = clientFilter ? rows.filter((row) => row.projects?.client_id === clientFilter) : rows;
+  const myTasks = rows.filter(row => row.assignee_id === currentProfileId || row.task_assignees?.some(member => member.profile_id === currentProfileId));
+  const scopedRows = scope === 'MINE' ? myTasks : rows;
+  const displayedRows = clientFilter ? scopedRows.filter((row) => row.projects?.client_id === clientFilter) : scopedRows;
   return (
     <>
       <Header
@@ -1382,6 +1394,7 @@ function TasksPage({
         add="Nouvelle tâche"
       />
       {clientFilter && <div className="filter-banner"><span>Affichage des tâches du client sélectionné.</span><button type="button" onClick={onClearFilter}>Afficher toutes les tâches</button></div>}
+      <div className="work-scope-tabs" role="group" aria-label="Portée des tâches"><button type="button" className={scope==='MINE'?'active':''} onClick={()=>setScope('MINE')}>Mes tâches <span>{myTasks.length}</span></button><button type="button" className={scope==='ALL'?'active':''} onClick={()=>setScope('ALL')}>Toutes les tâches <span>{rows.length}</span></button></div>
       {planning && (
         <section className="panel calendar-connection">
           <div className="channel-icon">
@@ -1424,7 +1437,7 @@ function TasksPage({
       {planning&&<div className="kanban-toolbar"><button className={planningView==='CALENDAR'?'active':''} onClick={()=>setPlanningView('CALENDAR')}>Calendrier global</button><button className={planningView==='LIST'?'active':''} onClick={()=>setPlanningView('LIST')}>Liste des tâches</button></div>}
       {planning&&planningView==='CALENDAR'&&<PlanningCalendar tasks={displayedRows} onSelect={task=>{setSelected(task);loadReferences()}}/>}
       {!planning&&<div className="kanban-toolbar"><button className={view==='LIST'?'active':''} onClick={()=>setView('LIST')}>Liste</button><button className={view==='KANBAN'?'active':''} onClick={()=>setView('KANBAN')}>Tableau Kanban</button><span>Déplacez une carte entre les colonnes pour mettre à jour son statut.</span></div>}
-      {planning&&planningView==='CALENDAR'?null:view==='KANBAN'&&!planning?<section className="kanban-board">{(['A_FAIRE','EN_COURS','EN_ATTENTE','TERMINE'] as const).map(status=><div className="kanban-column" key={status} onDragOver={event=>event.preventDefault()} onDrop={async()=>{if(!dragId||!rights.update)return;try{await updateTask(dragId,{status});setDragId(null);await load()}catch(e){setError(e instanceof Error?e.message:'Déplacement impossible')}}}><header><strong>{label(status)}</strong><span>{displayedRows.filter(row=>row.status===status).length}</span></header>{displayedRows.filter(row=>row.status===status).map(task=><article className="kanban-card" key={task.id} draggable={rights.update} onDragStart={()=>setDragId(task.id)} onClick={()=>{setSelected(task);loadReferences()}}><strong>{task.title}</strong><small>{task.projects?.name||'Sans projet'}</small><small>{task.task_assignees?.map(member=>member.profiles?.full_name).filter(Boolean).join(', ')||task.profiles?.full_name||'Non assignée'}</small><footer><span className={`status ${statusTone(task.priority)}`}>{label(task.priority)}</span><time>{fmt(task.due_at)}</time></footer></article>)}</div>)}</section>:<div className="records panel">
+      {planning&&planningView==='CALENDAR'?null:view==='KANBAN'&&!planning?<section className="kanban-board">{(['A_FAIRE','EN_COURS','EN_ATTENTE','EN_REVUE','BLOQUE','TERMINE'] as const).map(status=><div className="kanban-column" data-tone={statusTone(status)} key={status} onDragOver={event=>event.preventDefault()} onDrop={async()=>{if(!dragId||!rights.update)return;try{await updateTask(dragId,{status});setDragId(null);setError('');await load()}catch(e){setError(e instanceof Error?e.message:'Déplacement impossible')}}}><header><strong>{label(status)}</strong><span>{displayedRows.filter(row=>row.status===status).length}</span></header>{displayedRows.filter(row=>row.status===status).map(task=><article className="kanban-card" data-tone={statusTone(task.status)} key={task.id} draggable={rights.update} onDragStart={()=>setDragId(task.id)} onClick={()=>{setSelected(task);loadReferences()}}><strong>{task.title}</strong><small>{task.projects?.name||'Sans projet'}</small><small>{task.task_assignees?.map(member=>member.profiles?.full_name).filter(Boolean).join(', ')||task.profiles?.full_name||'Non assignée'}</small><footer><span className={`status ${statusTone(task.status)}`}>{label(task.status)}</span><time>{fmt(task.due_at)}</time></footer></article>)}</div>)}</section>:<div className="records panel">
         {!displayedRows.length ? (
           <Empty name="tâche" onAdd={rights.create ? openCreator : undefined} />
         ) : (
@@ -1576,17 +1589,23 @@ function TasksPage({
               onSubmit={async (e) => {
                 e.preventDefault();
                 if (!rights.update) return;
-                const formData=new FormData(e.currentTarget);
-                const f = Object.fromEntries(formData) as Record<string, string>;
-                await updateTask(selected.id, {
-                  title: f.title,
-                  description: f.description,
-                  status: f.status,
-                  priority: f.priority,
-                  due_at: f.due_at || null,
-                },canAssign ? formData.getAll('assignee_ids').map(String) : undefined);
-                setSelected(null);
-                load();
+                try {
+                  const formData=new FormData(e.currentTarget);
+                  const f = Object.fromEntries(formData) as Record<string, string>;
+                  const nextAssignees=formData.getAll('assignee_ids').map(String).sort();
+                  const previousAssignees=(selected.task_assignees?.map(member=>member.profile_id)??(selected.assignee_id?[selected.assignee_id]:[])).sort();
+                  const assignmentsChanged=canAssign&&JSON.stringify(nextAssignees)!==JSON.stringify(previousAssignees);
+                  await updateTask(selected.id, {
+                    title: f.title,
+                    description: f.description,
+                    status: f.status,
+                    priority: f.priority,
+                    due_at: f.due_at || null,
+                  },assignmentsChanged?nextAssignees:undefined);
+                  setError('');
+                  setSelected(null);
+                  await load();
+                } catch (caught) { setError(caught instanceof Error?caught.message:'Mise à jour impossible'); }
               }}
             >
               <fieldset disabled={!rights.update} className="permission-fieldset"><div className="form-grid">
@@ -1597,9 +1616,10 @@ function TasksPage({
                   <select name="status" defaultValue={selected.status}>
                     <option>A_FAIRE</option>
                     <option>EN_COURS</option>
+                    <option>EN_ATTENTE</option>
                     <option>EN_REVUE</option>
-                    <option>TERMINE</option>
                     <option>BLOQUE</option>
+                    <option>TERMINE</option>
                   </select>
                 </Field>
                 {canAssign ? <Field label="Personnes assignées" wide>
@@ -3052,6 +3072,9 @@ function Shell({
     [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null),
     [installed, setInstalled] = useState(() => window.matchMedia('(display-mode: standalone)').matches),
     [notificationRows, setNotificationRows] = useState<Notification[]>([]),
+    [chatOpen,setChatOpen] = useState(false),
+    [chatWelcome,setChatWelcome] = useState(false),
+    [chatUnread,setChatUnread] = useState<TeamChatMessage[]>([]),
     [englishDashboard, setEnglishDashboard] = useState(false),
     [paywallOpen,setPaywallOpen] = useState(false),
     [trialClock,setTrialClock] = useState(Date.now()),
@@ -3085,6 +3108,22 @@ function Shell({
     const timer = window.setInterval(pulseSession, 60_000);
     return () => window.clearInterval(timer);
   }, [profile.id]);
+  const chatSeenKey=`smartsell-chat-seen:${profile.id}`;
+  const markChatRead=useCallback(()=>{localStorage.setItem(chatSeenKey,new Date().toISOString());setChatUnread([])},[chatSeenKey]);
+  useEffect(()=>{
+    if(profile.role==='CLIENT'||profile.roles?.includes('CLIENT'))return;
+    let active=true,first=true;
+    const load=()=>void listTeamChatMessages().then(rows=>{
+      if(!active)return;
+      const seen=localStorage.getItem(chatSeenKey)||'1970-01-01T00:00:00Z';
+      const unread=rows.filter(row=>row.sender_id!==profile.id&&row.created_at>seen);
+      setChatUnread(unread);
+      if(first&&unread.length)setChatWelcome(true);
+      first=false;
+    }).catch(()=>{first=false});
+    load();const timer=window.setInterval(load,30000);
+    return()=>{active=false;window.clearInterval(timer)};
+  },[profile.id,profile.role,profile.roles,chatSeenKey]);
   useEffect(() => {
     trackActivity("Page consultée", page, `Consultation de ${page}`);
   }, [page]);
@@ -3178,6 +3217,7 @@ function Shell({
           </div>
           <div className="top-actions">
             <button className="assist-header-btn" type="button" onClick={()=>navigate('Assistance')} title="Contacter l’assistance Smartsell" aria-label="Contacter l’assistance"><LifeBuoy/><span>Assistance</span></button>
+            <button className="icon-btn chat-header-btn" type="button" onClick={()=>{setChatWelcome(false);setChatOpen(true);markChatRead()}} title="Messages de l’équipe" aria-label={`Messages de l’équipe${chatUnread.length?` : ${chatUnread.length} non lus`:''}`}><MessageSquareText/>{chatUnread.length>0&&<b>{chatUnread.length>99?'99+':chatUnread.length}</b>}</button>
             {!installed&&<button className="install-app-btn" onClick={()=>void installApp()} title="Installer Smartsell Management sur cet appareil"><Download/><span>Installer l’application</span></button>}
             <button className="language-toggle" onClick={()=>setEnglishDashboard(value=>!value)} title="Dashboard language">{englishDashboard?"FR":"EN"}</button>
             <button
@@ -3204,11 +3244,11 @@ function Shell({
               ) : currentPage === "Clients" ? (
                 <ClientsPage rights={rightsFor('clients')} onNavigate={(next,clientId)=>navigate(next,clientId)} />
               ) : currentPage === "Projets" ? (
-                <ProjectsPage rights={rightsFor('projects')} clientFilter={clientFilter} onClearFilter={()=>navigate("Projets")} />
+                <ProjectsPage rights={rightsFor('projects')} currentProfileId={profile.id} clientFilter={clientFilter} onClearFilter={()=>navigate("Projets")} />
               ) : currentPage === "Tâches" ? (
-                <TasksPage rights={rightsFor('tasks')} canAssign={actionAllowed('tasks.assign')} clientFilter={clientFilter} onClearFilter={()=>navigate("Tâches")} />
+                <TasksPage rights={rightsFor('tasks')} currentProfileId={profile.id} canAssign={actionAllowed('tasks.assign')} clientFilter={clientFilter} onClearFilter={()=>navigate("Tâches")} />
               ) : currentPage === "Planning" ? (
-                <TasksPage rights={{view:actionAllowed('planning.view'),create:actionAllowed('planning.create'),update:actionAllowed('planning.update'),delete:actionAllowed('tasks.delete')}} canAssign={actionAllowed('tasks.assign')} planning />
+                <TasksPage rights={{view:actionAllowed('planning.view'),create:actionAllowed('planning.create'),update:actionAllowed('planning.update'),delete:actionAllowed('tasks.delete')}} currentProfileId={profile.id} canAssign={actionAllowed('tasks.assign')} planning />
               ) : currentPage === "Éditorial" ? (
                 <EditorialV3 />
               ) : currentPage === "Services" ? (
@@ -3228,7 +3268,7 @@ function Shell({
               ) : currentPage === "Intégrations" ? (
                 <IntegrationsPage rights={rightsFor('communication')} />
               ) : currentPage === "Équipe" ? (
-                <TeamAccessPage admin={admin} superAdmin={roles.includes("SUPER_ADMIN")} currentProfileId={profile.id} />
+                <>{admin&&<TeamActivityDashboard tenantOwnerId={profile.tenant_owner_id||profile.id}/>}<TeamAccessPage admin={admin} superAdmin={roles.includes("SUPER_ADMIN")} currentProfileId={profile.id} tenantOwnerId={profile.tenant_owner_id||profile.id} /></>
               ) : currentPage === "Demandes SaaS" ? (
                 <SignupRequestsPage />
               ) : currentPage === "RH" ? (
@@ -3265,6 +3305,10 @@ function Shell({
         </main>
       </div>
       {expiredTrial&&<TrialPaywall open={paywallOpen} onClose={()=>setPaywallOpen(false)} expiredAt={tenantTrial.access_expires_at!} canRequest={(profile.tenant_owner_id||profile.id)===profile.id}/>}
+      <AnimatePresence>
+        {chatWelcome&&!chatOpen&&<Modal title="Vous avez de nouveaux messages" onClose={()=>setChatWelcome(false)}><div className="chat-welcome-preview"><p>Voici les derniers échanges reçus depuis votre précédente visite.</p>{chatUnread.slice(-3).reverse().map(item=><article key={item.id}><strong>{item.profiles?.full_name||'Collaborateur'}{item.recipient_id?' · privé':' · équipe'}</strong><span>{item.body}</span></article>)}<button type="button" className="primary-btn compact" onClick={()=>{setChatWelcome(false);setChatOpen(true);markChatRead()}}>Ouvrir la messagerie</button></div></Modal>}
+        {chatOpen&&<Modal title="Messagerie" onClose={()=>setChatOpen(false)}><TeamChat onRead={markChatRead}/></Modal>}
+      </AnimatePresence>
     </div>
   );
 }
