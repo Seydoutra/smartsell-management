@@ -27,7 +27,13 @@ const aliases = {
 const allowedStatuses = new Set(['A_REDIGER','EN_CREATION','A_VALIDER','PLANIFIE','PUBLIE','REPORTE'])
 
 function dateTime(dateValue: unknown, timeValue: unknown): string | null {
-  if (dateValue instanceof Date && !Number.isNaN(dateValue.getTime())) return dateValue.toISOString()
+  if (dateValue instanceof Date && !Number.isNaN(dateValue.getTime())) {
+    const result=new Date(dateValue)
+    if (timeValue instanceof Date && !Number.isNaN(timeValue.getTime())) result.setHours(timeValue.getHours(),timeValue.getMinutes(),0,0)
+    else if (typeof timeValue==='number' && timeValue>=0 && timeValue<1) {const minutes=Math.round(timeValue*24*60);result.setHours(Math.floor(minutes/60),minutes%60,0,0)}
+    else if (/^\d{1,2}:\d{2}$/.test(clean(timeValue))) {const [hour,minute]=clean(timeValue).split(':').map(Number);result.setHours(hour,minute,0,0)}
+    return result.toISOString()
+  }
   const value=clean(dateValue), time=clean(timeValue)
   if (!value) return null
   const match=value.match(/^(\d{1,2})[/.](\d{1,2})[/.](\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/)

@@ -29,4 +29,13 @@ describe('editorial calendar import',()=>{
     expect(rows.map(row=>row.status)).toEqual(['PUBLIE','A_REDIGER','A_REDIGER'])
     expect(rows[2].error).toContain('Date invalide')
   })
+  it('imports the downloadable template columns and combines Excel date with time',()=>{
+    const rows=editorialFromRows([
+      ['Date','Heure','Client','Projet','Titre','Réseaux','Format','Thème','Type de post','Objectif du post','Titre sur le visuel','Sous-titre','Légende','Hashtags','Consignes','Semaine','Statut'],
+      [new Date(2026,9,15),0.6041666667,'Client A','Projet B','Publication exemple','Instagram, Facebook','Carrousel','Marque','Corporate','Notoriété','Titre visuel','Sous-titre','Texte','#marque','Valider','S3','PLANIFIE'],
+    ])
+    expect(rows[0]).toMatchObject({client:'Client A',project:'Projet B',title:'Publication exemple',platforms:['Instagram','Facebook'],post_type:'Corporate',status:'PLANIFIE',error:null})
+    expect(new Date(rows[0].publish_at).getHours()).toBe(14)
+    expect(new Date(rows[0].publish_at).getMinutes()).toBe(30)
+  })
 })
