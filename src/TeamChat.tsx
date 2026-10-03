@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { MessageCircle, Send } from 'lucide-react'
-import { listProfiles, listTeamChatMessages, sendTeamChatMessage } from './services/repository'
+import { getProfile, listProfiles, listTeamChatMessages, sendTeamChatMessage } from './services/repository'
 import { supabase } from './services/supabase'
 import type { Profile, TeamChatMessage } from './types/models'
 import './client-portal.css'
@@ -20,7 +20,7 @@ export default function TeamChat({onRead}:{onRead?:()=>void}){
   useEffect(()=>{
     let active=true
     void supabase?.auth.getUser().then(({data})=>{if(active)setMyId(data.user?.id||'')})
-    void listProfiles().then(rows=>{if(active)setProfiles(rows.filter(row=>row.active && row.role!=='CLIENT'))}).catch(()=>{})
+    void Promise.all([getProfile(),listProfiles()]).then(([mine,rows])=>{if(active){const tenant=mine.tenant_owner_id||mine.id;setProfiles(rows.filter(row=>row.active&&row.role!=='CLIENT'&&(row.id===tenant||row.tenant_owner_id===tenant)))}}).catch(()=>{})
     const load=()=>listTeamChatMessages().then(rows=>{if(active){setMessages(rows);onRead?.()}}).catch(reason=>{if(active)setError(reason instanceof Error?reason.message:'Chat indisponible')})
     void load()
     const timer=window.setInterval(()=>void load(),15000)
