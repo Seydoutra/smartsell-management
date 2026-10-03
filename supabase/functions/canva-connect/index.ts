@@ -1,4 +1,5 @@
 import { adminClient, authenticated, edgeError, handleOptions, json } from '../_shared/http.ts'
+import { resolveCanvaWorkspace } from '../_shared/canvaWorkspace.ts'
 
 const encode=(bytes:Uint8Array)=>btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','')
 const decode=(value:string)=>Uint8Array.from(atob(value.replaceAll('-','+').replaceAll('_','/')),char=>char.charCodeAt(0))
@@ -13,6 +14,14 @@ async function decrypt(value:string,iv:string){const bytes=await crypto.subtle.d
 async function token(body:URLSearchParams){const response=await fetch('https://api.canva.com/rest/v1/oauth/token',{method:'POST',headers:{authorization:`Basic ${btoa(`${required('CANVA_CLIENT_ID')}:${required('CANVA_CLIENT_SECRET')}`)}`,'content-type':'application/x-www-form-urlencoded'},body});const data=await response.json() as {access_token?:string;refresh_token?:string;expires_in?:number;scope?:string;message?:string};if(!response.ok||!data.access_token||!data.refresh_token)throw new Error(data.message||'Autorisation Canva impossible');return data}
 type Connection={profile_id:string;encrypted_access_token:string;encrypted_refresh_token:string;access_token_iv:string;refresh_token_iv:string;token_expires_at:string;scope:string|null}
 async function accessToken(connection:Connection){if(new Date(connection.token_expires_at).getTime()>Date.now()+60_000)return decrypt(connection.encrypted_access_token,connection.access_token_iv);const refresh=await decrypt(connection.encrypted_refresh_token,connection.refresh_token_iv);const next=await token(new URLSearchParams({grant_type:'refresh_token',refresh_token:refresh}));const access=await encrypt(next.access_token!),refreshEncrypted=await encrypt(next.refresh_token!);const {error}=await adminClient().from('canva_connections').update({encrypted_access_token:access.value,access_token_iv:access.iv,encrypted_refresh_token:refreshEncrypted.value,refresh_token_iv:refreshEncrypted.iv,token_expires_at:new Date(Date.now()+(next.expires_in||3600)*1000).toISOString(),updated_at:new Date().toISOString()}).eq('profile_id',connection.profile_id);if(error)throw error;return next.access_token!}
+
+async function workspaceAccess(admin:ReturnType<typeof adminClient>,profileId:string){
+  const {data:profile,error}=await admin.from('profiles').select('tenant_owner_id,role,roles').eq('id',profileId).single()
+  if(error||!profile)throw new Error('Espace Canva introuvable')
+  const {data:access,error:accessError}=await admin.from('user_access_controls').select('allowed_modules,denied_permissions').eq('profile_id',profileId).maybeSingle()
+  if(accessError)throw accessError
+  return resolveCanvaWorkspace(profileId,profile,access)
+}
 
 Deno.serve(async(request)=>{
   const options=handleOptions(request);if(options)return options
@@ -36,7 +45,9 @@ Deno.serve(async(request)=>{
   try{
     const {admin,user}=await authenticated(request)
     const {action,design_id}=await request.json() as {action:'start'|'status'|'designs'|'design'|'disconnect';design_id?:string}
+    const workspace=await workspaceAccess(admin,user.id)
     if(action==='start'){
+      if(!workspace.isOwner)return json(request,{error:'Seul le propriétaire de cet espace peut connecter Canva.'},403)
       const clientId=required('CANVA_CLIENT_ID');required('CANVA_CLIENT_SECRET');required('CANVA_TOKEN_ENCRYPTION_KEY')
       const state=random(),verifier=random(),challenge=await digest(verifier)
       const {error}=await admin.from('canva_oauth_states').insert({state_hash:await digest(state),profile_id:user.id,code_verifier:verifier,expires_at:new Date(Date.now()+10*60_000).toISOString()})
@@ -44,10 +55,15 @@ Deno.serve(async(request)=>{
       const params=new URLSearchParams({client_id:clientId,redirect_uri:redirectUri(),response_type:'code',scope:'design:meta:read',code_challenge:challenge,code_challenge_method:'s256',state})
       return json(request,{url:`https://www.canva.com/api/oauth/authorize?${params}`})
     }
-    const {data:connection,error}=await admin.from('canva_connections').select('*').eq('profile_id',user.id).maybeSingle()
+    const {data:connection,error}=await admin.from('canva_connections').select('*').eq('profile_id',workspace.tenantOwnerId).maybeSingle()
     if(error)throw error
-    if(action==='status')return json(request,{connected:!!connection,configured:!!(Deno.env.get('CANVA_CLIENT_ID')&&Deno.env.get('CANVA_CLIENT_SECRET')&&Deno.env.get('CANVA_TOKEN_ENCRYPTION_KEY'))})
-    if(action==='disconnect'){if(connection){const {error:removeError}=await admin.from('canva_connections').delete().eq('profile_id',user.id);if(removeError)throw removeError}return json(request,{connected:false})}
+    if(action==='status')return json(request,{connected:workspace.canView&&!!connection,configured:!!(Deno.env.get('CANVA_CLIENT_ID')&&Deno.env.get('CANVA_CLIENT_SECRET')&&Deno.env.get('CANVA_TOKEN_ENCRYPTION_KEY')),canManage:workspace.isOwner,shared:!workspace.isOwner})
+    if(action==='disconnect'){
+      if(!workspace.isOwner)return json(request,{error:'Seul le propriétaire de cet espace peut déconnecter Canva.'},403)
+      if(connection){const {error:removeError}=await admin.from('canva_connections').delete().eq('profile_id',workspace.tenantOwnerId);if(removeError)throw removeError}
+      return json(request,{connected:false})
+    }
+    if(!workspace.canView)return json(request,{error:'Accès au calendrier éditorial non autorisé.'},403)
     if(action==='designs'){
       if(!connection)return json(request,{error:'Connectez d’abord votre compte Canva.'},409)
       const bearer=await accessToken(connection as Connection)
