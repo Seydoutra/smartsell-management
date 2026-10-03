@@ -41,7 +41,7 @@ Deno.serve(async(request)=>{
       const state=random(),verifier=random(),challenge=await digest(verifier)
       const {error}=await admin.from('canva_oauth_states').insert({state_hash:await digest(state),profile_id:user.id,code_verifier:verifier,expires_at:new Date(Date.now()+10*60_000).toISOString()})
       if(error)throw error
-      const params=new URLSearchParams({client_id:clientId,redirect_uri:redirectUri(),response_type:'code',scope:'design:meta:read',code_challenge:challenge,code_challenge_method:'S256',state})
+      const params=new URLSearchParams({client_id:clientId,redirect_uri:redirectUri(),response_type:'code',scope:'design:meta:read',code_challenge:challenge,code_challenge_method:'s256',state})
       return json(request,{url:`https://www.canva.com/api/oauth/authorize?${params}`})
     }
     const {data:connection,error}=await admin.from('canva_connections').select('*').eq('profile_id',user.id).maybeSingle()
