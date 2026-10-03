@@ -6,6 +6,7 @@ import {
   Send, ShieldCheck, Trash2, Users, X,
 } from "lucide-react";
 import { companyProfile } from "./lib/companyProfile";
+import { statusTone } from './lib/statusTone';
 import { demoData, DemoRecord } from "./lib/demoData";
 import type { Profile } from "./types/models";
 
@@ -87,7 +88,7 @@ export default function BetaSandboxApp({ profile, onLogout }: { profile: Profile
           <div className="module-head"><div><span className="eyebrow"><i /> MODULE BÊTA</span><h1>{page}</h1><p>Jeu de données fictives indépendant, avec droits de création et suppression complets.</p></div><button className="primary-btn compact" onClick={() => setModal(true)}><Plus size={17} /> Ajouter</button></div>
           {page === "Communication" && <div className="beta-actions"><button onClick={() => simulate("SMS")}><Send /> Simuler un SMS</button><button onClick={() => simulate("E-mail")}><Mail /> Simuler un e-mail</button><button onClick={() => simulate("Appel")}><Phone /> Simuler un appel</button><button onClick={() => simulate("Campagne")}><BarChart3 /> Simuler une campagne</button></div>}
           <div className="filter-bar"><label><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Rechercher dans ${page.toLowerCase()}…`} /></label><span>{filtered.length} éléments fictifs</span></div>
-          <div className="records panel"><div className="records-head"><span>Nom</span><span>Statut</span><span>Détail</span><span>Actions</span></div>{filtered.map((row) => <article key={row.id}><div className="record-main"><span className="record-avatar">{row.title.slice(0, 2).toUpperCase()}</span><div><strong>{row.title}</strong><small>{row.subtitle}</small></div></div><span className="status">{row.status}</span><span className="record-meta">{row.meta}</span><button className="icon-btn danger" aria-label="Supprimer" onClick={() => remove(row.id)}><Trash2 size={16} /></button></article>)}{!filtered.length && <div className="empty-state"><Search /><h3>Aucun élément fictif</h3><p>Créez-en un pour tester ce module.</p></div>}</div>
+          <div className="records panel"><div className="records-head"><span>Nom</span><span>Statut</span><span>Détail</span><span>Actions</span></div>{filtered.map((row) => <article key={row.id}><div className="record-main"><span className="record-avatar">{row.title.slice(0, 2).toUpperCase()}</span><div><strong>{row.title}</strong><small>{row.subtitle}</small></div></div><span className={`status ${statusTone(row.status)}`}>{row.status}</span><span className="record-meta">{row.meta}</span><button className="icon-btn danger" aria-label="Supprimer" onClick={() => remove(row.id)}><Trash2 size={16} /></button></article>)}{!filtered.length && <div className="empty-state"><Search /><h3>Aucun élément fictif</h3><p>Créez-en un pour tester ce module.</p></div>}</div>
         </section>}
       </main>
     </div>

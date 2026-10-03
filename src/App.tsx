@@ -6,6 +6,7 @@ import {
   Phone, Plus, Search, Settings, ShieldCheck, Sun, Users, X,
 } from 'lucide-react'
 import { companyProfile } from './lib/companyProfile'
+import { statusTone } from './lib/statusTone'
 import { demoData, DemoRecord } from './lib/demoData'
 import { endSession, getDemoActivity, pulseSession, startSession, trackActivity } from './services/activityTracker'
 import { isDemoMode } from './services/supabase'
@@ -180,7 +181,7 @@ function AdministrationPage(){
 function CommunicationPage(){
   const channels=[{icon:Mail,title:'Email',status:'Prêt à configurer',copy:'SMTP, Resend, SendGrid ou fournisseur API.',metric:'2 500 / jour'},{icon:Phone,title:'SMS',status:'Mode test',copy:'API générique, Twilio ou Africa’s Talking.',metric:'1 000 / jour'},{icon:Phone,title:'Appels',status:'API à connecter',copy:'Twilio Voice, Vonage ou opérateur compatible.',metric:'100 / jour'}]
   return <section className="module-page"><div className="module-head"><div><span className="eyebrow"><i/> COMMUNICATION OMNICANALE</span><h1>SMS, emails & appels</h1><p>Contactez clients et prospects depuis un espace sécurisé et traçable.</p></div><button className="primary-btn compact"><Plus size={17}/> Nouvelle campagne</button></div><div className="test-mode"><b>MODE TEST</b><span>Les envois et appels sont redirigés vers les coordonnées de test tant que les API ne sont pas validées.</span></div>
-    <div className="channel-grid">{channels.map((c,i)=><article className="panel" key={c.title}><div className="channel-icon"><c.icon/></div><span className="status">{c.status}</span><h2>{c.title}</h2><p>{c.copy}</p><div className="channel-foot"><span>Limite Super Admin</span><strong>{c.metric}</strong></div><button>{i===2?'Configurer la téléphonie':'Configurer le fournisseur'} →</button></article>)}</div>
+    <div className="channel-grid">{channels.map((c,i)=><article className="panel" key={c.title}><div className="channel-icon"><c.icon/></div><span className={`status ${statusTone(c.status)}`}>{c.status}</span><h2>{c.title}</h2><p>{c.copy}</p><div className="channel-foot"><span>Limite Super Admin</span><strong>{c.metric}</strong></div><button>{i===2?'Configurer la téléphonie':'Configurer le fournisseur'} →</button></article>)}</div>
     <div className="panel comm-safety"><h2>Protections actives</h2><div><span><CheckCircle2/> Consentement et opt-out</span><span><CheckCircle2/> Confirmation avant envoi massif</span><span><CheckCircle2/> Quotas par utilisateur</span><span><CheckCircle2/> Journal complet</span><span><CheckCircle2/> Secrets côté serveur</span><span><CheckCircle2/> Coûts réels uniquement</span></div></div>
   </section>
 }

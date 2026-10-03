@@ -33,7 +33,7 @@ export function normalizePhone(value: unknown) {
   return raw.startsWith("+") ? `+${digits}` : digits;
 }
 
-function parseCsvRows(text: string) {
+export function parseCsvRows(text: string) {
   const delimiter = (text.split(/\r?\n/, 1)[0]?.match(/;/g)?.length || 0) >
     (text.split(/\r?\n/, 1)[0]?.match(/,/g)?.length || 0) ? ";" : ",";
   const rows: string[][] = [];
