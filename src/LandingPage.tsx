@@ -10,6 +10,7 @@ import { companyProfile } from './lib/companyProfile'
 import SiteFooter from './SiteFooter'
 import SocialProof from './SocialProof'
 import MobileSiteMenu from './MobileSiteMenu'
+import InnovationShowcase from './InnovationShowcase'
 import { marketingPath, type MarketingRoute } from './lib/marketingRoutes'
 import './landing.css'
 
@@ -210,6 +211,7 @@ export default function LandingPage({ onOpenApp, onSignUp }: { onOpenApp: () => 
     if (!page || !('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const selector = [
       '.landing-showcase-head h2', '.landing-showcase-head p',
+      '.innovation-intro h2', '.innovation-intro p',
       '.landing-trial-band h2', '.landing-trial-band p',
       '.landing-section-head > *', '.landing-feature-grid article > h3', '.landing-feature-grid article > p',
       '.landing-workflow-copy > .landing-label', '.landing-workflow-copy > h2', '.landing-workflow-copy > p',
@@ -248,7 +250,7 @@ export default function LandingPage({ onOpenApp, onSignUp }: { onOpenApp: () => 
       setScrolled(window.scrollY > 24)
       const available = document.documentElement.scrollHeight - window.innerHeight
       setScrollProgress(available > 0 ? Math.min(100, (window.scrollY / available) * 100) : 0)
-      const sections = ['accueil', 'demo-produit', 'solution', 'fonctionnement', 'personnalisation', 'tarifs']
+      const sections = ['accueil', 'demo-produit', 'nouveautes', 'solution', 'fonctionnement', 'personnalisation', 'tarifs']
       const current = sections.reduce((visible, id) => (document.getElementById(id)?.getBoundingClientRect().top ?? 9999) <= 180 ? id : visible, 'accueil')
       setActiveSection(current)
     }
@@ -267,6 +269,7 @@ export default function LandingPage({ onOpenApp, onSignUp }: { onOpenApp: () => 
       <div className="header-aurora"/><div className="header-grid"/>
       <a className="landing-brand" href="#accueil" onClick={() => setActiveSection('accueil')} aria-label={en ? 'Smartsell Management, home' : 'Smartsell Management, accueil'}><span className="brand-orbit"><i/><img src={theme === 'light' ? `${import.meta.env.BASE_URL}brand/wordmark-purple.png` : companyProfile.logo_light} alt="Smartsell Management"/></span><span>Management<small>BUSINESS OS</small></span></a>
       <nav aria-label={en ? 'Main navigation' : 'Navigation principale'}>
+        <a href="#nouveautes" onClick={event=>{event.preventDefault();go('nouveautes')}}><span>{en ? 'What’s new' : 'Nouveautés'}</span><i/></a>
         {(en ? [['solutions', 'Features'], ['fonctionnement', 'How it works'], ['personnalisation', 'Customization'], ['tarifs', 'Pricing'], ['contact', 'Contact']] : [['solutions', 'Fonctionnalités'], ['fonctionnement', 'Fonctionnement'], ['personnalisation', 'Personnalisation'], ['tarifs', 'Tarifs'], ['contact', 'Contact']]).map(([id, label]) => <a key={id} href={marketingPath(id as MarketingRoute)} onClick={()=>setMenuOpen(false)}><span>{label}</span><i/></a>)}
         <a href={marketingPath('parrainage')} onClick={()=>setMenuOpen(false)}>{en ? 'Referral program' : 'Parrainage · 10 % chacun'}</a>
       </nav>
@@ -275,6 +278,7 @@ export default function LandingPage({ onOpenApp, onSignUp }: { onOpenApp: () => 
       <div className="header-progress" style={{ '--header-progress': `${scrollProgress}%` } as CSSProperties}/>
     </header>
     {menuOpen&&<MobileSiteMenu id="landing-mobile-navigation" title={en?'Navigate Smartsell':'Explorer Smartsell'} onClose={()=>setMenuOpen(false)}>
+      <a href="#nouveautes" onClick={event=>{event.preventDefault();go('nouveautes')}}>{en?'What’s new':'Nouveautés'}</a>
       {(en ? [['solutions', 'Features'], ['fonctionnement', 'How it works'], ['personnalisation', 'Customization'], ['tarifs', 'Pricing'], ['contact', 'Contact']] : [['solutions', 'Fonctionnalités'], ['fonctionnement', 'Fonctionnement'], ['personnalisation', 'Personnalisation'], ['tarifs', 'Tarifs'], ['contact', 'Contact']]).map(([id,label])=><a key={id} href={marketingPath(id as MarketingRoute)} onClick={()=>setMenuOpen(false)}>{label}</a>)}
       <a href={marketingPath('parrainage')} onClick={()=>setMenuOpen(false)}>{en?'Referral program':'Parrainage · 10 % chacun'}</a>
       <button type="button" className="site-mobile-menu-primary" onClick={()=>{setMenuOpen(false);onSignUp()}}>{en?'Create an account · 72-hour trial':'Créer un compte · essai gratuit 72 h'}</button>
@@ -285,6 +289,8 @@ export default function LandingPage({ onOpenApp, onSignUp }: { onOpenApp: () => 
       <section className="landing-hero" id="accueil"><div className="landing-orb landing-orb-one"/><div className="landing-orb landing-orb-two"/><motion.div className="landing-hero-copy" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .6 }}><div className="landing-kicker"><Sparkles/> {en ? 'Your entire company. One platform.' : 'Toute votre entreprise. Une seule plateforme.'}</div><RotatingHeadline language={language}/><p>{en ? 'Smartsell Management brings clients, projects, planning, production, teams, communication and finance together to turn every day into clear decisions.' : 'Smartsell Management réunit clients, projets, planning, production, équipe, communication et finances pour transformer chaque journée en décisions claires.'}</p><div className="landing-hero-actions"><button className="landing-primary" onClick={onSignUp}>{en ? 'Start my 72-hour demo' : 'Créer mon compte · essai gratuit 72 h'} <ArrowRight/></button><button className="landing-secondary" onClick={() => go('demo-produit')}><Play/> {en ? 'See the platform in action' : 'Voir la plateforme en action'}</button></div><p className="landing-existing">{en ? 'Already have an account?' : 'Vous avez déjà un compte ?'} <button onClick={onOpenApp}>{en ? 'Log in' : 'Se connecter'}</button></p><div className="landing-trust"><span><Check/> {en ? '100% tailored to your brand' : '100% à votre image'}</span><span><Check/> {en ? 'All your operations' : 'Toutes vos opérations'}</span><span><Check/> {en ? '72-hour trial access' : 'Accès d’essai limité à 72 h'}</span></div></motion.div><ProductPreview language={language}/><div className="landing-marquee"><span>CRM</span><i/><span>{en ? 'PROJECTS' : 'PROJETS'}</span><i/><span>{en ? 'PLANNING' : 'PLANNING'}</span><i/><span>{en ? 'PRODUCTION' : 'PRODUCTION'}</span><i/><span>{en ? 'BILLING' : 'FACTURATION'}</span><i/><span>HR</span><i/><span>AI</span></div></section>
 
       <ProductCinema language={language}/>
+
+      <InnovationShowcase language={language} onSignUp={onSignUp}/>
 
       <SocialProof language={language} onTrial={onSignUp}/>
 
