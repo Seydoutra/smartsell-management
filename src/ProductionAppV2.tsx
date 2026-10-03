@@ -902,7 +902,7 @@ function IntegrationsPage({rights}:{rights:CrudRights}){
   const [rows,setRows]=useState<SocialIntegration[]>([]),[clients,setClients]=useState<Client[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[selected,setSelected]=useState<SocialIntegration['provider']|null>(null);
   const load=()=>Promise.all([listSocialIntegrations(),listClients()]).then(([integrations,clientRows])=>{setRows(integrations);setClients(clientRows)}).catch(e=>setError(e instanceof Error?e.message:'Les intégrations ne sont pas encore activées dans Supabase.'));
   useEffect(()=>{void load()},[]);
-  const save=async(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();if(!selected||!rights.update)return;setBusy(true);try{const f=new FormData(event.currentTarget);await saveSocialIntegration({id:rows.find(row=>row.provider===selected)?.id,provider:selected,client_id:String(f.get('client_id')||'')||null,account_name:String(f.get('account_name')||''),account_url:String(f.get('account_url')||''),status:'CONNECTE',last_synced_at:new Date().toISOString()});setSelected(null);await load()}catch(e){setError(e instanceof Error?e.message:'Enregistrement impossible')}finally{setBusy(false)}};
+  const save=async(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();if(!selected||!rights.update)return;setBusy(true);try{const f=new FormData(event.currentTarget);await saveSocialIntegration({id:rows.find(row=>row.provider===selected)?.id,provider:selected,client_id:String(f.get('client_id')||'')||null,account_name:String(f.get('account_name')||''),account_url:String(f.get('account_url')||''),status:'NON_CONFIGURE',last_synced_at:null});setSelected(null);await load()}catch(e){setError(e instanceof Error?e.message:'Enregistrement impossible')}finally{setBusy(false)}};
   return <><Header title="Intégrations" copy="Connectez les réseaux de vos clients, centralisez leurs statistiques et préparez les décisions assistées par IA."/><ErrorBar value={error}/><section className="integration-intro panel"><div><span className="eyebrow"><i/> CONNECTEURS ÉVOLUTIFS</span><h2>Un hub unique pour les données sociales.</h2><p>Chaque connecteur sera isolé, révoquable et rattaché au bon client. Les métriques alimenteront ensuite les rapports, le calendrier éditorial et le radar commercial.</p></div><div className="integration-flow"><span>Connexion OAuth</span><b>→</b><span>Synchronisation</span><b>→</b><span>Rapport IA</span></div></section><CanvaIntegrationPanel canManage={rights.update}/><div className="integration-grid">{providers.map(([provider,name,description])=>{const row=rows.find(item=>item.provider===provider);return <article className="integration-card panel" key={provider}><div className={`integration-logo integration-${provider.toLowerCase()}`}>{provider.slice(0,1)}</div><div><h3>{name}</h3><p>{description}</p></div><span className={`status ${statusTone(row?.status||'A_CONFIGURER')}`}>{row?.status==='CONNECTE'?'Connecté':'À configurer'}</span><div className="integration-metrics"><b>{row?.metrics?.followers||0}</b><span>abonnés suivis</span><b>{row?.metrics?.engagement_rate||0}%</b><span>engagement</span></div><button className="ghost-action" disabled={!rights.update} onClick={()=>setSelected(provider)}>{row?'Modifier la connexion':'Configurer'}</button></article>})}</div><AnimatePresence>{selected&&<Modal title={`Configurer ${selected}`} onClose={()=>setSelected(null)}><form className="entity-form" onSubmit={save}><Field label="Client concerné"><select name="client_id" defaultValue={rows.find(row=>row.provider===selected)?.client_id||''}><option value="">Tous les comptes</option>{clients.map(client=><option key={client.id} value={client.id}>{client.name}</option>)}</select></Field><Field label="Nom du compte"><input name="account_name" defaultValue={rows.find(row=>row.provider===selected)?.account_name||''} placeholder="Ex. Smartsell Management Conakry" required/></Field><Field label="URL publique"><input name="account_url" type="url" defaultValue={rows.find(row=>row.provider===selected)?.account_url||''} placeholder="https://…"/></Field><p className="muted">La connexion OAuth sécurisée et la synchronisation des statistiques seront branchées par connecteur. Aucun mot de passe ni jeton ne doit être saisi ici.</p><button className="primary-btn compact" disabled={busy}>Enregistrer la connexion</button></form></Modal>}</AnimatePresence></>;
 }
 
@@ -3112,18 +3112,20 @@ function Shell({
   const markChatRead=useCallback(()=>{localStorage.setItem(chatSeenKey,new Date().toISOString());setChatUnread([])},[chatSeenKey]);
   useEffect(()=>{
     if(profile.role==='CLIENT'||profile.roles?.includes('CLIENT'))return;
-    let active=true,first=true;
+    let active=true,first=true,previousUnread=0;
     const load=()=>void listTeamChatMessages().then(rows=>{
       if(!active)return;
       const seen=localStorage.getItem(chatSeenKey)||'1970-01-01T00:00:00Z';
       const unread=rows.filter(row=>row.sender_id!==profile.id&&row.created_at>seen);
       setChatUnread(unread);
-      if(first&&unread.length)setChatWelcome(true);
+      if(!chatOpen&&unread.length>previousUnread){setChatWelcome(true);if(!first)playUiTone('confirm')}
+      previousUnread=unread.length;
       first=false;
     }).catch(()=>{first=false});
-    load();const timer=window.setInterval(load,30000);
-    return()=>{active=false;window.clearInterval(timer)};
-  },[profile.id,profile.role,profile.roles,chatSeenKey]);
+    load();const timer=window.setInterval(load,15000);
+    window.addEventListener('focus',load);
+    return()=>{active=false;window.clearInterval(timer);window.removeEventListener('focus',load)};
+  },[profile.id,profile.role,profile.roles,chatSeenKey,chatOpen]);
   useEffect(() => {
     trackActivity("Page consultée", page, `Consultation de ${page}`);
   }, [page]);
@@ -3226,7 +3228,11 @@ function Shell({
             >
               {theme === "dark" ? <Sun /> : <Moon />}
             </button>
-            <NotificationBell onRowsChange={setNotificationRows} />
+            <NotificationBell onRowsChange={setNotificationRows} onOpenEntity={row=>{
+              if(row.entity_type==='team_chat'){setChatWelcome(false);setChatOpen(true);markChatRead()}
+              else if(row.entity_type==='task')navigate('Tâches')
+              else if(row.entity_type==='project')navigate('Projets')
+            }}/>
           </div>
         </header>
         {expiredTrial&&<div className="trial-expired-banner" role="status"><span>Votre essai est terminé. Vos données restent visibles, mais les actions sont désactivées.</span><button type="button" onClick={()=>navigate('Abonnement')}>Choisir un abonnement</button></div>}

@@ -31,7 +31,7 @@ Deno.serve(async (request) => {
       ? Deno.env.get('COMMUNICATION_TEST_PHONE') : profile.phone;
     const due = task.due_at ? new Date(task.due_at).toLocaleString('fr-FR',{timeZone:'Africa/Conakry',dateStyle:'short',timeStyle:'short'}) : 'à définir';
     const name = String(profile.full_name || 'collaborateur').split(/\s+/)[0];
-    const body = `Bonjour ${name}, une nouvelle tâche vous a été attribuée sur Smartsell Management : « ${task.title} ». Échéance : ${due}. Consultez votre espace Tâches.`;
+    const body = `Bonjour ${name}, la tâche « ${task.title} » vous est attribuée. Échéance : ${due}. Connectez-vous pour voir votre mission : https://seydoutra.github.io/smartsell-management/`;
     try {
       if (!phone) throw new Error('Numéro du collaborateur manquant');
       const result = await sendNimbaSms([phone],body,assignment.tenant_owner_id);
@@ -42,6 +42,34 @@ Deno.serve(async (request) => {
       await admin.from('task_assignment_sms').update({status:'FAILED',error:detail}).eq('id',assignment.id);
       if (task.creator_id) await admin.from('notifications').insert({profile_id:task.creator_id,tenant_owner_id:assignment.tenant_owner_id,channel:'IN_APP',title:'SMS de tâche non envoyé',body:`${task.title} : ${detail}`,entity_type:'task',entity_id:assignment.task_id});
       assignmentFailed++;
+    }
+  }
+  const { data: projectAssignments, error: projectAssignmentError } = await admin.from('project_assignment_sms')
+    .select('id,project_id,profile_id,tenant_owner_id,projects(name,status,tenant_owner_id),recipient:profiles!project_assignment_sms_profile_id_fkey(full_name,phone,tenant_owner_id,active)')
+    .eq('status','PENDING').lte('scheduled_for',now.toISOString()).order('scheduled_for').limit(100);
+  if (projectAssignmentError) return json(request, { error: projectAssignmentError.message }, 500);
+  let projectSent = 0, projectFailed = 0;
+  for (const assignment of projectAssignments || []) {
+    const project = Array.isArray(assignment.projects) ? assignment.projects[0] : assignment.projects;
+    const profile = Array.isArray(assignment.recipient) ? assignment.recipient[0] : assignment.recipient;
+    if (!project || !profile?.active || project.status === 'ANNULE' || project.tenant_owner_id !== profile.tenant_owner_id) {
+      await admin.from('project_assignment_sms').update({status:'CANCELLED'}).eq('id',assignment.id);
+      continue;
+    }
+    const phone = Deno.env.get('COMMUNICATION_TEST_MODE') === 'true'
+      ? Deno.env.get('COMMUNICATION_TEST_PHONE') : profile.phone;
+    const name = String(profile.full_name || 'collaborateur').split(/\s+/)[0];
+    const body = `Bonjour ${name}, le projet « ${project.name} » vous est attribué. Connectez-vous pour découvrir votre mission : https://seydoutra.github.io/smartsell-management/`;
+    try {
+      if (!phone) throw new Error('Numéro du collaborateur manquant');
+      const result = await sendNimbaSms([phone],body,assignment.tenant_owner_id);
+      await admin.from('project_assignment_sms').update({status:'SENT',sent_at:new Date().toISOString(),provider_message_id:result.uid||result.id||null,error:null}).eq('id',assignment.id);
+      projectSent++;
+    } catch (caught) {
+      const detail = caught instanceof Error ? caught.message : 'Envoi SMS impossible';
+      await admin.from('project_assignment_sms').update({status:'FAILED',error:detail}).eq('id',assignment.id);
+      await admin.from('notifications').insert({profile_id:assignment.tenant_owner_id,tenant_owner_id:assignment.tenant_owner_id,channel:'IN_APP',title:'SMS de projet non envoyé',body:`${project.name} : ${detail}`,entity_type:'project',entity_id:assignment.project_id});
+      projectFailed++;
     }
   }
   const { data: reminders, error } = await admin.from("task_reminder_schedule")
@@ -73,7 +101,7 @@ Deno.serve(async (request) => {
     await admin.from("task_reminder_schedule").update({ status, sent_at: now.toISOString(), provider_message_id: providerMessageId, error: errorMessage }).eq("id", reminder.id);
     await admin.from("reminder_deliveries").upsert({ task_id: reminder.task_id, profile_id: reminder.profile_id, tenant_owner_id: task.tenant_owner_id || profile?.tenant_owner_id || null, channel: "SMS", scheduled_for: reminder.scheduled_for, status, provider_message_id: providerMessageId, error: errorMessage }, { onConflict: "task_id,channel,scheduled_for" });
   }
-  return json(request, { assignments: { processed: assignments?.length || 0, sent:assignmentSent, failed:assignmentFailed }, reminders: { processed: reminders?.length || 0, sent, failed, cancelled } });
+  return json(request, { assignments: { processed: assignments?.length || 0, sent:assignmentSent, failed:assignmentFailed, projects:{processed:projectAssignments?.length||0,sent:projectSent,failed:projectFailed} }, reminders: { processed: reminders?.length || 0, sent, failed, cancelled } });
   } catch (error) {
     return json(request, { error: error instanceof Error ? error.message : 'Erreur de traitement des rappels' }, 500);
   }

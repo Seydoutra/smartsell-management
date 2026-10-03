@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { getAutopilotSettings, getCompanySettings, listActivityLogs, listClients, listExpenses, listInvoices, listNotifications, listProjects, listUserSessions, markAllNotificationsRead, markNotificationRead, saveAutopilotSettings, updateCompanySettings } from './services/repository'
 import type { ActivityLog, AutopilotSettings, Client, CompanySettings, Expense, Invoice, Notification, Profile, Project, UserSession } from './types/models'
 import { playUiTone } from './lib/uiFeedback'
+import { supabase } from './services/supabase'
 
 type Tab = 'notifications'|'audit'|'export'|'automation'|'security'|'kpi'|'company'
 const tabs:Array<[Tab,string,typeof Bell]> = [['notifications','Notifications',Bell],['audit','Journal d’audit',Activity],['export','Sauvegarde & export',FileArchive],['automation','Automatisation commerciale',Sparkles],['security','Sécurité & conformité',ShieldCheck],['kpi','Indicateurs de performance',Gauge],['company','Paramètres entreprise',Building2]]
@@ -11,15 +12,36 @@ const fmt=(value?:string|null)=>value?new Date(value).toLocaleString('fr-FR'):'�
 const csv=(rows:Array<Record<string,unknown>>)=>{const keys=[...new Set(rows.flatMap(row=>Object.keys(row)))];return [keys.join(';'),...rows.map(row=>keys.map(key=>JSON.stringify(row[key]??'')).join(';'))].join('\n')}
 function download(name:string,body:string,type='text/csv'){const blob=new Blob([body],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();URL.revokeObjectURL(url)}
 
-export function NotificationBell({onRowsChange}:{onRowsChange?:(rows:Notification[])=>void}={}){
+export function NotificationBell({onRowsChange,onOpenEntity}:{onRowsChange?:(rows:Notification[])=>void;onOpenEntity?:(row:Notification)=>void}={}){
   const [open,setOpen]=useState(false),[rows,setRows]=useState<Notification[]>([])
   const previousUnread=useRef<number|null>(null)
   const wrap=useRef<HTMLDivElement>(null)
   const load=()=>listNotifications().then(next=>{const unread=next.filter(row=>!row.read_at).length;if(previousUnread.current!==null&&unread>previousUnread.current)playUiTone('confirm');previousUnread.current=unread;setRows(next);onRowsChange?.(next)}).catch(()=>undefined)
-  useEffect(()=>{void load();const timer=window.setInterval(()=>void load(),60_000);return()=>window.clearInterval(timer)},[])
+  useEffect(()=>{
+    void load();
+    const timer=window.setInterval(()=>{if(!document.hidden)void load()},15_000);
+    const refresh=()=>{if(!document.hidden)void load()};
+    window.addEventListener('focus',refresh);
+    document.addEventListener('visibilitychange',refresh);
+    let active=true;
+    let channel:ReturnType<NonNullable<typeof supabase>['channel']>|undefined;
+    void supabase?.auth.getUser().then(({data:{user}})=>{
+      if(!active||!user||!supabase)return;
+      channel=supabase.channel(`personal-notifications-${user.id}`)
+        .on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications',filter:`profile_id=eq.${user.id}`},()=>void load())
+        .subscribe();
+    });
+    return()=>{
+      active=false;
+      window.clearInterval(timer);
+      window.removeEventListener('focus',refresh);
+      document.removeEventListener('visibilitychange',refresh);
+      if(channel&&supabase)void supabase.removeChannel(channel);
+    };
+  },[])
   useEffect(()=>{if(!open)return;const close=(event:PointerEvent)=>{if(!wrap.current?.contains(event.target as Node))setOpen(false)};const escape=(event:KeyboardEvent)=>{if(event.key==='Escape')setOpen(false)};document.addEventListener('pointerdown',close);document.addEventListener('keydown',escape);return()=>{document.removeEventListener('pointerdown',close);document.removeEventListener('keydown',escape)}},[open])
   const unread=rows.filter(row=>!row.read_at).length
-  return <div className="notification-wrap" ref={wrap}><button className="icon-btn notification-trigger" onClick={()=>setOpen(value=>!value)} aria-label="Notifications" aria-expanded={open}><Bell/>{unread>0&&<b>{unread>99?'99+':unread}</b>}</button><AnimatePresence>{open&&<motion.div className="notification-popover" initial={{opacity:0,y:-8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-8}}><div className="notification-head"><div><span className="eyebrow"><i/> CENTRE DE NOTIFICATION</span><h3>Vos alertes</h3></div><button className="ghost-action" onClick={async()=>{await markAllNotificationsRead();await load()}}>Tout lire</button><button className="ghost-action notification-close" onClick={()=>setOpen(false)} aria-label="Fermer les notifications"><X/></button></div>{rows.length?rows.slice(0,8).map(row=><button key={row.id} className={`notification-item ${row.read_at?'read':''}`} onClick={async()=>{if(!row.read_at){await markNotificationRead(row.id);await load()}}}><span className="notification-dot"/><span><strong>{row.title}</strong><small>{row.body||'—'}</small><time>{fmt(row.created_at)}</time></span></button>):<p className="muted notification-empty">Aucune notification.</p>}</motion.div>}</AnimatePresence></div>
+  return <div className="notification-wrap" ref={wrap}><button className="icon-btn notification-trigger" onClick={()=>setOpen(value=>!value)} aria-label="Notifications" aria-expanded={open}><Bell/>{unread>0&&<b>{unread>99?'99+':unread}</b>}</button><AnimatePresence>{open&&<motion.div className="notification-popover" initial={{opacity:0,y:-8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-8}}><div className="notification-head"><div><span className="eyebrow"><i/> CENTRE DE NOTIFICATION</span><h3>Vos alertes</h3></div><button className="ghost-action" onClick={async()=>{await markAllNotificationsRead();await load()}}>Tout lire</button><button className="ghost-action notification-close" onClick={()=>setOpen(false)} aria-label="Fermer les notifications"><X/></button></div>{rows.length?rows.slice(0,8).map(row=><button key={row.id} className={`notification-item ${row.read_at?'read':''}`} onClick={async()=>{if(!row.read_at){await markNotificationRead(row.id);await load()}onOpenEntity?.(row);setOpen(false)}}><span className="notification-dot"/><span><strong>{row.title}</strong><small>{row.body||'—'}</small><time>{fmt(row.created_at)}</time></span></button>):<p className="muted notification-empty">Aucune notification.</p>}</motion.div>}</AnimatePresence></div>
 }
 
 export function OperationsCenter({profile}:{profile:Profile}){
