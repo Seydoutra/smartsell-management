@@ -9,6 +9,7 @@ import {
 import { companyProfile } from './lib/companyProfile'
 import SiteFooter from './SiteFooter'
 import SocialProof from './SocialProof'
+import MobileSiteMenu from './MobileSiteMenu'
 import { marketingPath, type MarketingRoute } from './lib/marketingRoutes'
 import './landing.css'
 
@@ -150,6 +151,15 @@ function SceneContent({ scene, language }: { scene: typeof productScenes[number]
   return <div className="cinema-dashboard"><div className="role-ai-note"><Sparkles/><p><b>Smartsell Management Live</b><span>{scene.note}</span></p><small>{en ? 'Just now' : 'À l’instant'}</small></div><div className="role-stats">{scene.stats.map(([value, label], index) => <article key={label} className={index === 0 ? 'accent' : ''}><span>{label}</span><strong>{value}</strong><i style={{ '--progress': `${65 + index * 11}%` } as CSSProperties}/></article>)}</div><div className="cinema-lower"><article className="role-decision"><div><b>{scene.key === 'ai' ? (en ? 'Copilot recommendations' : 'Recommandations du copilote') : (en ? 'Actions in motion' : 'Actions en mouvement')}</b><small>{en ? 'Real time' : 'Temps réel'}</small></div>{scene.items.map((item, index) => <p key={item}><i>{index + 1}</i><span>{item}</span><button aria-label={`${en ? 'Open' : 'Ouvrir'} ${item}`}><ChevronRight/></button></p>)}</article><article className="role-activity"><b>{en ? 'Live activity' : 'Activité en direct'}</b><div className="mini-wave">{[35, 62, 48, 78, 58, 88, 72, 96, 68, 82].map((height, index) => <i key={index} style={{ height: `${height}%` }}/>)}</div><small>+18% {en ? 'this week' : 'cette semaine'}</small></article></div></div>
 }
 
+export function ProductScenePreview({ language, sceneKey }: { language: Language; sceneKey: string }) {
+  const scenes = language === 'en' ? productScenesEn : productScenes
+  const scene = scenes.find(item => item.key === sceneKey) || scenes[0]
+  return <div className="mp-scene-frame cinema-frame" aria-label={`${language === 'en' ? 'Illustrated preview' : 'Aperçu illustré'} : ${scene.label}`}>
+    <div className="cinema-top"><span><i/><i/><i/></span><b>Smartsell Management / {scene.label}</b><em><i/> {language === 'en' ? 'PREVIEW' : 'APERÇU'}</em></div>
+    <div className="cinema-screen"><aside><img src={companyProfile.logo_light} alt=""/><small>{language === 'en' ? 'WORKSPACE' : 'ESPACE'} {scene.label.toUpperCase()}</small><strong>{language === 'en' ? 'Hello' : 'Bonjour'}, {scene.person}.</strong><nav><span className="active"><scene.icon/>{scene.label}</span></nav></aside><main><header><div><small>{language === 'en' ? 'ILLUSTRATED PRODUCT VIEW' : 'VUE PRODUIT ILLUSTRATIVE'}</small><h3>{scene.title}</h3></div></header><SceneContent scene={scene} language={language}/></main></div>
+  </div>
+}
+
 function ProductCinema({ language }: { language: Language }) {
   const en = language === 'en'
   const scenes = en ? productScenesEn : productScenes
@@ -256,17 +266,20 @@ export default function LandingPage({ onOpenApp, onSignUp }: { onOpenApp: () => 
     <header className={`landing-header ${scrolled ? 'is-scrolled' : ''}`}>
       <div className="header-aurora"/><div className="header-grid"/>
       <a className="landing-brand" href="#accueil" onClick={() => setActiveSection('accueil')} aria-label={en ? 'Smartsell Management, home' : 'Smartsell Management, accueil'}><span className="brand-orbit"><i/><img src={theme === 'light' ? `${import.meta.env.BASE_URL}brand/wordmark-purple.png` : companyProfile.logo_light} alt="Smartsell Management"/></span><span>Management<small>BUSINESS OS</small></span></a>
-      {menuOpen&&<button className="landing-menu-scrim" onClick={()=>setMenuOpen(false)} aria-label={en?'Close menu':'Fermer le menu'}/>}
-      <nav id="landing-mobile-navigation" className={menuOpen ? 'open' : ''} aria-label={en ? 'Main navigation' : 'Navigation principale'}>
+      <nav aria-label={en ? 'Main navigation' : 'Navigation principale'}>
         {(en ? [['solutions', 'Features'], ['fonctionnement', 'How it works'], ['personnalisation', 'Customization'], ['tarifs', 'Pricing'], ['contact', 'Contact']] : [['solutions', 'Fonctionnalités'], ['fonctionnement', 'Fonctionnement'], ['personnalisation', 'Personnalisation'], ['tarifs', 'Tarifs'], ['contact', 'Contact']]).map(([id, label]) => <a key={id} href={marketingPath(id as MarketingRoute)} onClick={()=>setMenuOpen(false)}><span>{label}</span><i/></a>)}
-        <button className="mobile-signup" onClick={onSignUp}>{en ? 'Create an account · 72-hour trial' : 'Créer un compte · essai gratuit 72 h'}</button>
         <a href={marketingPath('parrainage')} onClick={()=>setMenuOpen(false)}>{en ? 'Referral program' : 'Parrainage · 10 % chacun'}</a>
-        <button className="mobile-login" onClick={onOpenApp}>{en ? 'Already registered? Log in' : 'Déjà inscrit ? Se connecter'}</button>
       </nav>
       <div className="landing-header-actions"><div className="landing-preferences"><button onClick={toggleLanguage} aria-label={en ? 'Passer en français' : 'Switch to English'} title={en ? 'Français' : 'English'}><Globe2/><span>{en ? 'FR' : 'EN'}</span></button><button onClick={toggleTheme} aria-label={theme === 'dark' ? (en ? 'Enable light mode' : 'Activer le mode jour') : (en ? 'Enable dark mode' : 'Activer le mode nuit')} title={theme === 'dark' ? (en ? 'Light mode' : 'Mode jour') : (en ? 'Dark mode' : 'Mode nuit')}>{theme === 'dark' ? <Sun/> : <Moon/>}</button></div><a className="header-whatsapp" href={whatsappHref} target="_blank" rel="noreferrer" aria-label={en ? 'Chat on WhatsApp' : 'Discuter sur WhatsApp'}><MessageCircle/></a><button className="landing-login" onClick={onOpenApp}>{en ? 'Log in' : 'Se connecter'}</button><button className="landing-nav-cta" onClick={onSignUp}><span>{en ? 'Sign up' : 'S’inscrire'}</span><small>{en ? 'Free 72-hour trial' : 'Essai gratuit 72 h'}</small><ArrowRight/></button></div>
       <button className={`landing-menu ${menuOpen ? 'active' : ''}`} onClick={() => setMenuOpen(!menuOpen)} aria-expanded={menuOpen} aria-controls="landing-mobile-navigation" aria-label={menuOpen ? (en ? 'Close menu' : 'Fermer le menu') : (en ? 'Open menu' : 'Ouvrir le menu')}>{menuOpen ? <X/> : <Menu/>}</button>
       <div className="header-progress" style={{ '--header-progress': `${scrollProgress}%` } as CSSProperties}/>
     </header>
+    {menuOpen&&<MobileSiteMenu id="landing-mobile-navigation" title={en?'Navigate Smartsell':'Explorer Smartsell'} onClose={()=>setMenuOpen(false)}>
+      {(en ? [['solutions', 'Features'], ['fonctionnement', 'How it works'], ['personnalisation', 'Customization'], ['tarifs', 'Pricing'], ['contact', 'Contact']] : [['solutions', 'Fonctionnalités'], ['fonctionnement', 'Fonctionnement'], ['personnalisation', 'Personnalisation'], ['tarifs', 'Tarifs'], ['contact', 'Contact']]).map(([id,label])=><a key={id} href={marketingPath(id as MarketingRoute)} onClick={()=>setMenuOpen(false)}>{label}</a>)}
+      <a href={marketingPath('parrainage')} onClick={()=>setMenuOpen(false)}>{en?'Referral program':'Parrainage · 10 % chacun'}</a>
+      <button type="button" className="site-mobile-menu-primary" onClick={()=>{setMenuOpen(false);onSignUp()}}>{en?'Create an account · 72-hour trial':'Créer un compte · essai gratuit 72 h'}</button>
+      <button type="button" className="site-mobile-menu-secondary" onClick={()=>{setMenuOpen(false);onOpenApp()}}>{en?'Already registered? Log in':'Déjà inscrit ? Se connecter'}</button>
+    </MobileSiteMenu>}
 
     <main>
       <section className="landing-hero" id="accueil"><div className="landing-orb landing-orb-one"/><div className="landing-orb landing-orb-two"/><motion.div className="landing-hero-copy" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .6 }}><div className="landing-kicker"><Sparkles/> {en ? 'Your entire company. One platform.' : 'Toute votre entreprise. Une seule plateforme.'}</div><RotatingHeadline language={language}/><p>{en ? 'Smartsell Management brings clients, projects, planning, production, teams, communication and finance together to turn every day into clear decisions.' : 'Smartsell Management réunit clients, projets, planning, production, équipe, communication et finances pour transformer chaque journée en décisions claires.'}</p><div className="landing-hero-actions"><button className="landing-primary" onClick={onSignUp}>{en ? 'Start my 72-hour demo' : 'Créer mon compte · essai gratuit 72 h'} <ArrowRight/></button><button className="landing-secondary" onClick={() => go('demo-produit')}><Play/> {en ? 'See the platform in action' : 'Voir la plateforme en action'}</button></div><p className="landing-existing">{en ? 'Already have an account?' : 'Vous avez déjà un compte ?'} <button onClick={onOpenApp}>{en ? 'Log in' : 'Se connecter'}</button></p><div className="landing-trust"><span><Check/> {en ? '100% tailored to your brand' : '100% à votre image'}</span><span><Check/> {en ? 'All your operations' : 'Toutes vos opérations'}</span><span><Check/> {en ? '72-hour trial access' : 'Accès d’essai limité à 72 h'}</span></div></motion.div><ProductPreview language={language}/><div className="landing-marquee"><span>CRM</span><i/><span>{en ? 'PROJECTS' : 'PROJETS'}</span><i/><span>{en ? 'PLANNING' : 'PLANNING'}</span><i/><span>{en ? 'PRODUCTION' : 'PRODUCTION'}</span><i/><span>{en ? 'BILLING' : 'FACTURATION'}</span><i/><span>HR</span><i/><span>AI</span></div></section>

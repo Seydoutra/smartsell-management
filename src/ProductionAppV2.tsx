@@ -20,6 +20,7 @@ import {
   Gauge,
   Gift,
   LayoutDashboard,
+  LifeBuoy,
   LogOut,
   Mail,
   Megaphone,
@@ -77,6 +78,8 @@ import { NotificationBell, OperationsCenter } from "./OperationsCenter";
 import { SmsSettings } from './SmsSettings';
 import { PerformanceGoals } from './PerformanceGoals';
 import TrialPaywall from './TrialPaywall';
+import SubscriptionPage from './SubscriptionPage';
+import SupportCenter from './SupportCenter';
 import ReferralDashboard from './ReferralDashboard';
 import {
   connectGoogleCalendar,
@@ -218,6 +221,8 @@ type Page =
   | "Paramètres SMS"
   | "Objectifs & performance"
   | "Parrainage"
+  | "Abonnement"
+  | "Assistance"
   | "Jumeau numérique"
   | "Radar commercial"
   | "Studio campagnes IA"
@@ -230,6 +235,8 @@ const nav: [Page, typeof LayoutDashboard, Permission?][] = [
   ["Dashboard", LayoutDashboard],
   ["Objectifs & performance", Target],
   ["Parrainage", Gift],
+  ["Abonnement", CircleDollarSign],
+  ["Assistance", LifeBuoy],
   ["Clients", Users, "crm.write"],
   ["Projets", BriefcaseBusiness, "projects.write"],
   ["Tâches", ClipboardList, "projects.write"],
@@ -257,7 +264,7 @@ const nav: [Page, typeof LayoutDashboard, Permission?][] = [
   ["Assistant IA", MessageSquareText],
 ];
 const navGroups:{label:string;pages:Page[]}[]=[
-  {label:'Pilotage',pages:['Dashboard','Objectifs & performance','Parrainage']},
+  {label:'Pilotage',pages:['Dashboard','Objectifs & performance','Parrainage','Abonnement','Assistance']},
   {label:'Production & clients',pages:['Clients','Projets','Tâches','Planning','Éditorial']},
   {label:'Finance & achats',pages:['Services','Fournisseurs','Facturation','Documents','Comptabilité','Matériel']},
   {label:'Communication',pages:['Communication','Intégrations','Paramètres SMS']},
@@ -3090,11 +3097,11 @@ function Shell({
     const target = event.target as HTMLElement;
     const control = target.closest('button, a, [role="button"]');
     if (!control || (control as HTMLButtonElement).disabled) return;
-    if(expiredTrial && control.closest('.app-main main') && !control.closest('.trial-expired-banner')){
+    if(expiredTrial && page!=='Abonnement' && page!=='Assistance' && control.closest('.app-main main') && !control.closest('.trial-expired-banner')){
       event.preventDefault();event.stopPropagation();setPaywallOpen(true);return;
     }
     playUiTone(control.classList.contains('primary-btn') ? 'confirm' : 'tap');
-  }, [expiredTrial]);
+  }, [expiredTrial,page]);
   const roles = (profile.roles?.length ? profile.roles : [profile.role]) as Role[],
     admin = roles.some((item) => ["SUPER_ADMIN", "ADMIN"].includes(item)),
     platformOwner = profile.is_platform_owner===true;
@@ -3118,12 +3125,12 @@ function Shell({
     delete: actionAllowed(`${scope}.delete`),
   });
   const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'finance.read',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Intégrations:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Centre de contrôle':'audit.read','Portail client':'portal.view','Jumeau numérique':'accounting.view','Radar commercial':'clients.view','Studio campagnes IA':'communication.view'};
-  const visible = (n: [Page, typeof LayoutDashboard, Permission?]) => n[0]==='Parrainage' ? (profile.tenant_owner_id||profile.id)===profile.id : n[0]==='Objectifs & performance' ? !roles.includes('CLIENT') : n[0]==='Paramètres SMS' ? (profile.is_platform_owner===true||roles.includes('SUPER_ADMIN')) : n[0]==='Dashboard'||(n[0]==='Demandes SaaS' ? platformOwner : (
+  const visible = (n: [Page, typeof LayoutDashboard, Permission?]) => n[0]==='Assistance' ? true : n[0]==='Parrainage'||n[0]==='Abonnement' ? (profile.tenant_owner_id||profile.id)===profile.id : n[0]==='Objectifs & performance' ? !roles.includes('CLIENT') : n[0]==='Paramètres SMS' ? (profile.is_platform_owner===true||roles.includes('SUPER_ADMIN')) : n[0]==='Dashboard'||(n[0]==='Demandes SaaS' ? platformOwner : (
     (!viewKeys[n[0]] || actionAllowed(viewKeys[n[0]]!)) &&
     (n[0]==='Centre de contrôle' ? actionAllowed('audit.read') : isModuleAllowed(roles,access,accessLoaded,n[0]))));
   const currentPage = nav.some((item)=>item[0]===page&&visible(item)) ? page : 'Dashboard';
   return (
-    <div className="app-shell production-shell v2-shell" onClickCapture={handleUiClick} onSubmitCapture={event=>{if(expiredTrial){event.preventDefault();event.stopPropagation();setPaywallOpen(true)}}}>
+    <div className="app-shell production-shell v2-shell" onClickCapture={handleUiClick} onSubmitCapture={event=>{if(expiredTrial&&currentPage!=='Abonnement'&&currentPage!=='Assistance'){event.preventDefault();event.stopPropagation();setPaywallOpen(true)}}}>
       <aside className={mobile ? "mobile-open" : ""}>
         <div className="side-head">
           <img src={companyProfile.logo_light} />
@@ -3164,6 +3171,7 @@ function Shell({
             <div className="production-badge">SMARTSELL MANAGEMENT <i /></div>
           </div>
           <div className="top-actions">
+            <button className="assist-header-btn" type="button" onClick={()=>navigate('Assistance')} title="Contacter l’assistance Smartsell" aria-label="Contacter l’assistance"><LifeBuoy/><span>Assistance</span></button>
             {!installed&&<button className="install-app-btn" onClick={()=>void installApp()} title="Installer Smartsell Management sur cet appareil"><Download/><span>Installer l’application</span></button>}
             <button className="language-toggle" onClick={()=>setEnglishDashboard(value=>!value)} title="Dashboard language">{englishDashboard?"FR":"EN"}</button>
             <button
@@ -3175,7 +3183,7 @@ function Shell({
             <NotificationBell onRowsChange={setNotificationRows} />
           </div>
         </header>
-        {expiredTrial&&<div className="trial-expired-banner" role="status"><span>Votre essai est terminé. Vos données restent visibles, mais les actions sont désactivées.</span><button type="button" onClick={()=>setPaywallOpen(true)}>Choisir un abonnement</button></div>}
+        {expiredTrial&&<div className="trial-expired-banner" role="status"><span>Votre essai est terminé. Vos données restent visibles, mais les actions sont désactivées.</span><button type="button" onClick={()=>navigate('Abonnement')}>Choisir un abonnement</button></div>}
         <main>
           {!online&&<div className="offline-banner" role="status"><strong>Mode hors connexion</strong><span>Les écrans déjà chargés restent disponibles. Attendez le retour du réseau avant d’enregistrer une modification.</span></div>}
           <AnimatePresence mode="wait">
@@ -3202,7 +3210,7 @@ function Shell({
               ) : currentPage === "Fournisseurs" ? (
                 <SuppliersPage admin={admin} canCreate={actionAllowed('suppliers.create')} canUpdate={actionAllowed('suppliers.update')} canDelete={actionAllowed('suppliers.delete')} />
               ) : currentPage === "Facturation" ? (
-                <BillingV3 admin={actionAllowed('invoices.delete')} canCreate={actionAllowed('invoices.create')} canUpdate={actionAllowed('invoices.update')} canSend={actionAllowed('invoices.send')} clientFilter={clientFilter} onClearFilter={()=>navigate("Facturation")} />
+                <BillingV3 admin={actionAllowed('invoices.delete')} canCreate={actionAllowed('invoices.create')} canUpdate={actionAllowed('invoices.update')} canSend={actionAllowed('invoices.send')} signedBySmartsell={profile.is_platform_owner===true} clientFilter={clientFilter} onClearFilter={()=>navigate("Facturation")} />
               ) : currentPage === "Documents" ? (
                 <DocumentsPage rights={rightsFor('documents')} />
               ) : currentPage === "Comptabilité" ? (
@@ -3227,6 +3235,10 @@ function Shell({
                 <PerformanceGoals />
               ) : currentPage === "Parrainage" ? (
                 <ReferralDashboard />
+              ) : currentPage === "Abonnement" ? (
+                <SubscriptionPage />
+              ) : currentPage === "Assistance" ? (
+                <SupportCenter profile={profile} />
               ) : currentPage === "Centre de contrôle" ? (
                 <OperationsCenter profile={profile} />
               ) : currentPage === "Jumeau numérique" ? (

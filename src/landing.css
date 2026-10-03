@@ -169,4 +169,5 @@
   .landing-page.theme-light .landing-header nav .mobile-signup{color:#201325}
 }
 @media(max-width:360px){.landing-page .landing-header{padding-inline:9px;gap:5px}.landing-page .landing-header-actions .landing-nav-cta{min-width:67px;padding-inline:7px}.landing-page .landing-menu{width:36px;min-width:36px;height:36px}.landing-page .landing-brand img{width:82px}}
+@media(max-width:1120px){.landing-page .landing-header nav,.landing-page .landing-header nav.open{display:none!important}}
 @media(prefers-reduced-motion:reduce){.landing-hero-rotator em:after{animation:none}.landing-reveal-text{opacity:1;transform:none;filter:none;transition:none}}
