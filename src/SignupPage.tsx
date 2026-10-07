@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, Sparkles } from 'lucide-react'
 import { companyProfile } from './lib/companyProfile'
 import { isDemoMode } from './services/supabase'
@@ -26,6 +26,10 @@ export default function SignupPage({ onBack, onAccess }: Props) {
   // secondary toggle.
   const [smsMode, setSmsMode] = useState(true)
   const [smsChallenge, setSmsChallenge] = useState<{ id: string; email: string; password: string } | null>(null)
+  const [smsCode, setSmsCode] = useState('')
+  const [verifyingSms, setVerifyingSms] = useState(false)
+  const verificationPending = useRef(false)
+  const [createdEmail, setCreatedEmail] = useState('')
   const [brandTheme, setBrandTheme] = useState(readBrandTheme)
   const humanizeSignupError = (reason: unknown) => {
     const message = reason instanceof Error ? reason.message : ''
@@ -52,6 +56,8 @@ export default function SignupPage({ onBack, onAccess }: Props) {
       if (smsMode) {
         const phone = String(form.get('phone') || '').trim()
         const result = await startSmsSignupOtp({ phone, email, fullName, companyName })
+        if (!result?.challenge_id) throw new Error('La confirmation SMS n’a pas pu démarrer. Réessayez dans quelques instants.')
+        setSmsCode('')
         setSmsChallenge({ id: result.challenge_id, email, password })
         setError('')
       } else {
@@ -66,6 +72,39 @@ export default function SignupPage({ onBack, onAccess }: Props) {
       setError(humanizeSignupError(reason))
     } finally { setBusy(false) }
   }
+
+  const confirmSms = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!smsChallenge || verificationPending.current) return
+    if (!/^\d{6}$/.test(smsCode)) return setError('Saisissez les 6 chiffres du code reçu par SMS.')
+    verificationPending.current = true
+    setVerifyingSms(true)
+    setError('')
+    try {
+      const result = await verifySmsSignupOtp({ challengeId: smsChallenge.id, code: smsCode, password: smsChallenge.password, referralCode })
+      if (!result?.success) throw new Error('Le compte n’a pas pu être créé. Réessayez la validation du code.')
+      persistBrandTheme(brandTheme)
+      sessionStorage.setItem('smartsell-show-welcome', '1')
+      setCreatedEmail(result.email || smsChallenge.email)
+      setSmsChallenge(null)
+      setSmsCode('')
+    } catch (reason) {
+      setError(humanizeSignupError(reason))
+    } finally {
+      verificationPending.current = false
+      setVerifyingSms(false)
+    }
+  }
+
+  if (createdEmail) return <main className="signup-page confirmation-state">
+    <section className="signup-confirmation">
+      <div className="confirmation-icon"><Check/></div>
+      <span>COMPTE CONFIRMÉ</span>
+      <h1>Votre compte est créé.</h1>
+      <p>Connectez-vous avec <strong>{createdEmail}</strong> et le mot de passe que vous venez de choisir.</p>
+      <button type="button" onClick={onAccess}>Se connecter <ArrowRight/></button>
+    </section>
+  </main>
 
   if (confirmationEmail) return <main className="signup-page confirmation-state">
     <section className="signup-confirmation">
@@ -88,12 +127,14 @@ export default function SignupPage({ onBack, onAccess }: Props) {
       <span>CONFIRMATION PAR SMS</span>
       <h1>Entrez le code reçu.</h1>
       <p>Un code à 6 chiffres a été envoyé par Nimba au numéro indiqué. Il est valable 10 minutes.</p>
-      <form onSubmit={async event => { event.preventDefault(); setBusy(true); setError(''); try { await verifySmsSignupOtp({ challengeId: smsChallenge.id, code: String(new FormData(event.currentTarget).get('code') || ''), password: smsChallenge.password, referralCode }); persistBrandTheme(brandTheme); sessionStorage.setItem('smartsell-show-welcome', '1'); onAccess(); } catch (reason) { setError(humanizeSignupError(reason)) } finally { setBusy(false) } }}>
-        <label>Code reçu par SMS<input name="code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" required placeholder="000000"/></label>
-        {error && <div className="signup-error"><LockKeyhole/>{error}</div>}
-        <button className="signup-submit" disabled={busy}>{busy ? 'Vérification…' : 'Valider et créer mon espace'} <ArrowRight/></button>
+      <form className="signup-otp-form" onSubmit={confirmSms} aria-busy={verifyingSms}>
+        <label htmlFor="signup-sms-code">Code reçu par SMS</label>
+        <input id="signup-sms-code" name="code" type="text" inputMode="numeric" pattern="[0-9]{6}" autoComplete="one-time-code" required autoFocus placeholder="000000" value={smsCode} onChange={event => { setSmsCode(event.target.value.replace(/\D/g, '').slice(0, 6)); setError('') }} aria-describedby="signup-sms-help" aria-invalid={Boolean(error)}/>
+        <p id="signup-sms-help">Saisissez ou collez les 6 chiffres reçus, puis validez votre compte.</p>
+        {error && <div className="signup-error" role="alert"><LockKeyhole/>{error}</div>}
+        <button type="submit" className="signup-submit" disabled={verifyingSms}>{verifyingSms ? 'Vérification…' : 'Valider et créer mon espace'} <ArrowRight/></button>
       </form>
-      <button className="text-button" onClick={() => setSmsChallenge(null)}>Revenir au formulaire</button>
+      <button type="button" className="text-button" disabled={verifyingSms} onClick={() => { setSmsChallenge(null); setSmsCode(''); setError('') }}>Revenir au formulaire</button>
     </section>
   </main>
 
