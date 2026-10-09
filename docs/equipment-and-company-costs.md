@@ -2,7 +2,7 @@
 
 ## Mise en service
 
-Appliquer `supabase/v63_equipment_requests.sql`, puis `supabase/v64_company_purchases_expenses.sql`. Les migrations sont additives et ne suppriment pas les anciennes données. Le responsable matériel est configurable par le propriétaire de chaque espace ; Adama Bangoura est configurée uniquement dans l’espace Smartsell existant.
+Appliquer `supabase/v63_equipment_requests.sql`, puis `supabase/v64_company_purchases_expenses.sql` et `supabase/v65_supplier_tenant_isolation.sql` avant l’utilisation du registre. La dernière migration ajoute l’isolation manquante aux fournisseurs historiques et supprime les anciennes règles de lecture globale. Elle refuse tout rattachement ambigu à plusieurs espaces. Les migrations sont additives et ne suppriment pas les anciennes données. Le responsable matériel est configurable par le propriétaire de chaque espace ; Adama Bangoura est configurée uniquement dans l’espace Smartsell existant.
 
 ## Matériel
 
