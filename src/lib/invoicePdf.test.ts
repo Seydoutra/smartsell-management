@@ -18,6 +18,20 @@ describe('invoice PDF download pipeline',()=>{
     await invoicePdfFile(element,'FAC-002')
     expect(engine.addPage).toHaveBeenCalledTimes(2);expect(engine.addImage).toHaveBeenCalledTimes(3)
   })
+  it('embeds a desktop A4 layout even if external CSS is unavailable',async()=>{
+    await invoicePdfFile(element,'FAC-CSS')
+    const options=engine.capture.mock.calls[0][1]
+    const style={textContent:''},cloned={style:{},setAttribute:vi.fn(),querySelectorAll:()=>[]}
+    const clonedDocument={createElement:()=>style,head:{appendChild:vi.fn()},body:{appendChild:vi.fn()}}
+    options.onclone(clonedDocument,cloned)
+    expect(options.windowWidth).toBe(1200)
+    expect(cloned.style).toMatchObject({width:'794px',maxWidth:'none',overflow:'visible'})
+    expect(cloned.setAttribute).toHaveBeenCalledWith('data-invoice-export','true')
+    expect(style.textContent).toContain('width:150px!important')
+    expect(style.textContent).toContain('width:125px!important')
+    expect(style.textContent).toContain('grid-template-columns:1fr auto!important')
+    expect(clonedDocument.body.appendChild).toHaveBeenCalledWith(cloned)
+  })
   it('reports an empty rendering rather than downloading a blank file',async()=>{
     engine.capture.mockResolvedValue({width:0,height:0})
     await expect(invoicePdfFile(element,'FAC-003')).rejects.toThrow(/document est vide/)
