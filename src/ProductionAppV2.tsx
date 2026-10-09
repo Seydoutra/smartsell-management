@@ -147,6 +147,7 @@ import {
   listInvoices,
   listPayments,
   listProfiles,
+  listTeamProfiles,
   listProspects,
   listProjects,
   listSocialIntegrations,
@@ -486,15 +487,6 @@ function Field({
       {children}
     </label>
   );
-}
-function ProfileChecklist({ profiles, name, selected=[] }: { profiles:Profile[]; name:string; selected?:string[] }) {
-  return <div className="check-options profile-checklist">
-    {profiles.filter(profile=>profile.active).map(profile=><label key={profile.id}>
-      <input type="checkbox" name={name} value={profile.id} defaultChecked={selected.includes(profile.id)}/>
-      <span>{profile.full_name}</span>
-    </label>)}
-    {!profiles.some(profile=>profile.active)&&<small>Aucun collaborateur actif disponible.</small>}
-  </div>;
 }
 function Header({
   title,
@@ -1200,7 +1192,7 @@ function ProjectsPage({ rights, currentProfileId, clientFilter, onClearFilter }:
     [error, setError] = useState("");
   const load = () => listProjects().then(setRows).catch((e) => setError(e.message));
   const loadReferences = () => {
-    if (!clients.length || !profiles.length) void Promise.all([listClients(), listProfiles()]).then(([a, b]) => { setClients(a); setProfiles(b); }).catch((e) => setError(e.message));
+    if (!clients.length || !profiles.length) void Promise.all([listClients(), listTeamProfiles()]).then(([a, b]) => { setClients(a); setProfiles(b); }).catch((e) => setError(e.message));
   };
   const openCreator = () => {
     setOpen(true);
@@ -1356,7 +1348,7 @@ function TasksPage({
     [error, setError] = useState("");
   const load = () => listTasks().then(setRows).catch((e) => setError(e.message));
   const loadReferences = () => {
-    if (!projects.length || !profiles.length) void Promise.all([listProjects(), listProfiles()]).then(([a, b]) => { setProjects(a); setProfiles(b); }).catch((e) => setError(e.message));
+    if (!projects.length || !profiles.length) void Promise.all([listProjects(), listTeamProfiles()]).then(([a, b]) => { setProjects(a); setProfiles(b); }).catch((e) => setError(e.message));
   };
   const openCreator = () => { setOpen(true); loadReferences(); };
   useEffect(() => {
@@ -3440,3 +3432,4 @@ function PasswordChangeGate({ profile, onComplete }: { profile: Profile; onCompl
     </section>
   </main>;
 }
+import ProfileChecklist from './TeamProfilePicker';

@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';import {pathToFileURL} from 'node:url';
+const {PGlite}=await import(pathToFileURL(process.argv[2]).href);const pg=new PGlite();
+const A='11111111-1111-4111-8111-111111111111',U='22222222-2222-4222-8222-222222222222',B='33333333-3333-4333-8333-333333333333',C='44444444-4444-4444-8444-444444444444';
+await pg.exec(`create role authenticated;create role anon;create table profiles(id uuid primary key,tenant_owner_id uuid,full_name text,role text,roles text[],active boolean,avatar_url text);
+insert into profiles values('${A}','${A}','Owner','SUPER_ADMIN','{SUPER_ADMIN}',true,null),('${U}','${A}','Staff','ADMIN','{ADMIN}',true,null),('${B}','${B}','Other SaaS','SUPER_ADMIN','{SUPER_ADMIN}',true,null),('${C}','${A}','Client','CLIENT','{CLIENT}',true,null);
+create function current_tenant_owner_id() returns uuid language sql as $$select '${A}'::uuid$$;create function action_allowed(a text) returns boolean language sql as $$select true$$;
+create table tasks(id uuid primary key default gen_random_uuid(),tenant_owner_id uuid,assignee_id uuid);create table projects(id uuid primary key default gen_random_uuid(),tenant_owner_id uuid,manager_id uuid);
+create table task_assignees(task_id uuid,profile_id uuid);create table project_members(project_id uuid,profile_id uuid);`);
+const migration=await readFile(new URL('../supabase/v67_workspace_assignment_team.sql',import.meta.url),'utf8');await pg.exec(migration);await pg.exec(migration);
+const team=(await pg.query('select list_assignment_team() team')).rows[0].team;assert.deepEqual(team.map(p=>p.id).sort(),[A,U].sort());
+await assert.rejects(pg.query('insert into tasks(tenant_owner_id,assignee_id) values($1,$2)',[A,B]),/Attribution refusée/);
+await assert.rejects(pg.query('insert into projects(tenant_owner_id,manager_id) values($1,$2)',[A,C]),/Attribution refusée/);
+const task=(await pg.query('insert into tasks(tenant_owner_id,assignee_id) values($1,$2) returning id',[A,U])).rows[0].id;
+await assert.rejects(pg.query('insert into task_assignees values($1,$2)',[task,B]),/Attribution refusée/);await pg.query('insert into task_assignees values($1,$2)',[task,U]);
+const project=(await pg.query('insert into projects(tenant_owner_id,manager_id) values($1,$2) returning id',[A,U])).rows[0].id;
+await assert.rejects(pg.query('insert into project_members values($1,$2)',[project,C]),/Attribution refusée/);
+await pg.query('update profiles set active=false where id=$1',[U]);await assert.rejects(pg.query('insert into tasks(tenant_owner_id,assignee_id) values($1,$2)',[A,U]),/Attribution refusée/);
+await pg.close();console.log('Assignment isolation: own team only, clients/external/inactive excluded, primary and secondary assignments enforced, migration idempotent.');
