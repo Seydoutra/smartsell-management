@@ -25,13 +25,13 @@ Deno.serve(async (request) => {
   try {
     const { admin, user } = await authenticated(request);
     const { data: caller } = await admin.from("profiles").select("role,roles,active,tenant_owner_id").eq("id", user.id).single();
-    const callerRoles = Array.isArray(caller?.roles) && caller.roles.length ? caller.roles : [caller?.role];
-    if (!caller?.active || !callerRoles.some((role) => ["SUPER_ADMIN", "ADMIN"].includes(role))) return json(request, { error: "Permission refusée" }, 403);
+    const {data:canCreate,error:permissionError}=await admin.rpc('member_action_allowed',{p_profile_id:user.id,p_action:'team.create'});
+    if (permissionError || !caller?.active || !canCreate) return json(request, { error: "Permission refusée" }, 403);
     const body = await request.json() as { email?: string; password?: string; name?: string; phone?: string; roles?: string[]; role?: string; department_id?: string; trial_days?: number | null; notify_email?: boolean; notify_sms?: boolean };
     const email = body.email?.trim().toLowerCase(), name = body.name?.trim();
     const selectedRoles = [...new Set((Array.isArray(body.roles) ? body.roles : [body.role]).filter((role): role is string => Boolean(role)).map((role) => role.trim()))];
     if (!email || !name || !selectedRoles.length || selectedRoles.some((role) => !roles.has(role))) return json(request, { error: "Nom, e-mail et rôles valides requis" }, 400);
-    if (selectedRoles.includes("SUPER_ADMIN") && !callerRoles.includes("SUPER_ADMIN")) return json(request, { error: "Seul un Super Admin peut créer un autre propriétaire." }, 403);
+    if (selectedRoles.includes("SUPER_ADMIN") && caller.tenant_owner_id!==user.id) return json(request, { error: "Seul le propriétaire peut attribuer ce rôle." }, 403);
     const role = rolePriority.find((candidate) => selectedRoles.includes(candidate)) || "COLLABORATEUR";
     if (!body.password || body.password.length < 8) return json(request, { error: "Le mot de passe temporaire doit contenir au moins 8 caractères" }, 400);
     const trialDays = body.trial_days == null || body.trial_days === 0 ? null : Math.trunc(Number(body.trial_days));

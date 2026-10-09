@@ -23,7 +23,14 @@ describe("granular access", () => {
     expect(isActionAllowed(["COLLABORATEUR"], access, true, "clients.delete")).toBe(false);
     expect(isActionAllowed(["COLLABORATEUR"], access, true, "accounting.view")).toBe(false);
   });
-  it("lets the super admin access every module", () => {
-    expect(isModuleAllowed(["SUPER_ADMIN"], null, false, "Comptabilité")).toBe(true);
+  it("only lets a workspace owner bypass restrictions", () => {
+    expect(isModuleAllowed(["SUPER_ADMIN"], null, false, "Comptabilité",true)).toBe(true);
+    expect(isModuleAllowed(["SUPER_ADMIN"], null, false, "Comptabilité")).toBe(false);
+    expect(isActionAllowed(["SUPER_ADMIN"],access,true,"clients.delete")).toBe(false);
+  });
+  it("denies mutations when viewing is revoked even with multiple admin roles",()=>{
+    const denied={...access,denied_permissions:['clients.view']};
+    expect(isActionAllowed(['ADMIN','SUPER_ADMIN'],denied,true,'clients.create')).toBe(false);
+    expect(isActionAllowed(['ADMIN','SUPER_ADMIN'],denied,true,'clients.delete')).toBe(false);
   });
 });

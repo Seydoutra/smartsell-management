@@ -4,7 +4,8 @@ import type { AccessControl, ActivityLog, AgencyBriefing, AgencyScenario, Autopi
 const db=()=>{if(!supabase)throw new Error('Supabase n’est pas configuré.');return supabase}
 const fail=(error:{message:string}|null)=>{if(error)throw new Error(error.message)}
 const queryCache=new Map<string,{until:number,value:unknown}>()
-async function cached<T>(key:string,loader:()=>Promise<T>,ttl=45_000):Promise<T>{const hit=queryCache.get(key);if(hit&&hit.until>Date.now())return hit.value as T;const pending=loader();queryCache.set(key,{until:Date.now()+ttl,value:pending});try{const value=await pending;queryCache.set(key,{until:Date.now()+ttl,value});return value}catch(error){queryCache.delete(key);throw error}}
+let cacheAccount:string|undefined
+async function cached<T>(key:string,loader:()=>Promise<T>,ttl=45_000):Promise<T>{const {data}=await db().auth.getSession();const account=data.session?.user.id;if(account!==cacheAccount){queryCache.clear();cacheAccount=account}const hit=queryCache.get(key);if(hit&&hit.until>Date.now())return hit.value as T;const pending=loader();queryCache.set(key,{until:Date.now()+ttl,value:pending});try{const value=await pending;if(cacheAccount===account)queryCache.set(key,{until:Date.now()+ttl,value});return value}catch(error){if(cacheAccount===account)queryCache.delete(key);throw error}}
 const invalidate=(...keys:string[])=>keys.forEach(key=>queryCache.delete(key))
 async function invokeEdge<T>(name:string,body?:Record<string,unknown>,retryNetwork=false):Promise<T>{
   const client=db();
@@ -63,7 +64,7 @@ export async function signInWithGoogle(){
   const {data,error}=await db().auth.signInWithOAuth({provider:'google',options:{redirectTo:redirectTo.href,queryParams:{access_type:'offline',prompt:'consent'}}});
   fail(error);return data
 }
-export async function signOut(){const {error}=await db().auth.signOut();fail(error)}
+export async function signOut(){queryCache.clear();cacheAccount=undefined;const {error}=await db().auth.signOut();fail(error)}
 export async function currentSession(){return (await db().auth.getSession()).data.session}
 export function onAuthChange(callback:()=>void){return db().auth.onAuthStateChange(callback).data.subscription}
 export async function getProfile():Promise<Profile>{
@@ -257,6 +258,7 @@ export type CanvaDesign={id:string;title:string;thumbnail:string|null;edit_url:s
 export async function canvaAction<T>(action:'start'|'status'|'designs'|'design'|'disconnect'|'permissions'|'set-access',designId?:string,options?:{target_profile_id:string;enabled:boolean}){return invokeEdge<T>('canva-connect',{action,design_id:designId,...options})}
 export async function saveSocialIntegration(input:Partial<SocialIntegration>){const payload={provider:input.provider,client_id:input.client_id||null,account_name:input.account_name||null,account_url:input.account_url||null,status:'NON_CONFIGURE',last_synced_at:null};const query=input.id?db().from('social_integrations').update(payload).eq('id',input.id):db().from('social_integrations').insert(payload);const {data,error}=await query.select('id,client_id,provider,account_name,account_url,status,metrics,last_synced_at,created_at').single();fail(error);return data as SocialIntegration}
 export async function saveAccessControl(input:AccessControl){const {data:{user}}=await db().auth.getUser();const {data,error}=await db().from('user_access_controls').upsert({...input,updated_by:user?.id}).select().single();fail(error);return data as AccessControl}
+export async function saveTeamAccess(input:AccessControl,roles:string[]){const {data,error}=await db().rpc('save_team_access',{p_profile_id:input.profile_id,p_roles:roles,p_access:input});fail(error);invalidate('profiles');window.dispatchEvent(new Event('smartsell-access-updated'));return data as AccessControl}
 export async function listEmployeeRecords():Promise<EmployeeRecord[]>{const {data,error}=await db().from('employee_records').select('*,profiles(full_name,phone,role)').order('updated_at',{ascending:false});fail(error);return data as EmployeeRecord[]}
 export async function saveEmployeeRecord(input:Partial<EmployeeRecord>){const {data,error}=await db().from('employee_records').upsert(input).select().single();fail(error);return data as EmployeeRecord}
 export async function listLeaveRequests():Promise<LeaveRequest[]>{const {data,error}=await db().from('leave_requests').select('*,profiles(full_name)').order('created_at',{ascending:false});fail(error);return data as LeaveRequest[]}

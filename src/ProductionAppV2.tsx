@@ -2,6 +2,7 @@ import { CSSProperties, FormEvent, MouseEvent, ReactNode, useCallback, useEffect
 import { AnimatePresence, motion } from "framer-motion";
 import EquipmentRequests from './EquipmentRequests';
 import CompanyCosts from './CompanyCosts';
+import {useLiveAccess} from './services/useLiveAccess';
 import {
   Activity,
   ArrowLeft,
@@ -122,7 +123,6 @@ import {
   executeNextBestAction,
   askAiAssistant,
   generateAgencyIntelligence,
-  getAccessControl,
   getCalendarConnection,
   getCompanySettings,
   getClientWorkspace,
@@ -596,7 +596,7 @@ function TrendCurve({rows,showRevenue,showCost}:{rows:Array<{label:string;revenu
 function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { profile: Profile; access:AccessControl|null; accessLoaded:boolean; onNavigate:(page:Page,clientId?:string|null)=>void; english:boolean }) {
   const roles=(profile.roles?.length?profile.roles:[profile.role]) as Role[];
   const platformOwner=profile.is_platform_owner===true;
-  const allowed=(action:string)=>isActionAllowed(roles,access,accessLoaded,action);
+  const allowed=(action:string)=>isActionAllowed(roles,access,accessLoaded,action,profile.is_platform_owner===true||profile.tenant_owner_id===profile.id);
   const canClients=allowed('clients.view'), canProjects=allowed('projects.view'), canTasks=allowed('tasks.view'),
     canInvoices=allowed('invoices.view'), canAccounting=allowed('accounting.view'), canSuppliers=allowed('suppliers.view'),
     canTeam=allowed('team.view'), canFinance=canInvoices||canAccounting;
@@ -628,6 +628,8 @@ function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { pro
     [intelligenceError,setIntelligenceError]=useState('');
   const loadIntelligence=async()=>{if(!canIntelligence)return;setIntelligenceBusy(true);setIntelligenceError('');try{const result=await generateAgencyIntelligence();setBriefing(result.briefing);setNextActions(result.actions)}catch(error){setIntelligenceError(error instanceof Error?error.message:'Briefing indisponible')}finally{setIntelligenceBusy(false)}};
   useEffect(() => {
+    let active=true;
+    setC([]);setP([]);setI([]);setT([]);setPayments([]);setExpenses([]);setSuppliers([]);setTeam([]);setSessions([]);setActivityLogs([]);
     setLoadError('');
     setLoading(true);
     Promise.all([
@@ -642,6 +644,7 @@ function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { pro
       canTeam?listUserSessions():Promise.resolve([]),
       canTeam&&roles.includes('SUPER_ADMIN')?listActivityLogs():Promise.resolve([]),
     ]).then(([a, b, d, e, f, g, h, j, k, l]) => {
+      if(!active)return;
       setC(a);
       setP(b);
       setI(d);
@@ -652,8 +655,9 @@ function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { pro
       setTeam(j);
       setSessions(k);
       setActivityLogs(l);
-    }).catch((error)=>setLoadError(error instanceof Error?error.message:'Impossible de charger les indicateurs.')).finally(()=>setLoading(false));
+    }).catch((error)=>{if(active)setLoadError(error instanceof Error?error.message:'Impossible de charger les indicateurs.')}).finally(()=>{if(active)setLoading(false)});
     if(canIntelligence)void loadIntelligence();
+    return()=>{active=false};
   }, [accessLoaded,access?.allowed_modules.join('|'),access?.denied_permissions.join('|')]);
   useEffect(()=>{if(!roles.includes('SUPER_ADMIN'))return;void getAppSetting<{metric:string;target:number;period:string;plan?:string}>('monthly_goal').then(value=>setMonthlyGoal(value||undefined)).catch(()=>undefined)},[roles.join('|')]);
   const saveMonthlyGoal=async(goal:{metric:string;target:number;period:string})=>{setGoalBusy(true);try{const active=team.filter(member=>member.active&&!member.roles?.includes('SUPER_ADMIN'));const allocation=active.length?Math.ceil(goal.target/active.length):goal.target;const plan=await askAiAssistant(`Objectif mensuel Smartsell Management : ${goal.target} ${goal.metric} sur ${goal.period}. Équipe active : ${active.map(item=>item.full_name).join(', ')||'aucun collaborateur'}. Répartis l’objectif sur 4 semaines et indique les activités opérationnelles prioritaires. Donne un plan très concis en français.`, 'Plan d’objectifs mensuel');const value={...goal,plan:`Répartition indicative : ${allocation} ${goal.metric} par collaborateur actif.\n${plan}`};await saveAppSetting('monthly_goal',value);setMonthlyGoal(value)}catch(error){setSalesAdvice(error instanceof Error?error.message:'Impossible de calculer le plan')}finally{setGoalBusy(false)}};
@@ -3071,6 +3075,8 @@ function Shell({
   onLogout: () => void;
 }) {
   const online = useOnlineStatus();
+  const {access,accessLoaded}=useLiveAccess(profile.id);
+  const workspaceOwner=profile.is_platform_owner===true||profile.tenant_owner_id===profile.id;
   const [page, setPage] = useState<Page>(pageFromHash),
     [theme, setTheme] = useState<"light" | "dark">(
       () =>
@@ -3080,8 +3086,6 @@ function Shell({
     [mobile, setMobile] = useState(false),
     [clientFilter, setClientFilter] = useState<string | null>(clientFromHash),
     [routeQuery,setRouteQuery]=useState(()=>location.hash.split('?')[1]||''),
-    [access, setAccess] = useState<AccessControl | null>(null),
-    [accessLoaded, setAccessLoaded] = useState(false),
     [openGroups,setOpenGroups]=useState<string[]>(['Pilotage','Production & clients','Communication']),
     [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null),
     [installed, setInstalled] = useState(() => window.matchMedia('(display-mode: standalone)').matches),
@@ -3122,8 +3126,6 @@ function Shell({
   }, [theme]);
   useEffect(() => {
     startSession();
-    setAccessLoaded(false);
-    void getAccessControl(profile.id).then(setAccess).catch(()=>setAccess(null)).finally(()=>setAccessLoaded(true));
     const timer = window.setInterval(pulseSession, 60_000);
     return () => window.clearInterval(timer);
   }, [profile.id]);
@@ -3172,8 +3174,8 @@ function Shell({
     admin = roles.some((item) => ["SUPER_ADMIN", "ADMIN"].includes(item)),
     platformOwner = profile.is_platform_owner===true;
   if (roles.includes("CLIENT")) return <ClientPortalExperience tenantOwnerId={profile.tenant_owner_id||profile.id} onLogout={onLogout} />;
-  if (!accessLoaded&&!roles.includes("SUPER_ADMIN")) return <div className="app-loading"><img src={companyProfile.logo_dark}/><span>Vérification de vos autorisations…</span></div>;
-  const actionAllowed = (key: string) => isActionAllowed(roles,access,accessLoaded,key);
+  if (!accessLoaded&&!workspaceOwner) return <div className="app-loading"><img src={companyProfile.logo_dark}/><span>Vérification de vos autorisations…</span></div>;
+  const actionAllowed = (key: string) => isActionAllowed(roles,access,accessLoaded,key,workspaceOwner);
   const navNotificationCount = (name: Page) => {
     const unread = notificationRows.filter(row=>!row.read_at);
     if (name === 'Centre de contrôle') return unread.length;
@@ -3191,11 +3193,11 @@ function Shell({
     update: actionAllowed(`${scope}.update`),
     delete: actionAllowed(`${scope}.delete`),
   });
-  const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'finance.read',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Intégrations:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Centre de contrôle':'audit.read','Portail client':'portal.view','Jumeau numérique':'accounting.view','Radar commercial':'clients.view','Studio campagnes IA':'communication.view'};
+  const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'suppliers.view',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Intégrations:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Centre de contrôle':'audit.read','Portail client':'portal.view','Jumeau numérique':'accounting.view','Radar commercial':'clients.view','Studio campagnes IA':'communication.view'};
   viewKeys['Achats & dépenses']='accounting.view';
   const visible = (n: [Page, typeof LayoutDashboard, Permission?]) => n[0]==='Assistance'||n[0]==='Demandes matériel' ? true : n[0]==='Parrainage'||n[0]==='Abonnement' ? (profile.tenant_owner_id||profile.id)===profile.id : n[0]==='Objectifs & performance' ? !roles.includes('CLIENT') : n[0]==='Paramètres SMS' ? (profile.is_platform_owner===true||roles.includes('SUPER_ADMIN')) : n[0]==='Dashboard'||(n[0]==='Demandes SaaS' ? platformOwner : (
     (!viewKeys[n[0]] || actionAllowed(viewKeys[n[0]]!)) &&
-    (n[0]==='Centre de contrôle' ? actionAllowed('audit.read') : isModuleAllowed(roles,access,accessLoaded,n[0]==='Achats & dépenses'?'Comptabilité':n[0]))));
+    (n[0]==='Centre de contrôle' ? actionAllowed('audit.read') : isModuleAllowed(roles,access,accessLoaded,n[0]==='Achats & dépenses'?'Comptabilité':n[0],workspaceOwner))));
   const socialVisible=actionAllowed('editorial.view')||actionAllowed('communication.view');
   const socialRoute=page==='Smart Social'||page==='Éditorial'||page==='Intégrations';
   const currentPage = socialRoute&&socialVisible ? page : nav.some((item)=>item[0]===page&&(item[0]==='Smart Social'?socialVisible:visible(item))) ? page : 'Dashboard';
@@ -3309,13 +3311,13 @@ function Shell({
               ) : currentPage === "Demandes matériel" ? (
                 <EquipmentRequests tenantOwnerId={profile.tenant_owner_id||profile.id} blocked={expiredTrial||!online}/>
               ) : currentPage === "Communication" ? (
-                <CommunicationHub canApprove={admin} onBack={()=>navigate("Dashboard")} onOpenIntegrations={()=>navigate("Intégrations")} />
+                <CommunicationHub canApprove={actionAllowed('communication.update')&&actionAllowed('communication.send')} canSend={actionAllowed('communication.send')} canCreate={actionAllowed('communication.create')} canImport={actionAllowed('communication.import')} canCall={workspaceOwner||Boolean(access?.can_initiate_calls)&&actionAllowed('communication.send')} onBack={()=>navigate("Dashboard")} onOpenIntegrations={()=>navigate("Intégrations")} />
               ) : currentPage === "Équipe" ? (
-                <>{admin&&<TeamActivityDashboard tenantOwnerId={profile.tenant_owner_id||profile.id}/>}<TeamAccessPage admin={admin} superAdmin={roles.includes("SUPER_ADMIN")} currentProfileId={profile.id} tenantOwnerId={profile.tenant_owner_id||profile.id} /></>
+                <>{admin&&<TeamActivityDashboard tenantOwnerId={profile.tenant_owner_id||profile.id}/>}<TeamAccessPage admin={actionAllowed("team.create")} canManage={actionAllowed("team.update")} superAdmin={workspaceOwner} currentProfileId={profile.id} tenantOwnerId={profile.tenant_owner_id||profile.id} /></>
               ) : currentPage === "Demandes SaaS" ? (
                 <SignupRequestsPage />
               ) : currentPage === "RH" ? (
-                <HRPage currentProfileId={profile.id} />
+                <HRPage currentProfileId={profile.id} canCreate={actionAllowed('hr.create')} canUpdate={actionAllowed('hr.update')} />
               ) : currentPage === "Rapports" ? (
                 <ReportsPage />
               ) : currentPage === "Paramètres SMS" ? (
