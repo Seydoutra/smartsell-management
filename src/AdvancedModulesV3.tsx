@@ -149,10 +149,11 @@ export function HRPage({currentProfileId}:{currentProfileId:string}){
 // Editorial lives inside Smart Social; the production shell supplies granular rights.
 
 type BillKind='FACTURE'|'DEVIS'
-export function BillingCreateForm({kind,clients,projects,services,clientFilter,onCreated,create}:{kind:BillKind;clients:Client[];projects:Project[];services:Service[];clientFilter?:string|null;onCreated:(document:Invoice|Quote)=>void;create?:(input:{kind:BillKind;clientId:string;projectId?:string;date:string;currency:string;discount:number;items:InvoiceItem[]})=>Promise<Invoice|Quote>}){
+export function BillingCreateForm({kind,clients,projects,services,clientFilter,onCreated,create,initialDraft,requireConfirmation=false}:{kind:BillKind;clients:Client[];projects:Project[];services:Service[];clientFilter?:string|null;onCreated:(document:Invoice|Quote)=>void;initialDraft?:{items:InvoiceItem[];date?:string;currency?:string;taxEnabled?:boolean};requireConfirmation?:boolean;create?:(input:{kind:BillKind;clientId:string;projectId?:string;date:string;currency:string;discount:number;items:InvoiceItem[]})=>Promise<Invoice|Quote>}){
   const [clientId,setClientId]=useState(clientFilter||'')
-  const [items,setItems]=useState<InvoiceItem[]>([{description:'',quantity:1,unit_price:0,tax_rate:0}])
-  const [taxEnabled,setTaxEnabled]=useState(false)
+  const [items,setItems]=useState<InvoiceItem[]>(initialDraft?.items||[{description:'',quantity:1,unit_price:0,tax_rate:0}])
+  const [taxEnabled,setTaxEnabled]=useState(initialDraft?.taxEnabled||false)
+  const [confirmed,setConfirmed]=useState(false)
   const [busy,setBusy]=useState(false)
   const [error,setError]=useState('')
   const total=items.reduce((sum,item)=>sum+item.quantity*item.unit_price*(1+(taxEnabled?item.tax_rate:0)/100),0)
@@ -160,6 +161,7 @@ export function BillingCreateForm({kind,clients,projects,services,clientFilter,o
   const submit=async(event:FormEvent<HTMLFormElement>)=>{
     event.preventDefault()
     if(busy)return
+    if(requireConfirmation&&!confirmed){setError('Vérifiez les champs et confirmez la création.');return}
     const form=event.currentTarget
     const values=new FormData(form)
     const prepared=items.map(item=>({...item,description:item.description.trim(),tax_rate:taxEnabled?item.tax_rate:0}))
@@ -178,12 +180,12 @@ export function BillingCreateForm({kind,clients,projects,services,clientFilter,o
     }catch(cause){setError(cause instanceof Error?cause.message:'La création a échoué. Réessayez après avoir vérifié votre connexion.')}
     finally{setBusy(false)}
   }
-  return <form className="entity-form billing-create-form" onSubmit={submit} noValidate aria-busy={busy}>
+  return <form className="entity-form billing-create-form" onSubmit={submit} onChange={event=>{if((event.target as HTMLElement).getAttribute('name')!=='command_confirmation')setConfirmed(false)}} noValidate aria-busy={busy}>
     <div className="form-grid">
       <Field label="Client"><select name="client_id" required value={clientId} onChange={event=>setClientId(event.target.value)}><option value="">Choisir un client…</option>{clients.map(client=><option value={client.id} key={client.id}>{client.name}</option>)}</select></Field>
       <Field label="Projet"><select name="project_id" key={clientId}><option value="">Sans projet</option>{projects.filter(project=>project.client_id===clientId).map(project=><option value={project.id} key={project.id}>{project.name}</option>)}</select></Field>
-      <Field label={kind==='FACTURE'?'Échéance':'Validité'}><input name="date" type="date" required/></Field>
-      <Field label="Devise"><select name="currency" defaultValue="GNF"><option>GNF</option><option>EUR</option><option>USD</option></select></Field>
+      <Field label={kind==='FACTURE'?'Échéance':'Validité'}><input name="date" type="date" defaultValue={initialDraft?.date} required/></Field>
+      <Field label="Devise"><select name="currency" defaultValue={initialDraft?.currency||'GNF'}><option>GNF</option><option>EUR</option><option>USD</option></select></Field>
       <Field label="Remise"><input name="discount" type="number" min="0" step="any" defaultValue="0"/></Field>
       <Field label="TVA"><span className="toggle-line"><input type="checkbox" checked={taxEnabled} onChange={event=>setTaxEnabled(event.target.checked)}/><span>{taxEnabled?'TVA activée':'Sans TVA'}</span></span></Field>
     </div>
@@ -193,15 +195,17 @@ export function BillingCreateForm({kind,clients,projects,services,clientFilter,o
       <label>Quantité<input required type="number" min="0.01" step="any" value={item.quantity} onChange={event=>updateItem(index,{quantity:Number(event.target.value)})}/></label>
       <label>Prix unitaire<input required type="number" min="0" step="any" value={item.unit_price} onChange={event=>updateItem(index,{unit_price:Number(event.target.value)})}/></label>
       <label>TVA %<input type="number" min="0" max="100" step="any" disabled={!taxEnabled} value={taxEnabled?item.tax_rate:0} onChange={event=>updateItem(index,{tax_rate:Number(event.target.value)})}/></label>
-      {items.length>1&&<button type="button" className="invoice-line-remove" aria-label={`Supprimer la prestation ${index+1}`} onClick={()=>setItems(current=>current.filter((_,i)=>i!==index))}><X/></button>}
+      {items.length>1&&<button type="button" className="invoice-line-remove" aria-label={`Supprimer la prestation ${index+1}`} onClick={()=>{setItems(current=>current.filter((_,i)=>i!==index));setConfirmed(false)}}><X/></button>}
     </div>)}</div>
     {error&&<div className="error-banner" role="alert">{error}</div>}
-    <div className="form-actions"><button type="button" className="ghost-action" disabled={busy} onClick={()=>setItems(current=>[...current,{description:'',quantity:1,unit_price:0,tax_rate:0}])}><Plus/>Ajouter une ligne</button><strong>Total : {money(total)}</strong><button type="submit" className="primary-btn compact" disabled={busy}>{busy?'Création en cours…':'Générer'}</button></div>
+    {requireConfirmation&&<label className="command-confirm"><input name="command_confirmation" type="checkbox" checked={confirmed} disabled={busy} onChange={event=>setConfirmed(event.target.checked)}/>J’ai vérifié le client, les montants, la TVA et la date ; je confirme cette création.</label>}
+    <div className="form-actions"><button type="button" className="ghost-action" disabled={busy} onClick={()=>{setItems(current=>[...current,{description:'',quantity:1,unit_price:0,tax_rate:0}]);setConfirmed(false)}}><Plus/>Ajouter une ligne</button><strong>Total : {money(total)}</strong><button type="submit" className="primary-btn compact" disabled={busy||(requireConfirmation&&!confirmed)}>{busy?'Création en cours…':requireConfirmation?'Confirmer et générer':'Générer'}</button></div>
   </form>
 }
-export function BillingV3({admin,canCreate=true,canUpdate=true,canSend=true,signedBySmartsell=false,clientFilter,onClearFilter}:{admin:boolean;canCreate?:boolean;canUpdate?:boolean;canSend?:boolean;signedBySmartsell?:boolean;clientFilter?:string|null;onClearFilter?:()=>void}){
+export function BillingV3({admin,canCreate=true,canUpdate=true,canSend=true,signedBySmartsell=false,clientFilter,onClearFilter,intent={}}:{admin:boolean;canCreate?:boolean;canUpdate?:boolean;canSend?:boolean;signedBySmartsell?:boolean;clientFilter?:string|null;onClearFilter?:()=>void;intent?:{view?:string;action?:string;request?:string}}){
   const[invoices,setInvoices]=useState<Invoice[]>([]),[quotes,setQuotes]=useState<Quote[]>([]),[clients,setClients]=useState<Client[]>([]),[projects,setProjects]=useState<Project[]>([]),[services,setServices]=useState<Service[]>([]),[kind,setKind]=useState<BillKind>('FACTURE'),[open,setOpen]=useState(false),[selected,setSelected]=useState<Invoice|Quote|null>(null),[documentNotice,setDocumentNotice]=useState(''),[documentError,setDocumentError]=useState(''),[pdfBusy,setPdfBusy]=useState(false),[actionBusy,setActionBusy]=useState(false),[paymentMode,setPaymentMode]=useState(false),[conversionMode,setConversionMode]=useState(false),[loadError,setLoadError]=useState('')
   const documentRef=useRef<HTMLDivElement>(null)
+  useEffect(()=>{if(intent.view==='FACTURE'||intent.view==='DEVIS'){setKind(intent.view);setSelected(null);setOpen(intent.action==='new-document'&&canCreate)}},[intent.view,intent.action,intent.request,canCreate])
   const[issuer,setIssuer]=useState<CompanySettings|null>(null)
   const[smartsellTenant,setSmartsellTenant]=useState(signedBySmartsell)
   useEffect(()=>{void getCompanySettings().then(setIssuer).catch(()=>setIssuer(null))},[])

@@ -26,6 +26,7 @@ import {
   Megaphone,
   Menu,
   MessageSquareText,
+  Mic,
   Moon,
   Package,
   Pencil,
@@ -53,6 +54,12 @@ import CommunicationHub from "./CommunicationHub";
 import TeamChat from "./TeamChat";
 import TeamActivityDashboard from "./TeamActivityDashboard";
 import SmartSocial from "./SmartSocial";
+import CommercialPipeline from './CommercialPipeline';
+import ClientSocialDashboard from './ClientSocialDashboard';
+import ModuleNavigation from './ModuleNavigation';
+import ActionCommand from './ActionCommand';
+import { commandKinds, commandPermission } from './lib/actionCommand';
+import { moduleNavigationHash, readModuleIntent, type ModuleIntent } from './lib/commercialPipeline';
 import PlanningCalendar from "./PlanningCalendar";
 import { ClientConversationDesk, ClientPortalExperience } from "./ClientPortalExperience";
 import { contactsFromCsv, contactsFromFile, googleSheetCsvUrl, ImportedContact } from "./lib/contactImport";
@@ -164,7 +171,6 @@ import {
   updateEquipment,
   updateProfile,
   updateProject,
-  updateProspect,
   updateService,
   updateTask,
   updateNextBestAction,
@@ -182,7 +188,6 @@ import type {
   Client,
   CompanySettings,
   CommercialDocument,
-  CommercialRadar,
   ContactGroup,
   EditorialItem,
   Equipment,
@@ -724,12 +729,14 @@ function ClientDetail({
   onChanged,
   onNavigate,
   rights,
+  tenantOwnerId,
 }: {
   id: string;
   onClose: () => void;
   onChanged: () => void;
   onNavigate: (page: "Projets" | "Tâches" | "Facturation", clientId: string) => void;
   rights: CrudRights;
+  tenantOwnerId:string;
 }) {
   const [data, setData] = useState<Awaited<
       ReturnType<typeof getClientWorkspace>
@@ -825,6 +832,7 @@ function ClientDetail({
             <button type="button" className="detail-kpi-link" onClick={()=>{onClose();onNavigate("Tâches",id)}} aria-label={`Voir les ${data.tasks.length} tâches de ${data.client.name}`}><Stat name="Tâches" value={data.tasks.length} copy="Ouvrir les tâches" /></button>
             <button type="button" className="detail-kpi-link" onClick={()=>{onClose();onNavigate("Facturation",id)}} aria-label={`Voir les factures de ${data.client.name}`}><Stat name="Facturé" value={money(data.invoices.reduce((s, x) => s + Number(x.total), 0))} copy={`Payé ${money(paid)} · Ouvrir`} /></button>
           </div>
+          <ClientSocialDashboard tenantOwnerId={tenantOwnerId} clientId={id} clientName={data.client.name} canEdit={rights.update}/>
           <DetailList
             title="Projets"
             rows={data.projects.map((x) => [
@@ -898,32 +906,34 @@ function DetailList({ title, rows }: { title: string; rows: string[][] }) {
 
 // Social connections are now part of the Smart Social workspace.
 
-function ClientsPage({ rights, onNavigate }: { rights: CrudRights; onNavigate: (page: "Projets" | "Tâches" | "Facturation", clientId: string) => void }) {
+function ClientsPage({ rights, onNavigate, tenantOwnerId, canViewOffers, intent }: { rights: CrudRights; onNavigate: (page: "Projets" | "Tâches" | "Facturation", clientId: string) => void; tenantOwnerId:string; canViewOffers:boolean; intent:ModuleIntent }) {
   const [rows, setRows] = useState<Client[]>([]),
-    [prospects,setProspects]=useState<Prospect[]>([]),
-    [radar,setRadar]=useState<CommercialRadar|null>(null),
-    [workspace,setWorkspace]=useState<'CLIENTS'|'PIPELINE'>('CLIENTS'),
+    [workspace,setWorkspace]=useState<'CLIENTS'|'PIPELINE'>(intent.view==='PIPELINE'?'PIPELINE':'CLIENTS'),
     [open, setOpen] = useState(false),
     [selected, setSelected] = useState<string | null>(null),
     [error, setError] = useState("");
   const load = () =>
-    Promise.all([listClients(),listProspects()])
-      .then(([clients,leads])=>{setRows(clients);setProspects(leads)})
+    listClients()
+      .then(setRows)
       .catch((e) => setError(e.message));
   useEffect(() => {
     void load();
   }, []);
+  useEffect(()=>{
+    setWorkspace(intent.view==='PIPELINE'?'PIPELINE':'CLIENTS');
+    if(intent.action==='new-client'&&rights.create)setOpen(true);
+  },[intent.view,intent.action,intent.request,rights.create]);
   return (
     <>
       <Header
         title="Clients"
         copy="Fiches complètes, projets, tâches, factures et paiements reliés."
-        onAdd={rights.create ? () => setOpen(true) : undefined}
+        onAdd={rights.create ? () => {setWorkspace('CLIENTS');setOpen(true)} : undefined}
         add="Nouveau client"
       />
       <ErrorBar value={error} />
-      <div className="crm-workspace-tabs"><button className={workspace==='CLIENTS'?'active':''} onClick={()=>setWorkspace('CLIENTS')}><Users/>Clients & comptes</button><button className={workspace==='PIPELINE'?'active':''} onClick={()=>setWorkspace('PIPELINE')}><Target/>Pipeline commercial IA</button></div>
-      {workspace==='PIPELINE'&&<section className="crm-command panel"><div className="crm-command-head"><div><span className="eyebrow"><i/> CRM AUGMENTÉ</span><h2>Chaque opportunité, avec la prochaine action déjà suggérée.</h2><p>Le radar IA analyse le stade, les relances, les signaux de contact et les consentements pour prioriser le pipeline.</p></div><button className="primary-btn compact" disabled={!prospects.length} onClick={async()=>{try{setRadar(await (await import('./services/repository')).generateCommercialRadar())}catch(e){setError(e instanceof Error?e.message:'Analyse IA indisponible')}}}><Sparkles/>Analyser le pipeline</button></div>{radar&&<div className="crm-ai-summary"><b>{radar.summary.hot_prospects} prospect(s) chaud(s)</b><span>{radar.summary.healthy} client(s) sains · {radar.summary.watch} à surveiller · {radar.summary.critical} critiques</span></div>}<div className="crm-pipeline">{(['NOUVEAU','CONTACTE','QUALIFIE','PROPOSITION','NEGOCIATION','GAGNE'] as const).map(stage=><div className="crm-stage" key={stage}><header><strong>{stage.replace('QUALIFIE','QUALIFIÉ')}</strong><span>{prospects.filter(item=>item.stage===stage).length}</span></header>{prospects.filter(item=>item.stage===stage).map(item=>{const score=radar?.prospects.find(row=>row.prospect_id===item.id);return <article key={item.id}><strong>{item.company}</strong><small>{item.contact_name||'Contact non renseigné'}</small>{score&&<em>{score.score}/100 · {score.recommended_action}</em>}<select disabled={!rights.update} value={item.stage} onChange={async event=>{try{const next=await updateProspect(item.id,{stage:event.target.value} as Partial<Prospect>);setProspects(current=>current.map(row=>row.id===next.id?next:row))}catch(e){setError(e instanceof Error?e.message:'Mise à jour impossible')}}}><option>NOUVEAU</option><option>CONTACTE</option><option>QUALIFIE</option><option>PROPOSITION</option><option>NEGOCIATION</option><option>GAGNE</option><option>PERDU</option></select></article>})}</div>)}</div></section>}
+      <div className="crm-workspace-tabs"><button className={workspace==='CLIENTS'?'active':''} onClick={()=>setWorkspace('CLIENTS')}><Users/>Clients & comptes</button><button className={workspace==='PIPELINE'?'active':''} onClick={()=>setWorkspace('PIPELINE')}><Target/>Pipeline commercial</button></div>
+      {workspace==='PIPELINE'&&<CommercialPipeline tenantOwnerId={tenantOwnerId} rights={rights} canViewOffers={canViewOffers} intent={intent}/>}
       {workspace==='CLIENTS'&&<>
       <div className="records panel">
         {!rows.length ? (
@@ -968,6 +978,7 @@ function ClientsPage({ rights, onNavigate }: { rights: CrudRights; onNavigate: (
                   const photo=form.get('avatar_file');
                   if(photo instanceof File && photo.size) await updateClient(created.id,{avatar_url:await uploadClientAvatar(photo)});
                   setOpen(false);
+                  setSelected(created.id);
                   load();
                 } catch (x) {
                   setError(x instanceof Error ? x.message : "Erreur");
@@ -1008,6 +1019,7 @@ function ClientsPage({ rights, onNavigate }: { rights: CrudRights; onNavigate: (
         {selected && (
           <ClientDetail
             id={selected}
+            tenantOwnerId={tenantOwnerId}
             onClose={() => setSelected(null)}
             onChanged={load}
             onNavigate={onNavigate}
@@ -3058,6 +3070,7 @@ function Shell({
     ),
     [mobile, setMobile] = useState(false),
     [clientFilter, setClientFilter] = useState<string | null>(clientFromHash),
+    [routeQuery,setRouteQuery]=useState(()=>location.hash.split('?')[1]||''),
     [access, setAccess] = useState<AccessControl | null>(null),
     [accessLoaded, setAccessLoaded] = useState(false),
     [openGroups,setOpenGroups]=useState<string[]>(['Pilotage','Production & clients','Communication']),
@@ -3065,6 +3078,8 @@ function Shell({
     [installed, setInstalled] = useState(() => window.matchMedia('(display-mode: standalone)').matches),
     [notificationRows, setNotificationRows] = useState<Notification[]>([]),
     [chatOpen,setChatOpen] = useState(false),
+    [commandOpen,setCommandOpen] = useState(false),
+    [workspaceRevision,setWorkspaceRevision] = useState(0),
     [chatWelcome,setChatWelcome] = useState(false),
     [chatUnread,setChatUnread] = useState<TeamChatMessage[]>([]),
     [englishDashboard, setEnglishDashboard] = useState(false),
@@ -3074,17 +3089,20 @@ function Shell({
   const expiredTrial=Boolean(tenantTrial.is_temporary&&!profile.is_platform_owner&&tenantTrial.access_expires_at&&new Date(tenantTrial.access_expires_at).getTime()<=trialClock);
   useEffect(()=>{const timer=window.setInterval(()=>setTrialClock(Date.now()),30_000);return()=>window.clearInterval(timer)},[]);
   useEffect(()=>{void getTenantTrialStatus(profile).then(setTenantTrial).catch(()=>undefined)},[profile.id,profile.tenant_owner_id,profile.access_expires_at]);
-  const navigate = (next: Page, clientId: string | null = null) => {
-    const hash = `#/${encodeURIComponent(next)}${clientId ? `?client=${encodeURIComponent(clientId)}` : ""}`;
+  const routeIntent=useMemo(()=>readModuleIntent(routeQuery),[routeQuery]);
+  useEffect(()=>{const group=navGroups.find(item=>item.pages.includes(page));if(group)setOpenGroups(current=>current.includes(group.label)?current:[...current,group.label])},[page]);
+  const navigate = (next: Page, clientId: string | null = null, intent:ModuleIntent={}) => {
+    const hash = moduleNavigationHash(next,clientId,intent);
     history.pushState({}, "", hash);
     setPage(next);
     setClientFilter(clientId);
+    setRouteQuery(hash.split('?')[1]||'');
     setMobile(false);
   };
   useEffect(()=>watchTranslations(englishDashboard),[englishDashboard]);
   useEffect(() => {
     if (!location.hash) history.replaceState({}, "", `#/${encodeURIComponent("Dashboard")}`);
-    const sync = () => { setPage(pageFromHash()); setClientFilter(clientFromHash()); };
+    const sync = () => { setPage(pageFromHash()); setClientFilter(clientFromHash()); setRouteQuery(location.hash.split('?')[1]||''); };
     window.addEventListener("popstate", sync);
     window.addEventListener("hashchange", sync);
     return () => { window.removeEventListener("popstate", sync); window.removeEventListener("hashchange", sync); };
@@ -3144,7 +3162,7 @@ function Shell({
   const roles = (profile.roles?.length ? profile.roles : [profile.role]) as Role[],
     admin = roles.some((item) => ["SUPER_ADMIN", "ADMIN"].includes(item)),
     platformOwner = profile.is_platform_owner===true;
-  if (roles.includes("CLIENT")) return <ClientPortalExperience onLogout={onLogout} />;
+  if (roles.includes("CLIENT")) return <ClientPortalExperience tenantOwnerId={profile.tenant_owner_id||profile.id} onLogout={onLogout} />;
   if (!accessLoaded&&!roles.includes("SUPER_ADMIN")) return <div className="app-loading"><img src={companyProfile.logo_dark}/><span>Vérification de vos autorisations…</span></div>;
   const actionAllowed = (key: string) => isActionAllowed(roles,access,accessLoaded,key);
   const navNotificationCount = (name: Page) => {
@@ -3181,9 +3199,19 @@ function Shell({
         </div>
         <nav>
           <small>SMARTSELL MANAGEMENT</small>
-          {navGroups.map(group=>{const items=nav.filter(item=>group.pages.includes(item[0])&&(item[0]==='Smart Social'?socialVisible:visible(item)));if(!items.length)return null;const active=items.some(item=>item[0]===currentPage||(item[0]==='Smart Social'&&socialRoute)),expanded=openGroups.includes(group.label)||active;return <section className={`nav-group ${expanded?'expanded':''}`} key={group.label}>
-            <button className="nav-group-toggle" onClick={()=>setOpenGroups(groups=>groups.includes(group.label)?groups.filter(item=>item!==group.label):[...groups,group.label])}><span>{group.label}</span><ChevronRight/></button>
-            <AnimatePresence initial={false}>{expanded&&<motion.div className="nav-group-items" initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}} transition={{duration:.24,ease:'easeOut'}}>{items.map(([name,Icon])=><button key={name} className={currentPage===name||(name==='Smart Social'&&socialRoute)?'active':''} onClick={()=>navigate(name)}><Icon/><span>{name==='Clients'?'CRM & clients':name}</span>{navNotificationCount(name)>0&&<b className="nav-alert-badge">{navNotificationCount(name)>99?'99+':navNotificationCount(name)}</b>}</button>)}</motion.div>}</AnimatePresence>
+          {navGroups.map(group=>{const items=nav.filter(item=>group.pages.includes(item[0])&&(item[0]==='Smart Social'?socialVisible:visible(item)));if(!items.length)return null;const expanded=openGroups.includes(group.label);return <section className={`nav-group ${expanded?'expanded':''}`} key={group.label}>
+            <button className="nav-group-toggle" aria-expanded={expanded} onClick={()=>setOpenGroups(groups=>groups.includes(group.label)?groups.filter(item=>item!==group.label):[...groups,group.label])}><span>{group.label}</span><ChevronRight/></button>
+            <AnimatePresence initial={false}>{expanded&&<motion.div className="nav-group-items" initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}} transition={{duration:.24,ease:'easeOut'}}>{items.map(([name,Icon])=>name==='Clients'||name==='Facturation'?<ModuleNavigation key={name} name={name==='Clients'?'CRM & clients':'Factures & devis'} icon={Icon} active={currentPage===name} intent={routeIntent} notificationCount={navNotificationCount(name)} onNavigate={intent=>navigate(name,null,intent)} links={name==='Clients'?[
+              {label:'Gérer les clients',view:'CLIENTS',allowed:actionAllowed('clients.view')},
+              {label:'Ajouter un client',view:'CLIENTS',action:'new-client',allowed:actionAllowed('clients.create')},
+              {label:'Pipeline commercial',view:'PIPELINE',allowed:actionAllowed('clients.view')},
+              {label:'Ajouter un prospect',view:'PIPELINE',action:'new-prospect',allowed:actionAllowed('clients.create')},
+            ]:[
+              {label:'Voir les factures',view:'FACTURE',allowed:actionAllowed('invoices.view')},
+              {label:'Ajouter une facture',view:'FACTURE',action:'new-document',allowed:actionAllowed('invoices.create')},
+              {label:'Voir les devis',view:'DEVIS',allowed:actionAllowed('invoices.view')},
+              {label:'Ajouter un devis',view:'DEVIS',action:'new-document',allowed:actionAllowed('invoices.create')},
+            ]}/>:<button key={name} className={currentPage===name||(name==='Smart Social'&&socialRoute)?'active':''} onClick={()=>navigate(name)}><Icon/><span>{name}</span>{navNotificationCount(name)>0&&<b className="nav-alert-badge">{navNotificationCount(name)>99?'99+':navNotificationCount(name)}</b>}</button>)}</motion.div>}</AnimatePresence>
           </section>})}
         </nav>
         <div className="side-bottom">
@@ -3212,6 +3240,7 @@ function Shell({
             <div className="production-badge">SMARTSELL MANAGEMENT <i /></div>
           </div>
           <div className="top-actions">
+            <button className="command-launch" type="button" onClick={()=>{setChatOpen(false);setChatWelcome(false);setCommandOpen(true)}} title="Dicter une action" aria-label="Dicter une action"><Mic/><span>Dicter une action</span></button>
             <button className="assist-header-btn" type="button" onClick={()=>navigate('Assistance')} title="Contacter l’assistance Smartsell" aria-label="Contacter l’assistance"><LifeBuoy/><span>Assistance</span></button>
             <button className="icon-btn chat-header-btn" type="button" onClick={()=>{setChatWelcome(false);setChatOpen(true);markChatRead()}} title="Messages de l’équipe" aria-label={`Messages de l’équipe${chatUnread.length?` : ${chatUnread.length} non lus`:''}`}><MessageSquareText/>{chatUnread.length>0&&<b>{chatUnread.length>99?'99+':chatUnread.length}</b>}</button>
             {!installed&&<button className="install-app-btn" onClick={()=>void installApp()} title="Installer Smartsell Management sur cet appareil"><Download/><span>Installer l’application</span></button>}
@@ -3234,7 +3263,7 @@ function Shell({
           {!online&&<div className="offline-banner" role="status"><strong>Mode hors connexion</strong><span>Les écrans déjà chargés restent disponibles. Attendez le retour du réseau avant d’enregistrer une modification.</span></div>}
           <AnimatePresence mode="wait">
             <motion.div
-              key={currentPage}
+              key={`${currentPage}:${workspaceRevision}`}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
@@ -3242,7 +3271,7 @@ function Shell({
               {currentPage === "Dashboard" ? (
                 <Dashboard profile={profile} access={access} accessLoaded={accessLoaded} onNavigate={navigate} english={englishDashboard} />
               ) : currentPage === "Clients" ? (
-                <ClientsPage rights={rightsFor('clients')} onNavigate={(next,clientId)=>navigate(next,clientId)} />
+                <ClientsPage rights={rightsFor('clients')} tenantOwnerId={profile.tenant_owner_id||profile.id} canViewOffers={actionAllowed('services.view')} intent={routeIntent} onNavigate={(next,clientId)=>navigate(next,clientId)} />
               ) : currentPage === "Projets" ? (
                 <ProjectsPage rights={rightsFor('projects')} currentProfileId={profile.id} clientFilter={clientFilter} onClearFilter={()=>navigate("Projets")} />
               ) : currentPage === "Tâches" ? (
@@ -3256,7 +3285,7 @@ function Shell({
               ) : currentPage === "Fournisseurs" ? (
                 <SuppliersPage admin={admin} canCreate={actionAllowed('suppliers.create')} canUpdate={actionAllowed('suppliers.update')} canDelete={actionAllowed('suppliers.delete')} />
               ) : currentPage === "Facturation" ? (
-                <BillingV3 admin={actionAllowed('invoices.delete')} canCreate={actionAllowed('invoices.create')} canUpdate={actionAllowed('invoices.update')} canSend={actionAllowed('invoices.send')} signedBySmartsell={profile.is_platform_owner===true} clientFilter={clientFilter} onClearFilter={()=>navigate("Facturation")} />
+                <BillingV3 admin={actionAllowed('invoices.delete')} canCreate={actionAllowed('invoices.create')} canUpdate={actionAllowed('invoices.update')} canSend={actionAllowed('invoices.send')} signedBySmartsell={profile.is_platform_owner===true} clientFilter={clientFilter} intent={routeIntent} onClearFilter={()=>navigate("Facturation")} />
               ) : currentPage === "Documents" ? (
                 <DocumentsPage rights={rightsFor('documents')} />
               ) : currentPage === "Comptabilité" ? (
@@ -3303,6 +3332,7 @@ function Shell({
         </main>
       </div>
       {expiredTrial&&<TrialPaywall open={paywallOpen} onClose={()=>setPaywallOpen(false)} expiredAt={tenantTrial.access_expires_at!} canRequest={(profile.tenant_owner_id||profile.id)===profile.id}/>}
+      {commandOpen&&<ActionCommand profile={profile} allowed={actionAllowed} blocked={expiredTrial||!online||!commandKinds.some(kind=>actionAllowed(commandPermission(kind)))} onClose={()=>setCommandOpen(false)} onCreated={kind=>{setWorkspaceRevision(value=>value+1);navigate(kind==='CLIENT'?'Clients':kind==='TASK'?'Tâches':kind==='PROJECT'?'Projets':'Facturation',null,{view:kind==='FACTURE'||kind==='DEVIS'?kind:undefined})}}/>}
       <AnimatePresence>
         {chatWelcome&&!chatOpen&&<Modal title="Vous avez de nouveaux messages" onClose={()=>setChatWelcome(false)}><div className="chat-welcome-preview"><p>Voici les derniers échanges reçus depuis votre précédente visite.</p>{chatUnread.slice(-3).reverse().map(item=><article key={item.id}><strong>{item.profiles?.full_name||'Collaborateur'}{item.recipient_id?' · privé':' · équipe'}</strong><span>{item.body}</span></article>)}<button type="button" className="primary-btn compact" onClick={()=>{setChatWelcome(false);setChatOpen(true);markChatRead()}}>Ouvrir la messagerie</button></div></Modal>}
         {chatOpen&&<Modal title="Messagerie" onClose={()=>setChatOpen(false)}><TeamChat onRead={markChatRead}/></Modal>}
