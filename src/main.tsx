@@ -6,7 +6,11 @@ import './styles.css'
 
 const client = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: 1 } } })
 
-if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`))
+// Do not leave a production service worker controlling local development.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) window.addEventListener('load', () => {
+  void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { updateViaCache: 'none' })
+    .then(registration => registration.update()).catch(() => { /* Offline mode is optional. */ })
+})
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

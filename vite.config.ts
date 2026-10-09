@@ -5,7 +5,7 @@ const page = (name: string) => new URL(`./${name}/index.html`, import.meta.url).
 export default defineConfig(({ command }) => ({
   plugins: [react()],
   base: command === 'build' ? '/smartsell-management/' : '/',
-  build: { sourcemap: true, rollupOptions: { input: {
+  build: { sourcemap: true, rollupOptions: { output: { manualChunks: { 'pdf-engine': ['jspdf', 'html2canvas'] } }, input: {
     main: new URL('./index.html', import.meta.url).pathname,
     solutions: page('solutions'),
     fonctionnement: page('fonctionnement'),

@@ -1,4 +1,5 @@
 import type { CommercialDocument, CompanySettings } from '../types/models'
+import { jsPDF } from './pdfEngine'
 
 export const commercialKindNames:Record<string,string>={
   BON_COMMANDE:'Bon de commande',BON_LIVRAISON:'Bon de livraison',BON_VENTE:'Bon de vente',
@@ -15,7 +16,6 @@ export const commercialDrafts:Record<string,string>={
 }
 
 export async function commercialPdfFile(document:CommercialDocument,company:CompanySettings|null):Promise<File>{
-  const {jsPDF}=await import('jspdf')
   const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'})
   const companyName=company?.company_name?.trim()||'Votre organisation'
   const kind=commercialKindNames[document.kind]||document.kind.replaceAll('_',' ')

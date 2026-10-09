@@ -52,7 +52,7 @@ import BetaSandboxApp from "./BetaSandboxApp";
 import CommunicationHub from "./CommunicationHub";
 import TeamChat from "./TeamChat";
 import TeamActivityDashboard from "./TeamActivityDashboard";
-import CanvaIntegrationPanel from "./CanvaIntegrationPanel";
+import SmartSocial from "./SmartSocial";
 import PlanningCalendar from "./PlanningCalendar";
 import { ClientConversationDesk, ClientPortalExperience } from "./ClientPortalExperience";
 import { contactsFromCsv, contactsFromFile, googleSheetCsvUrl, ImportedContact } from "./lib/contactImport";
@@ -71,7 +71,6 @@ import {
   AiAssistantPage,
   BillingV3,
   ClientPortalAdmin,
-  EditorialV3,
   HRPage,
   SignupRequestsPage,
   SuppliersPage,
@@ -213,6 +212,7 @@ type Page =
   | "Tâches"
   | "Planning"
   | "Éditorial"
+  | "Smart Social"
   | "Services"
   | "Fournisseurs"
   | "Facturation"
@@ -248,7 +248,7 @@ const nav: [Page, typeof LayoutDashboard, Permission?][] = [
   ["Projets", BriefcaseBusiness, "projects.write"],
   ["Tâches", ClipboardList, "projects.write"],
   ["Planning", CalendarDays, "projects.write"],
-  ["Éditorial", BookOpenCheck, "projects.write"],
+  ["Smart Social", BookOpenCheck],
   ["Services", Boxes, "finance.read"],
   ["Fournisseurs", BriefcaseBusiness, "finance.read"],
   ["Facturation", ReceiptText, "finance.read"],
@@ -256,7 +256,6 @@ const nav: [Page, typeof LayoutDashboard, Permission?][] = [
   ["Comptabilité", CircleDollarSign, "finance.read"],
   ["Matériel", Package, "projects.write"],
   ["Communication", Mail, "communication.send"],
-  ["Intégrations", Settings2],
   ["Équipe", Users, "users.manage"],
   ["Demandes SaaS", ShieldCheck, "users.manage"],
   ["RH", BriefcaseBusiness, "users.manage"],
@@ -272,13 +271,13 @@ const nav: [Page, typeof LayoutDashboard, Permission?][] = [
 ];
 const navGroups:{label:string;pages:Page[]}[]=[
   {label:'Pilotage',pages:['Dashboard','Objectifs & performance','Parrainage','Abonnement','Assistance']},
-  {label:'Production & clients',pages:['Clients','Projets','Tâches','Planning','Éditorial']},
+  {label:'Production & clients',pages:['Clients','Projets','Tâches','Planning','Smart Social']},
   {label:'Finance & achats',pages:['Services','Fournisseurs','Facturation','Documents','Comptabilité','Matériel']},
-  {label:'Communication',pages:['Communication','Intégrations','Paramètres SMS']},
+  {label:'Communication',pages:['Communication','Paramètres SMS']},
   {label:'Administration',pages:['Équipe','Demandes SaaS','RH','Rapports','Centre de contrôle','Portail client']},
   {label:'Intelligence artificielle',pages:['Jumeau numérique','Radar commercial','Studio campagnes IA','Autopilot IA','Assistant IA']},
 ];
-const pageNames = new Set<Page>(nav.map(([name]) => name));
+const pageNames = new Set<Page>([...nav.map(([name]) => name), 'Éditorial', 'Intégrations']);
 const pageFromHash = (): Page => {
   const value = decodeURIComponent(location.hash.replace(/^#\/?/, "").split("?")[0] || "Dashboard") as Page;
   return pageNames.has(value) ? value : "Dashboard";
@@ -897,14 +896,7 @@ function DetailList({ title, rows }: { title: string; rows: string[][] }) {
   );
 }
 
-function IntegrationsPage({rights}:{rights:CrudRights}){
-  const providers:[SocialIntegration['provider'],string,string][]=[['FACEBOOK','Facebook','Pages et campagnes'],['INSTAGRAM','Instagram','Portée, engagement et contenus'],['LINKEDIN','LinkedIn','Pages entreprise et leads'],['X','X / Twitter','Impressions et interactions'],['TIKTOK','TikTok','Vues, portée et vidéos'],['YOUTUBE','YouTube','Vues, abonnés et watch time']];
-  const [rows,setRows]=useState<SocialIntegration[]>([]),[clients,setClients]=useState<Client[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[selected,setSelected]=useState<SocialIntegration['provider']|null>(null);
-  const load=()=>Promise.all([listSocialIntegrations(),listClients()]).then(([integrations,clientRows])=>{setRows(integrations);setClients(clientRows)}).catch(e=>setError(e instanceof Error?e.message:'Les intégrations ne sont pas encore activées dans Supabase.'));
-  useEffect(()=>{void load()},[]);
-  const save=async(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();if(!selected||!rights.update)return;setBusy(true);try{const f=new FormData(event.currentTarget);await saveSocialIntegration({id:rows.find(row=>row.provider===selected)?.id,provider:selected,client_id:String(f.get('client_id')||'')||null,account_name:String(f.get('account_name')||''),account_url:String(f.get('account_url')||''),status:'NON_CONFIGURE',last_synced_at:null});setSelected(null);await load()}catch(e){setError(e instanceof Error?e.message:'Enregistrement impossible')}finally{setBusy(false)}};
-  return <><Header title="Intégrations" copy="Connectez les réseaux de vos clients, centralisez leurs statistiques et préparez les décisions assistées par IA."/><ErrorBar value={error}/><section className="integration-intro panel"><div><span className="eyebrow"><i/> CONNECTEURS ÉVOLUTIFS</span><h2>Un hub unique pour les données sociales.</h2><p>Chaque connecteur sera isolé, révoquable et rattaché au bon client. Les métriques alimenteront ensuite les rapports, le calendrier éditorial et le radar commercial.</p></div><div className="integration-flow"><span>Connexion OAuth</span><b>→</b><span>Synchronisation</span><b>→</b><span>Rapport IA</span></div></section><CanvaIntegrationPanel canManage={rights.update}/><div className="integration-grid">{providers.map(([provider,name,description])=>{const row=rows.find(item=>item.provider===provider);return <article className="integration-card panel" key={provider}><div className={`integration-logo integration-${provider.toLowerCase()}`}>{provider.slice(0,1)}</div><div><h3>{name}</h3><p>{description}</p></div><span className={`status ${statusTone(row?.status||'A_CONFIGURER')}`}>{row?.status==='CONNECTE'?'Connecté':'À configurer'}</span><div className="integration-metrics"><b>{row?.metrics?.followers||0}</b><span>abonnés suivis</span><b>{row?.metrics?.engagement_rate||0}%</b><span>engagement</span></div><button className="ghost-action" disabled={!rights.update} onClick={()=>setSelected(provider)}>{row?'Modifier la connexion':'Configurer'}</button></article>})}</div><AnimatePresence>{selected&&<Modal title={`Configurer ${selected}`} onClose={()=>setSelected(null)}><form className="entity-form" onSubmit={save}><Field label="Client concerné"><select name="client_id" defaultValue={rows.find(row=>row.provider===selected)?.client_id||''}><option value="">Tous les comptes</option>{clients.map(client=><option key={client.id} value={client.id}>{client.name}</option>)}</select></Field><Field label="Nom du compte"><input name="account_name" defaultValue={rows.find(row=>row.provider===selected)?.account_name||''} placeholder="Ex. Smartsell Management Conakry" required/></Field><Field label="URL publique"><input name="account_url" type="url" defaultValue={rows.find(row=>row.provider===selected)?.account_url||''} placeholder="https://…"/></Field><p className="muted">La connexion OAuth sécurisée et la synchronisation des statistiques seront branchées par connecteur. Aucun mot de passe ni jeton ne doit être saisi ici.</p><button className="primary-btn compact" disabled={busy}>Enregistrer la connexion</button></form></Modal>}</AnimatePresence></>;
-}
+// Social connections are now part of the Smart Social workspace.
 
 function ClientsPage({ rights, onNavigate }: { rights: CrudRights; onNavigate: (page: "Projets" | "Tâches" | "Facturation", clientId: string) => void }) {
   const [rows, setRows] = useState<Client[]>([]),
@@ -3175,7 +3167,9 @@ function Shell({
   const visible = (n: [Page, typeof LayoutDashboard, Permission?]) => n[0]==='Assistance' ? true : n[0]==='Parrainage'||n[0]==='Abonnement' ? (profile.tenant_owner_id||profile.id)===profile.id : n[0]==='Objectifs & performance' ? !roles.includes('CLIENT') : n[0]==='Paramètres SMS' ? (profile.is_platform_owner===true||roles.includes('SUPER_ADMIN')) : n[0]==='Dashboard'||(n[0]==='Demandes SaaS' ? platformOwner : (
     (!viewKeys[n[0]] || actionAllowed(viewKeys[n[0]]!)) &&
     (n[0]==='Centre de contrôle' ? actionAllowed('audit.read') : isModuleAllowed(roles,access,accessLoaded,n[0]))));
-  const currentPage = nav.some((item)=>item[0]===page&&visible(item)) ? page : 'Dashboard';
+  const socialVisible=actionAllowed('editorial.view')||actionAllowed('communication.view');
+  const socialRoute=page==='Smart Social'||page==='Éditorial'||page==='Intégrations';
+  const currentPage = socialRoute&&socialVisible ? page : nav.some((item)=>item[0]===page&&(item[0]==='Smart Social'?socialVisible:visible(item))) ? page : 'Dashboard';
   return (
     <div className="app-shell production-shell v2-shell" onClickCapture={handleUiClick} onSubmitCapture={event=>{if(expiredTrial&&currentPage!=='Abonnement'&&currentPage!=='Assistance'){event.preventDefault();event.stopPropagation();setPaywallOpen(true)}}}>
       <aside className={mobile ? "mobile-open" : ""}>
@@ -3187,9 +3181,9 @@ function Shell({
         </div>
         <nav>
           <small>SMARTSELL MANAGEMENT</small>
-          {navGroups.map(group=>{const items=nav.filter(item=>group.pages.includes(item[0])&&visible(item));if(!items.length)return null;const active=items.some(item=>item[0]===currentPage),expanded=openGroups.includes(group.label)||active;return <section className={`nav-group ${expanded?'expanded':''}`} key={group.label}>
+          {navGroups.map(group=>{const items=nav.filter(item=>group.pages.includes(item[0])&&(item[0]==='Smart Social'?socialVisible:visible(item)));if(!items.length)return null;const active=items.some(item=>item[0]===currentPage||(item[0]==='Smart Social'&&socialRoute)),expanded=openGroups.includes(group.label)||active;return <section className={`nav-group ${expanded?'expanded':''}`} key={group.label}>
             <button className="nav-group-toggle" onClick={()=>setOpenGroups(groups=>groups.includes(group.label)?groups.filter(item=>item!==group.label):[...groups,group.label])}><span>{group.label}</span><ChevronRight/></button>
-            <AnimatePresence initial={false}>{expanded&&<motion.div className="nav-group-items" initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}} transition={{duration:.24,ease:'easeOut'}}>{items.map(([name,Icon])=><button key={name} className={currentPage===name?'active':''} onClick={()=>navigate(name)}><Icon/><span>{name==='Clients'?'CRM & clients':name}</span>{navNotificationCount(name)>0&&<b className="nav-alert-badge">{navNotificationCount(name)>99?'99+':navNotificationCount(name)}</b>}</button>)}</motion.div>}</AnimatePresence>
+            <AnimatePresence initial={false}>{expanded&&<motion.div className="nav-group-items" initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}} transition={{duration:.24,ease:'easeOut'}}>{items.map(([name,Icon])=><button key={name} className={currentPage===name||(name==='Smart Social'&&socialRoute)?'active':''} onClick={()=>navigate(name)}><Icon/><span>{name==='Clients'?'CRM & clients':name}</span>{navNotificationCount(name)>0&&<b className="nav-alert-badge">{navNotificationCount(name)>99?'99+':navNotificationCount(name)}</b>}</button>)}</motion.div>}</AnimatePresence>
           </section>})}
         </nav>
         <div className="side-bottom">
@@ -3255,8 +3249,8 @@ function Shell({
                 <TasksPage rights={rightsFor('tasks')} currentProfileId={profile.id} canAssign={actionAllowed('tasks.assign')} clientFilter={clientFilter} onClearFilter={()=>navigate("Tâches")} />
               ) : currentPage === "Planning" ? (
                 <TasksPage rights={{view:actionAllowed('planning.view'),create:actionAllowed('planning.create'),update:actionAllowed('planning.update'),delete:actionAllowed('tasks.delete')}} currentProfileId={profile.id} canAssign={actionAllowed('tasks.assign')} planning />
-              ) : currentPage === "Éditorial" ? (
-                <EditorialV3 />
+              ) : currentPage === "Smart Social" || currentPage === "Éditorial" || currentPage === "Intégrations" ? (
+                <SmartSocial key={currentPage} tenantOwnerId={profile.tenant_owner_id||profile.id} editorialRights={rightsFor('editorial')} connectionRights={rightsFor('communication')} initialView={currentPage==='Intégrations'?'CONNECTIONS':'CALENDAR'} />
               ) : currentPage === "Services" ? (
                 <ServicesPage rights={rightsFor('services')} />
               ) : currentPage === "Fournisseurs" ? (
@@ -3271,8 +3265,6 @@ function Shell({
                 <EquipmentPage rights={rightsFor('equipment')} />
               ) : currentPage === "Communication" ? (
                 <CommunicationHub canApprove={admin} onBack={()=>navigate("Dashboard")} onOpenIntegrations={()=>navigate("Intégrations")} />
-              ) : currentPage === "Intégrations" ? (
-                <IntegrationsPage rights={rightsFor('communication')} />
               ) : currentPage === "Équipe" ? (
                 <>{admin&&<TeamActivityDashboard tenantOwnerId={profile.tenant_owner_id||profile.id}/>}<TeamAccessPage admin={admin} superAdmin={roles.includes("SUPER_ADMIN")} currentProfileId={profile.id} tenantOwnerId={profile.tenant_owner_id||profile.id} /></>
               ) : currentPage === "Demandes SaaS" ? (
