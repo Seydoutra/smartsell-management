@@ -32,7 +32,7 @@ const permissionGroups=[
   {module:'Facturation',actions:[['invoices.view','Voir'],['invoices.create','Créer devis / facture'],['invoices.update','Enregistrer un paiement'],['invoices.send','Envoyer / partager'],['invoices.delete','Supprimer']]},
   {module:'Documents',actions:[['documents.view','Voir'],['documents.create','Créer'],['documents.update','Modifier'],['documents.delete','Supprimer']]},
   {module:'Comptabilité',actions:[['accounting.view','Voir'],['accounting.create','Enregistrer'],['accounting.update','Modifier / approuver'],['accounting.delete','Supprimer']]},
-  {module:'Matériel',actions:[['equipment.view','Voir'],['equipment.create','Créer'],['equipment.update','Modifier / sortir'],['equipment.delete','Supprimer']]},
+  {module:'Matériel',actions:[['equipment.view','Voir'],['equipment.create','Créer'],['equipment.update','Modifier / sortir'],['equipment.delete','Supprimer'],['equipment.request','Demander un bon de sortie'],['equipment.approve','Traiter les demandes (responsable désigné)']]},
   {module:'Communication',actions:[['communication.view','Voir / consulter les connexions sociales'],['communication.create','Ajouter une référence sociale'],['communication.update','Modifier les références / gérer Canva'],['communication.delete','Supprimer une référence sociale'],['communication.send','Envoyer'],['communication.import','Importer des contacts'],['communication.export','Exporter']]},
   {module:'Équipe',actions:[['team.view','Voir'],['team.create','Créer un compte'],['team.update','Modifier rôles et droits'],['team.suspend','Suspendre']]},
   {module:'RH',actions:[['hr.view','Voir'],['hr.create','Créer'],['hr.update','Modifier / approuver'],['hr.delete','Supprimer']]},

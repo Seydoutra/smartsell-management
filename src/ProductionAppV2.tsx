@@ -1,5 +1,7 @@
 import { CSSProperties, FormEvent, MouseEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import EquipmentRequests from './EquipmentRequests';
+import CompanyCosts from './CompanyCosts';
 import {
   Activity,
   ArrowLeft,
@@ -223,7 +225,9 @@ type Page =
   | "Facturation"
   | "Documents"
   | "Comptabilité"
+  | "Achats & dépenses"
   | "Matériel"
+  | "Demandes matériel"
   | "Communication"
   | "Équipe"
   | "Demandes SaaS"
@@ -259,7 +263,9 @@ const nav: [Page, typeof LayoutDashboard, Permission?][] = [
   ["Facturation", ReceiptText, "finance.read"],
   ["Documents", FileCheck2, "finance.read"],
   ["Comptabilité", CircleDollarSign, "finance.read"],
+  ["Achats & dépenses", WalletCards, "finance.read"],
   ["Matériel", Package, "projects.write"],
+  ["Demandes matériel", ClipboardList],
   ["Communication", Mail, "communication.send"],
   ["Équipe", Users, "users.manage"],
   ["Demandes SaaS", ShieldCheck, "users.manage"],
@@ -277,7 +283,7 @@ const nav: [Page, typeof LayoutDashboard, Permission?][] = [
 const navGroups:{label:string;pages:Page[]}[]=[
   {label:'Pilotage',pages:['Dashboard','Objectifs & performance','Parrainage','Abonnement','Assistance']},
   {label:'Production & clients',pages:['Clients','Projets','Tâches','Planning','Smart Social']},
-  {label:'Finance & achats',pages:['Services','Fournisseurs','Facturation','Documents','Comptabilité','Matériel']},
+  {label:'Finance & achats',pages:['Services','Fournisseurs','Facturation','Documents','Comptabilité','Achats & dépenses','Matériel','Demandes matériel']},
   {label:'Communication',pages:['Communication','Paramètres SMS']},
   {label:'Administration',pages:['Équipe','Demandes SaaS','RH','Rapports','Centre de contrôle','Portail client']},
   {label:'Intelligence artificielle',pages:['Jumeau numérique','Radar commercial','Studio campagnes IA','Autopilot IA','Assistant IA']},
@@ -2583,7 +2589,7 @@ function DocumentsPage({rights}:{rights:CrudRights}) {
   );
 }
 
-function AccountingPage({rights}:{rights:CrudRights}) {
+function AccountingPage({rights,onCosts}:{rights:CrudRights;onCosts:()=>void}) {
   const [rows, setRows] = useState<Expense[]>([]),
     [projects, setProjects] = useState<Project[]>([]),
     [invoices, setInvoices] = useState<Invoice[]>([]),
@@ -2599,7 +2605,7 @@ function AccountingPage({rights}:{rights:CrudRights}) {
   useEffect(() => {
     void load();
   }, []);
-  const approved=rows.filter(row=>row.status==='APPROUVE'),approvedTotal=approved.reduce((sum,row)=>sum+Number(row.amount),0),pendingTotal=rows.filter(row=>row.status!=='APPROUVE').reduce((sum,row)=>sum+Number(row.amount),0),billed=invoices.reduce((sum,row)=>sum+Number(row.total),0),collected=payments.reduce((sum,row)=>sum+Number(row.amount),0),receivables=Math.max(0,billed-collected),result=collected-approvedTotal,categories=Object.entries(rows.reduce<Record<string,number>>((acc,row)=>{const key=row.category||'Autre';acc[key]=(acc[key]||0)+Number(row.amount);return acc},{})).sort((a,b)=>b[1]-a[1]);
+  const approved=rows.filter(row=>row.status==='APPROUVE'),approvedTotal=approved.reduce((sum,row)=>sum+Number(row.amount),0),pendingTotal=rows.filter(row=>row.status==='BROUILLON').reduce((sum,row)=>sum+Number(row.amount),0),billed=invoices.reduce((sum,row)=>sum+Number(row.total),0),collected=payments.reduce((sum,row)=>sum+Number(row.amount),0),receivables=Math.max(0,billed-collected),result=collected-approvedTotal,categories=Object.entries(rows.filter(row=>row.status!=='REFUSE').reduce<Record<string,number>>((acc,row)=>{const key=row.category||'Autre';acc[key]=(acc[key]||0)+Number(row.amount);return acc},{})).sort((a,b)=>b[1]-a[1]);
   return (
     <>
       <Header
@@ -2607,7 +2613,9 @@ function AccountingPage({rights}:{rights:CrudRights}) {
         copy="Pilotage des dépenses, encaissements, créances, résultat et centres de coûts."
         onAdd={rights.create?() => setOpen(true):undefined}
         add="Nouvelle dépense"
-      />
+      >
+        <button className="ghost-action" onClick={onCosts}><WalletCards/>Achats & dépenses de l’entreprise</button>
+      </Header>
       <section className="production-kpis accounting-kpis">
         <Stat
           name="Dépenses approuvées"
@@ -2617,7 +2625,7 @@ function AccountingPage({rights}:{rights:CrudRights}) {
         <Stat
           name="Dépenses à approuver"
           value={money(pendingTotal)}
-          copy={`${rows.length-approved.length} en attente`}
+          copy={`${rows.filter(row=>row.status==='BROUILLON').length} en attente`}
         />
         <Stat
           name="Encaissements"
@@ -2625,7 +2633,7 @@ function AccountingPage({rights}:{rights:CrudRights}) {
           copy={`${payments.length} paiement(s)`}
         />
         <Stat name="Créances clients" value={money(receivables)} copy={`${invoices.filter(invoice=>invoice.status!=='PAYEE').length} facture(s) à suivre`}/>
-        <Stat name="Résultat de trésorerie" value={money(result)} copy={result>=0?'Solde positif':'Attention : solde négatif'}/>
+        <Stat name="Solde théorique" value={money(result)} copy="Encaissements moins charges approuvées ; approbation ≠ paiement"/>
         <Stat name="Total facturé" value={money(billed)} copy={`${invoices.length} facture(s)`}/>
       </section>
       <section className="accounting-overview">
@@ -2709,7 +2717,7 @@ function AccountingPage({rights}:{rights:CrudRights}) {
   );
 }
 
-function EquipmentPage({rights}:{rights:CrudRights}) {
+function EquipmentPage({rights,onRequests}:{rights:CrudRights;onRequests:()=>void}) {
   const [rows,setRows]=useState<Equipment[]>([]),[categories,setCategories]=useState<EquipmentCategory[]>([]),
     [movements,setMovements]=useState<EquipmentMovement[]>([]),[open,setOpen]=useState(false),[categoryOpen,setCategoryOpen]=useState(false),
     [selected,setSelected]=useState<Equipment|null>(null),[movementType,setMovementType]=useState<'SORTIE'|'RETOUR'|null>(null),[error,setError]=useState('');
@@ -2720,6 +2728,7 @@ function EquipmentPage({rights}:{rights:CrudRights}) {
   </form>;
   return <>
     <Header title="Matériel" copy="Inventaire complet, modèles, catégories personnalisables et traçabilité des entrées/sorties." onAdd={rights.create?()=>setOpen(true):undefined} add="Nouveau matériel">
+      <button className="ghost-action" onClick={onRequests}><ClipboardList/>Demandes de sortie & retours</button>
       {rights.create&&<button className="ghost-action" onClick={()=>setCategoryOpen(true)}><Plus/>Nouvelle catégorie</button>}
     </Header>
     <ErrorBar value={error}/>
@@ -2729,7 +2738,7 @@ function EquipmentPage({rights}:{rights:CrudRights}) {
     <AnimatePresence>
       {open&&<Modal title="Ajouter du matériel" onClose={()=>setOpen(false)}>{equipmentForm()}</Modal>}
       {categoryOpen&&<Modal title="Créer une catégorie" onClose={()=>setCategoryOpen(false)} wide={false}><form className="entity-form" onSubmit={async event=>{event.preventDefault();const form=new FormData(event.currentTarget);try{await createEquipmentCategory({name:String(form.get('name')),description:String(form.get('description')||'')});setCategoryOpen(false);await load()}catch(reason){setError(reason instanceof Error?reason.message:'Création impossible')}}}><Field label="Nom"><input name="name" required/></Field><Field label="Description"><textarea name="description"/></Field><button className="primary-btn compact">Créer la catégorie</button></form></Modal>}
-      {selected&&!movementType&&<Modal title={selected.name} onClose={()=>setSelected(null)}><div className="detail-hero"><div className="record-avatar large">MT</div><div><h3>{selected.name}</h3><p>{selected.model||'Modèle non renseigné'} · {selected.category||'Autre'} · {selected.serial_number||'Sans n° de série'}</p><span className={`status ${statusTone(selected.status)}`}>{label(selected.status)}</span></div></div>{rights.update&&equipmentForm(selected)}<div className="form-actions">{rights.update&&<><button className="ghost-action" onClick={()=>setMovementType('SORTIE')}>Bon de sortie</button><button className="primary-btn compact" onClick={()=>setMovementType('RETOUR')}>Bon de rentrée</button></>}{rights.delete&&<Danger onClick={async()=>{if(confirm(`Supprimer ${selected.name} de l’inventaire ?`)){await deleteEquipment(selected.id);setSelected(null);await load()}}}/>}</div></Modal>}
+      {selected&&!movementType&&<Modal title={selected.name} onClose={()=>setSelected(null)}><div className="detail-hero"><div className="record-avatar large">MT</div><div><h3>{selected.name}</h3><p>{selected.model||'Modèle non renseigné'} · {selected.category||'Autre'} · {selected.serial_number||'Sans n° de série'}</p><span className={`status ${statusTone(selected.status)}`}>{label(selected.status)}</span></div></div>{rights.update&&equipmentForm(selected)}<div className="form-actions"><button className="ghost-action" onClick={onRequests}>Demandes et bons de sortie / retour</button>{rights.update&&selected.status==='EN_MISSION'&&<button className="ghost-action" onClick={()=>setMovementType('RETOUR')}>Retour historique (hors demande)</button>}{rights.delete&&<Danger onClick={async()=>{if(confirm(`Supprimer ${selected.name} de l’inventaire ?`)){await deleteEquipment(selected.id);setSelected(null);await load()}}}/>}</div></Modal>}
       {selected&&movementType&&<Modal title={movementType==='SORTIE'?'Enregistrer un bon de sortie':'Enregistrer un bon de rentrée'} onClose={()=>setMovementType(null)} wide={false}><form className="entity-form" onSubmit={async event=>{event.preventDefault();const form=new FormData(event.currentTarget);try{await recordEquipmentMovement({equipment_id:selected.id,movement_type:movementType,reason:String(form.get('reason')||''),condition_notes:String(form.get('condition_notes')||'')});setMovementType(null);setSelected(null);await load()}catch(reason){setError(reason instanceof Error?reason.message:'Mouvement impossible')}}}><p><strong>{selected.code} · {selected.name}</strong></p><Field label="Motif"><input name="reason" required placeholder={movementType==='SORTIE'?'Projet, tournage, prêt…':'Retour, réintégration, récupération…'}/></Field><Field label="État constaté"><textarea name="condition_notes" placeholder="État du matériel au moment du mouvement"/></Field><button className="primary-btn compact">Valider le {movementType==='SORTIE'?'bon de sortie':'bon de rentrée'}</button></form></Modal>}
     </AnimatePresence>
   </>;
@@ -3172,6 +3181,7 @@ function Shell({
       Projets:['project','projects'], Tâches:['task','tasks'], Planning:['task','tasks'],
       Communication:['communication','campaign'], Facturation:['invoice','invoices'],
       Équipe:['team','user'], Clients:['client','clients'],
+      'Demandes matériel':['equipment_request'],
     };
     return unread.filter(row=>types[name]?.includes(row.entity_type||'')).length;
   };
@@ -3182,9 +3192,10 @@ function Shell({
     delete: actionAllowed(`${scope}.delete`),
   });
   const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'finance.read',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Intégrations:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Centre de contrôle':'audit.read','Portail client':'portal.view','Jumeau numérique':'accounting.view','Radar commercial':'clients.view','Studio campagnes IA':'communication.view'};
-  const visible = (n: [Page, typeof LayoutDashboard, Permission?]) => n[0]==='Assistance' ? true : n[0]==='Parrainage'||n[0]==='Abonnement' ? (profile.tenant_owner_id||profile.id)===profile.id : n[0]==='Objectifs & performance' ? !roles.includes('CLIENT') : n[0]==='Paramètres SMS' ? (profile.is_platform_owner===true||roles.includes('SUPER_ADMIN')) : n[0]==='Dashboard'||(n[0]==='Demandes SaaS' ? platformOwner : (
+  viewKeys['Achats & dépenses']='accounting.view';
+  const visible = (n: [Page, typeof LayoutDashboard, Permission?]) => n[0]==='Assistance'||n[0]==='Demandes matériel' ? true : n[0]==='Parrainage'||n[0]==='Abonnement' ? (profile.tenant_owner_id||profile.id)===profile.id : n[0]==='Objectifs & performance' ? !roles.includes('CLIENT') : n[0]==='Paramètres SMS' ? (profile.is_platform_owner===true||roles.includes('SUPER_ADMIN')) : n[0]==='Dashboard'||(n[0]==='Demandes SaaS' ? platformOwner : (
     (!viewKeys[n[0]] || actionAllowed(viewKeys[n[0]]!)) &&
-    (n[0]==='Centre de contrôle' ? actionAllowed('audit.read') : isModuleAllowed(roles,access,accessLoaded,n[0]))));
+    (n[0]==='Centre de contrôle' ? actionAllowed('audit.read') : isModuleAllowed(roles,access,accessLoaded,n[0]==='Achats & dépenses'?'Comptabilité':n[0]))));
   const socialVisible=actionAllowed('editorial.view')||actionAllowed('communication.view');
   const socialRoute=page==='Smart Social'||page==='Éditorial'||page==='Intégrations';
   const currentPage = socialRoute&&socialVisible ? page : nav.some((item)=>item[0]===page&&(item[0]==='Smart Social'?socialVisible:visible(item))) ? page : 'Dashboard';
@@ -3255,6 +3266,7 @@ function Shell({
               if(row.entity_type==='team_chat'){setChatWelcome(false);setChatOpen(true);markChatRead()}
               else if(row.entity_type==='task')navigate('Tâches')
               else if(row.entity_type==='project')navigate('Projets')
+              else if(row.entity_type==='equipment_request')navigate('Demandes matériel')
             }}/>
           </div>
         </header>
@@ -3289,9 +3301,13 @@ function Shell({
               ) : currentPage === "Documents" ? (
                 <DocumentsPage rights={rightsFor('documents')} />
               ) : currentPage === "Comptabilité" ? (
-                <AccountingPage rights={rightsFor('accounting')} />
+                <AccountingPage rights={rightsFor('accounting')} onCosts={()=>navigate('Achats & dépenses')}/>
+              ) : currentPage === "Achats & dépenses" ? (
+                <CompanyCosts tenantOwnerId={profile.tenant_owner_id||profile.id} rights={rightsFor('accounting')} canProjects={actionAllowed('projects.view')} canSuppliers={actionAllowed('suppliers.view')} blocked={expiredTrial||!online}/>
               ) : currentPage === "Matériel" ? (
-                <EquipmentPage rights={rightsFor('equipment')} />
+                <EquipmentPage rights={rightsFor('equipment')} onRequests={()=>navigate('Demandes matériel')}/>
+              ) : currentPage === "Demandes matériel" ? (
+                <EquipmentRequests tenantOwnerId={profile.tenant_owner_id||profile.id} blocked={expiredTrial||!online}/>
               ) : currentPage === "Communication" ? (
                 <CommunicationHub canApprove={admin} onBack={()=>navigate("Dashboard")} onOpenIntegrations={()=>navigate("Intégrations")} />
               ) : currentPage === "Équipe" ? (
