@@ -2171,6 +2171,8 @@ function BillingPage() {
                   amount: Number(f.amount),
                   method: f.method,
                   reference: f.reference,
+                  paid_at: f.paid_at,
+                  cashbox: f.cashbox,
                 });
                 setMode(null);
                 load();
@@ -2197,6 +2199,8 @@ function BillingPage() {
                     <option>Chèque</option>
                   </select>
                 </Field>
+                <Field label="Date du paiement"><input name="paid_at" type="datetime-local" required defaultValue={new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16)}/></Field>
+                <Field label="Caisse / compte comptable"><input name="cashbox" maxLength={160} placeholder="Facultatif"/></Field>
                 <Field label="Référence" wide>
                   <input name="reference" />
                 </Field>

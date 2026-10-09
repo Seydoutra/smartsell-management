@@ -1,0 +1,15 @@
+import {readFile} from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const {PGlite}=await import(process.argv[2]);
+const db=new PGlite();
+await db.exec(`create role anon; create role authenticated; create table payments(id uuid primary key,paid_at timestamptz not null default now(),amount numeric,method text,reference text);
+create function record_invoice_payment(uuid,numeric,text,text) returns uuid language plpgsql as $$ begin insert into payments(id,amount,method,reference) values($1,$2,$3,$4); return $1; end $$;`);
+const migration=await readFile(new URL('../supabase/v68_payment_traceability.sql',import.meta.url),'utf8');
+await db.exec(migration);await db.exec(migration);
+const id='00000000-0000-0000-0000-000000000001';
+await db.query("select record_invoice_payment_details($1,25000,'Orange Money','TX-123','2026-01-02T14:30:00Z',' Caisse principale ')",[id]);
+const {rows:[payment]}=await db.query('select * from payments where id=$1',[id]);
+assert.equal(payment.cashbox,'Caisse principale');assert.equal(payment.method,'Orange Money');assert.equal(payment.reference,'TX-123');assert.equal(new Date(payment.paid_at).toISOString(),'2026-01-02T14:30:00.000Z');
+await assert.rejects(db.query("select record_invoice_payment_details('00000000-0000-0000-0000-000000000002',1,'Espèces',null,now()+interval '1 day',null)"),/future/);
+assert.equal((await db.query('select count(*)::int n from payments')).rows[0].n,1);
+await db.close();console.log('Payment date, method, reference, cashbox and future-date rejection verified.');
