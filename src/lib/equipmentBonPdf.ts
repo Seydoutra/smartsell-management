@@ -1,7 +1,7 @@
 import {jsPDF} from 'jspdf'
 import type {EquipmentRequest} from '../services/equipmentRequests'
 export function equipmentBonPdf(request:EquipmentRequest):File{
- if(!['APPROUVEE','SORTIE','RETOUR_PARTIEL','RETOURNEE'].includes(request.status))throw new Error('Demande approuvée requise pour le bon PDF.')
+ if(!['SORTIE','RETOUR_PARTIEL','RETOURNEE'].includes(request.status)||!request.checked_out_at)throw new Error('Remise effective enregistrée requise pour le bon PDF.')
  const pdf=new jsPDF({unit:'mm',format:'a4'});let y=52
  const date=(value:string|null)=>value?new Date(value).toLocaleString('fr-FR',{timeZone:'Africa/Conakry'}):'Non enregistrée'
  const header=()=>{pdf.setFillColor(25,27,39);pdf.rect(0,0,210,35,'F');pdf.setTextColor(255,255,255);pdf.setFontSize(19);pdf.text('BON DE SORTIE DE MATERIEL',16,17);pdf.setFontSize(9);pdf.text(`Référence : ${request.id}`,16,26);pdf.setTextColor(25,27,39)}
@@ -9,7 +9,7 @@ export function equipmentBonPdf(request:EquipmentRequest):File{
  const text=(title:string,value:string)=>{pdf.setFontSize(10);const lines=pdf.splitTextToSize(value||'-',174) as string[];space(14);pdf.setFont('helvetica','bold');pdf.text(title,18,y);y+=6;pdf.setFont('helvetica','normal');for(const line of lines){space(5);pdf.setFontSize(10);pdf.text(line,18,y);y+=5}y+=5}
  header();text('Demandeur',request.requester_name);text('Mission / destination',`${request.reason} - ${request.destination}`)
  text('Décision',`Validée par ${request.decision_name||'le responsable'} le ${date(request.decision_at)}${request.decision_notes?'\n'+request.decision_notes:''}`)
- text('Remise effective',request.checked_out_at?date(request.checked_out_at):'AUTORISATION UNIQUEMENT - matériel réservé, remise non enregistrée.')
+ text('Remise effective',date(request.checked_out_at))
  text('Retour prévu',date(request.expected_return_at))
  for(const item of request.items){
   space(20);pdf.setDrawColor(219,222,229);pdf.line(18,y,192,y);y+=8

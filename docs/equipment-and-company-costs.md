@@ -22,7 +22,7 @@ Les fiches existantes reçoivent une référence automatique `EQ-XXXXXXXX`, sans
 
 Le stock total reste constant lors d’une sortie : les quantités réservées, sorties et indisponibles sont séparées. Une validation réserve les quantités, la remise avec photos les marque en mission, et un retour conforme les rend disponibles. Un lot retourné dégradé reste indisponible. Les retours peuvent porter sur certaines lignes du bon ; le retour partiel d’une même ligne quantitative n’est pas proposé. Les demandes et validations contrôlent les quantités côté serveur sous verrou, dans le bon espace. Les compteurs calculés ne sont pas modifiables par REST.
 
-La validation déclenche le téléchargement d’un bon PDF et le bon reste téléchargeable depuis son détail par les personnes autorisées. Avant remise, il porte la mention d’autorisation uniquement. Après remise, il reprend les constats. Les photos restent dans le dossier privé, sans URL temporaire imprimée. Une panne de génération PDF ne doit jamais rejouer la décision.
+La demande et la validation ne produisent aucun PDF. Après confirmation de la remise effective (quantités, état et photos), le bon de sortie est téléchargé et reste téléchargeable depuis son détail par les personnes autorisées. Un nouveau téléchargement ne rejoue ni la décision ni le mouvement de stock. Les photos restent dans le dossier privé, sans URL temporaire imprimée. Une panne de génération PDF ne doit jamais rejouer la décision.
 
 ## Achats & dépenses
 
