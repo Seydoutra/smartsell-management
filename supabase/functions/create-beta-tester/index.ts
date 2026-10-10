@@ -12,9 +12,9 @@ Deno.serve(async (request) => {
     const admin = adminClient();
     const { data: authData, error: authError } = await admin.auth.getUser(token);
     if (authError || !authData.user) return json(request, { error: "Session invalide" }, 401);
-    const { data: caller } = await admin.from("profiles").select("role,roles,active,is_beta_tester").eq("id", authData.user.id).single();
+    const { data: caller } = await admin.from("profiles").select("role,roles,active,is_beta_tester,is_platform_owner").eq("id", authData.user.id).single();
     const callerRoles = Array.isArray(caller?.roles) && caller.roles.length ? caller.roles : [caller?.role];
-    if (!caller?.active || caller?.is_beta_tester || !callerRoles.includes("SUPER_ADMIN")) return json(request, { error: "Seul le Super Admin de production peut créer ce compte" }, 403);
+    if (!caller?.active || caller?.is_beta_tester || !caller.is_platform_owner) return json(request, { error: "Seul le propriétaire de la plateforme peut créer ce compte" }, 403);
     const body = await request.json() as { email?: string; password?: string; name?: string };
     const email = body.email?.trim().toLowerCase(), name = body.name?.trim() || "Bêta Testeur SmartSell";
     if (!email || !body.password || body.password.length < 12) return json(request, { error: "E-mail et mot de passe temporaire sécurisé requis (12 caractères minimum)" }, 400);

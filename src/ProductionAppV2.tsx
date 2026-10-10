@@ -2,6 +2,8 @@ import { CSSProperties, FormEvent, MouseEvent, ReactNode, useCallback, useEffect
 import { AnimatePresence, motion } from "framer-motion";
 import EquipmentRequests from './EquipmentRequests';
 import CompanyCosts from './CompanyCosts';
+import WorkspaceFinance from './WorkspaceFinance';
+import WorkspaceSettings from './WorkspaceSettings';
 import {useLiveAccess} from './services/useLiveAccess';
 import {
   Activity,
@@ -239,6 +241,9 @@ type Page =
   | "Rapports"
   | "Centre de contrôle"
   | "Paramètres SMS"
+  | "Paramètres entreprise"
+  | "Banques & caisses"
+  | "Prêts & avances"
   | "Objectifs & performance"
   | "Parrainage"
   | "Abonnement"
@@ -277,6 +282,9 @@ const nav: [Page, typeof LayoutDashboard, Permission?][] = [
   ["Rapports", Activity, "audit.read"],
   ["Centre de contrôle", ShieldCheck, "audit.read"],
   ["Paramètres SMS", Settings2],
+  ["Paramètres entreprise", Settings2],
+  ["Banques & caisses", WalletCards],
+  ["Prêts & avances", CircleDollarSign],
   ["Jumeau numérique", Gauge, "finance.read"],
   ["Radar commercial", Target, "crm.write"],
   ["Studio campagnes IA", Megaphone, "communication.send"],
@@ -287,9 +295,9 @@ const nav: [Page, typeof LayoutDashboard, Permission?][] = [
 const navGroups:{label:string;pages:Page[]}[]=[
   {label:'Pilotage',pages:['Dashboard','Objectifs & performance','Parrainage','Abonnement','Assistance']},
   {label:'Production & clients',pages:['Clients','Projets','Tâches','Planning','Smart Social']},
-  {label:'Finance & achats',pages:['Services','Fournisseurs','Facturation','Documents','Comptabilité','Achats & dépenses','Matériel','Demandes matériel']},
+  {label:'Finance & achats',pages:['Services','Fournisseurs','Facturation','Documents','Comptabilité','Achats & dépenses','Banques & caisses','Matériel','Demandes matériel']},
   {label:'Communication',pages:['Communication','Paramètres SMS']},
-  {label:'Administration',pages:['Équipe','Demandes SaaS','RH','Rapports','Centre de contrôle','Portail client']},
+  {label:'Administration',pages:['Équipe','Demandes SaaS','RH','Prêts & avances','Paramètres entreprise','Rapports','Centre de contrôle','Portail client']},
   {label:'Intelligence artificielle',pages:['Jumeau numérique','Radar commercial','Studio campagnes IA','Autopilot IA','Assistant IA']},
 ];
 const pageNames = new Set<Page>([...nav.map(([name]) => name), 'Éditorial', 'Intégrations']);
@@ -3085,6 +3093,13 @@ function Shell({
   const online = useOnlineStatus();
   const {access,accessLoaded}=useLiveAccess(profile.id);
   const workspaceOwner=profile.is_platform_owner===true||profile.tenant_owner_id===profile.id;
+  const [workspaceIdentity,setWorkspaceIdentity]=useState<{company_name:string;logo_light:string|null;primary_color?:string;secondary_color?:string;accent_color?:string}|null>(null);
+  useEffect(()=>{
+    let cancelled=false;
+    for(const [key,value] of Object.entries({'--brand-primary':workspaceOwner?'#6a2b85':'#475569','--brand-secondary':'#15151a','--brand-accent':workspaceOwner?'#faee35':'#668899'}))document.documentElement.style.setProperty(key,value);
+    const refresh=()=>getCompanySettings().then(company=>{if(cancelled)return;setWorkspaceIdentity(company);const identity=company as typeof workspaceIdentity;for(const [key,value] of Object.entries({'--brand-primary':identity?.primary_color,'--brand-secondary':identity?.secondary_color,'--brand-accent':identity?.accent_color})){if(value&&/^#[0-9a-f]{6}$/i.test(value))document.documentElement.style.setProperty(key,value)}}).catch(()=>{if(!cancelled)setWorkspaceIdentity(null)});
+    void refresh();window.addEventListener('smartsell-company-updated',refresh);return()=>{cancelled=true;window.removeEventListener('smartsell-company-updated',refresh)};
+  },[profile.id,profile.tenant_owner_id]);
   const [page, setPage] = useState<Page>(pageFromHash),
     [theme, setTheme] = useState<"light" | "dark">(
       () =>
@@ -3130,6 +3145,7 @@ function Shell({
   }, []);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    for(const name of ['--background','--surface','--text-primary'])document.documentElement.style.removeProperty(name);
     localStorage.setItem("smartsell-theme", theme);
   }, [theme]);
   useEffect(() => {
@@ -3203,9 +3219,11 @@ function Shell({
   });
   const viewKeys: Partial<Record<Page,string>> = {Clients:'clients.view',Projets:'projects.view',Tâches:'tasks.view',Planning:'planning.view',Éditorial:'editorial.view',Services:'services.view',Fournisseurs:'suppliers.view',Facturation:'invoices.view',Documents:'documents.view',Comptabilité:'accounting.view',Matériel:'equipment.view',Communication:'communication.view',Intégrations:'communication.view',Équipe:'team.view',RH:'hr.view',Rapports:'reports.view','Centre de contrôle':'audit.read','Portail client':'portal.view','Jumeau numérique':'accounting.view','Radar commercial':'clients.view','Studio campagnes IA':'communication.view'};
   viewKeys['Achats & dépenses']='accounting.view';
-  const visible = (n: [Page, typeof LayoutDashboard, Permission?]) => n[0]==='Assistance'||n[0]==='Demandes matériel' ? true : n[0]==='Parrainage'||n[0]==='Abonnement' ? (profile.tenant_owner_id||profile.id)===profile.id : n[0]==='Objectifs & performance' ? !roles.includes('CLIENT') : n[0]==='Paramètres SMS' ? (profile.is_platform_owner===true||roles.includes('SUPER_ADMIN')) : n[0]==='Dashboard'||(n[0]==='Demandes SaaS' ? platformOwner : (
+  viewKeys['Banques & caisses']='accounting.view';
+  viewKeys['Paramètres entreprise']='settings.view';
+  const visible = (n: [Page, typeof LayoutDashboard, Permission?]) => n[0]==='Assistance'||n[0]==='Demandes matériel'||n[0]==='Prêts & avances' ? !roles.includes('CLIENT') : n[0]==='Parrainage'||n[0]==='Abonnement' ? (profile.tenant_owner_id||profile.id)===profile.id : n[0]==='Objectifs & performance' ? !roles.includes('CLIENT') : n[0]==='Paramètres SMS' ? (profile.is_platform_owner===true||roles.includes('SUPER_ADMIN')) : n[0]==='Dashboard'||(n[0]==='Demandes SaaS' ? platformOwner : (
     (!viewKeys[n[0]] || actionAllowed(viewKeys[n[0]]!)) &&
-    (n[0]==='Centre de contrôle' ? actionAllowed('audit.read') : isModuleAllowed(roles,access,accessLoaded,n[0]==='Achats & dépenses'?'Comptabilité':n[0],workspaceOwner))));
+    (n[0]==='Centre de contrôle' ? actionAllowed('audit.read') : isModuleAllowed(roles,access,accessLoaded,['Achats & dépenses','Banques & caisses'].includes(n[0])?'Comptabilité':n[0],workspaceOwner))));
   const socialVisible=actionAllowed('editorial.view')||actionAllowed('communication.view');
   const socialRoute=page==='Smart Social'||page==='Éditorial'||page==='Intégrations';
   const currentPage = socialRoute&&socialVisible ? page : nav.some((item)=>item[0]===page&&(item[0]==='Smart Social'?socialVisible:visible(item))) ? page : 'Dashboard';
@@ -3213,7 +3231,7 @@ function Shell({
     <div className="app-shell production-shell v2-shell" onClickCapture={handleUiClick} onSubmitCapture={event=>{if(expiredTrial&&currentPage!=='Abonnement'&&currentPage!=='Assistance'){event.preventDefault();event.stopPropagation();setPaywallOpen(true)}}}>
       <aside className={mobile ? "mobile-open" : ""}>
         <div className="side-head">
-          <img src={companyProfile.logo_light} />
+          {workspaceIdentity?.logo_light?<img src={workspaceIdentity.logo_light} alt={workspaceIdentity.company_name}/>:<strong>{workspaceIdentity?.company_name||(workspaceOwner?'Smartsell Management':'Mon entreprise')}</strong>}
           <button className="mobile-close" onClick={() => setMobile(false)}>
             <X />
           </button>
@@ -3330,6 +3348,12 @@ function Shell({
                 <ReportsPage />
               ) : currentPage === "Paramètres SMS" ? (
                 <SmsSettings />
+              ) : currentPage === "Paramètres entreprise" ? (
+                <WorkspaceSettings />
+              ) : currentPage === "Banques & caisses" ? (
+                <WorkspaceFinance mode="treasury" currentProfileId={profile.id}/>
+              ) : currentPage === "Prêts & avances" ? (
+                <WorkspaceFinance mode="loans" currentProfileId={profile.id}/>
               ) : currentPage === "Objectifs & performance" ? (
                 <PerformanceGoals />
               ) : currentPage === "Parrainage" ? (

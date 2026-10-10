@@ -1,4 +1,4 @@
-import { authenticated, edgeError, handleOptions, json } from "../_shared/http.ts";
+import { authenticated, edgeError, handleOptions, json, requireActions } from "../_shared/http.ts";
 
 const n = (value: unknown) => Number(value || 0);
 const clamp = (value: number, min = 0, max = 100) => Math.min(max, Math.max(min, Math.round(value)));
@@ -24,20 +24,23 @@ Deno.serve(async (request) => {
     const {admin,user}=await authenticated(request);
     const body=await request.json() as Record<string,unknown>;
     const mode=String(body.mode||"");
-    const {data:profile,error:profileError}=await admin.from("profiles").select("full_name,role,roles").eq("id",user.id).single();
+    const {data:profile,error:profileError}=await admin.from("profiles").select("full_name,role,roles,tenant_owner_id").eq("id",user.id).single();
     if(profileError)throw profileError;
     const roles=(profile.roles?.length?profile.roles:[profile.role]) as string[];
     if(roles.includes("CLIENT"))return json(request,{error:"Accès réservé à l'équipe SmartSell"},403);
 
+    const tenant=profile.tenant_owner_id||user.id;
+    if(!["digital_twin","commercial_radar","campaign_plan"].includes(mode))return json(request,{error:"Mode inconnu"},400);
+    await requireActions(admin,user.id,mode==="campaign_plan"?["communication.create"]:["clients.view","projects.view","invoices.view","accounting.view","tasks.view","audit.read"]);
     const [clientsQ,projectsQ,invoicesQ,paymentsQ,expensesQ,tasksQ,prospectsQ,activitiesQ]=await Promise.all([
-      admin.from("clients").select("id,name,status,created_at"),
-      admin.from("projects").select("id,name,client_id,status,progress,budget,starts_on,ends_on,created_at"),
-      admin.from("invoices").select("id,client_id,total,status,issue_date,due_date,created_at"),
-      admin.from("payments").select("invoice_id,amount,paid_at"),
-      admin.from("expenses").select("amount,status,spent_on,project_id"),
-      admin.from("tasks").select("id,project_id,status,due_at,created_at"),
-      admin.from("prospects").select("id,company,contact_name,email,phone,stage,last_contact_at,next_follow_up_at,sms_opt_in,email_opt_in,marketing_opt_in,created_at"),
-      admin.from("activity_logs").select("entity_type,entity_id,created_at").order("created_at",{ascending:false}).limit(1000)
+      mode==="campaign_plan"?Promise.resolve({data:[],error:null}):admin.from("clients").select("id,name,status,created_at").eq("tenant_owner_id",tenant),
+      mode==="campaign_plan"?Promise.resolve({data:[],error:null}):admin.from("projects").select("id,name,client_id,status,progress,budget,starts_on,ends_on,created_at").eq("tenant_owner_id",tenant),
+      mode==="campaign_plan"?Promise.resolve({data:[],error:null}):admin.from("invoices").select("id,client_id,total,status,issue_date,due_date,created_at").eq("tenant_owner_id",tenant),
+      mode==="campaign_plan"?Promise.resolve({data:[],error:null}):admin.from("payments").select("invoice_id,amount,paid_at").eq("tenant_owner_id",tenant),
+      mode==="campaign_plan"?Promise.resolve({data:[],error:null}):admin.from("expenses").select("amount,status,spent_on,project_id").eq("tenant_owner_id",tenant),
+      mode==="campaign_plan"?Promise.resolve({data:[],error:null}):admin.from("tasks").select("id,project_id,status,due_at,created_at").eq("tenant_owner_id",tenant),
+      mode==="campaign_plan"?Promise.resolve({data:[],error:null}):admin.from("prospects").select("id,company,contact_name,email,phone,stage,last_contact_at,next_follow_up_at,sms_opt_in,email_opt_in,marketing_opt_in,created_at").eq("tenant_owner_id",tenant),
+      mode==="campaign_plan"?Promise.resolve({data:[],error:null}):admin.from("activity_logs").select("entity_type,entity_id,created_at").eq("tenant_owner_id",tenant).order("created_at",{ascending:false}).limit(1000)
     ]);
     for(const q of [clientsQ,projectsQ,invoicesQ,paymentsQ,expensesQ,tasksQ,prospectsQ,activitiesQ])if(q.error)throw q.error;
     const clients=clientsQ.data||[],projects=projectsQ.data||[],invoices=invoicesQ.data||[],payments=paymentsQ.data||[],expenses=expensesQ.data||[],tasks=tasksQ.data||[],prospects=prospectsQ.data||[],activities=activitiesQ.data||[];

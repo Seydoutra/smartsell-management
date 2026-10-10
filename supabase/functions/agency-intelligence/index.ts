@@ -1,4 +1,4 @@
-import { authenticated, edgeError, handleOptions, json } from "../_shared/http.ts";
+import { authenticated, edgeError, handleOptions, json, requireActions } from "../_shared/http.ts";
 
 type Invoice = { id:string; number:string; client_id:string; total:number; status:string; due_date:string|null; clients?:{name:string}|null };
 type Task = { id:string; title:string; project_id:string|null; status:string; priority:string; due_at:string|null; projects?:{name:string;client_id:string|null}|null };
@@ -22,8 +22,7 @@ Deno.serve(async (request) => {
     const tenantOwnerId = profile?.tenant_owner_id || user.id;
     const roles = (profile.roles?.length ? profile.roles : [profile.role]) as string[];
     if (!roles.some((role) => ["SUPER_ADMIN","ADMIN","MANAGER"].includes(role))) return json(request, { error: "Le cockpit stratégique est réservé à la direction." }, 403);
-    const superAdmin=roles.includes("SUPER_ADMIN"), requiredModules=["Clients","Projets","Tâches","Facturation","Comptabilité"], requiredActions=["clients.view","projects.view","tasks.view","invoices.view","accounting.view"];
-    if(!superAdmin&&(!access||requiredModules.some(module=>!access.allowed_modules?.includes(module))||requiredActions.some(action=>access.denied_permissions?.includes(action)))) return json(request,{error:"Le briefing stratégique contient des données sensibles non autorisées pour ce profil."},403);
+    await requireActions(admin,user.id,["clients.view","projects.view","tasks.view","invoices.view","accounting.view"]);
 
     const [clientsQ, projectsQ, invoicesQ, tasksQ, paymentsQ, expensesQ, prospectsQ] = await Promise.all([
       admin.from("clients").select("id,name,status").eq("tenant_owner_id", tenantOwnerId),

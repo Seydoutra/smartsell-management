@@ -19,6 +19,7 @@ export const moduleForScope: Record<string, string> = {
   reports: "Rapports",
   portal: "Portail client",
   audit: "Rapports",
+  settings: "Paramètres entreprise",
 };
 
 export function isActionAllowed(

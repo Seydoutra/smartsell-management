@@ -50,6 +50,16 @@ export async function authenticated(request: Request) {
 
 export function edgeError(request: Request, error: unknown) {
   if (error instanceof Response) return error;
+  if (error instanceof ActionDeniedError) return json(request, {error:error.message}, 403);
   console.error(error);
   return json(request, { error: error instanceof Error ? error.message : "Erreur serveur" }, 500);
+}
+
+/** Service-role handlers must check the same granular policy as the database. */
+class ActionDeniedError extends Error {}
+export async function requireActions(admin: ReturnType<typeof adminClient>, profileId: string, actions: string[]) {
+  for (const action of actions) {
+    const {data, error} = await admin.rpc('member_action_allowed', {p_profile_id: profileId, p_action: action});
+    if (error || data !== true) throw new ActionDeniedError(`Action non autorisée : ${action}`);
+  }
 }

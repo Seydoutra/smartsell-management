@@ -1,0 +1,24 @@
+{
+  "date": "2026-10-10",
+  "scope": "Audit ciblé des droits serveur et de l'isolation des modules ; tests de régression, pas une certification ni un test exhaustif de tous les parcours réels.",
+  "modules": [
+    {"module": "Équipe et droits", "correction": "Résumé effectif des accès, sauvegarde atomique, blocage des écritures brutes et de la délégation supérieure aux droits du délégant", "tests": "UI, PostgreSQL/RLS, lecture production"},
+    {"module": "Clients, CRM, projets et tâches", "correction": "Contrôle des relations entre entreprises, retrait des accès IA inter-entreprises", "tests": "Régression UI/services et PostgreSQL inter-entreprises"},
+    {"module": "Facturation et documents", "correction": "Contrôle des relations des lignes/paiements et accès des fichiers", "tests": "Régression génération PDF, calculs et validation ; aucun nouveau paiement réel"},
+    {"module": "Éditorial et portail client", "correction": "Lecture du calendrier autorisée au client concerné, commentaires et discussions filtrés", "tests": "Régression Smart Social/portail et examen des politiques ; OAuth externe non testé"},
+    {"module": "Matériel et planning", "correction": "Droits des tables auxiliaires, fichiers de preuve conservés sous leurs politiques spécifiques, tokens Google non exposés", "tests": "Régression bons/PDF et contrôle des colonnes ; aucun nouveau mouvement réel"},
+    {"module": "Communication et campagnes", "correction": "Cron protégé par Vault, réservation atomique du quota, réservation exclusive d'une campagne avant envoi, exclusion des clients/essais expirés des encouragements", "tests": "Compilation serveur et PostgreSQL des quotas ; pas d'envoi payant de test"},
+    {"module": "Journal et rapports", "correction": "Journal non modifiable depuis le navigateur, lecture équipe soumise à audit.read, sessions liées à leur utilisateur", "tests": "PostgreSQL/RLS et contrôle production"},
+    {"module": "Réglages entreprise", "correction": "Édition soumise aux droits, contrôle de version concurrente, coordonnées/liens/couleurs validés, identité chargée par entreprise", "tests": "UI et PostgreSQL ; préfixes souhaités conservés sans renuméroter les documents"},
+    {"module": "Banques, caisses, prêts et avances", "correction": "Registre manuel par devise, transferts équilibrés, demandes personnelles, décision RH avec plafond, versement et remboursement distincts, protection anti-doublon", "tests": "UI et PostgreSQL, insuffisance de solde, remboursement partiel, refus inter-entreprises"},
+    {"module": "SaaS, assistance et inscriptions", "correction": "Les fonctions privées ne sont plus exécutables anonymement ; création bêta réservée au propriétaire plateforme", "tests": "Régression inscription/OTP et contrôle des permissions ; aucune création réelle de compte"}
+  ],
+  "limitations": [
+    "Les banques/caisses ne sont pas connectées à une banque et ne récupèrent pas automatiquement l'historique des factures/dépenses.",
+    "Les échéances des prêts sont indicatives : aucun prélèvement automatique sur salaire ni contrat juridique généré.",
+    "Un envoi arrêté au statut PROCESSING doit être vérifié auprès du fournisseur avant toute reprise pour éviter un doublon.",
+    "Les API Meta, LinkedIn, Google, Canva et la réception réelle des SMS/e-mails nécessitent des tests d'intégration dédiés.",
+    "Des liens de fichiers signés déjà émis peuvent rester valides jusqu'à leur expiration ; les nouveaux accès Storage sont désormais filtrés.",
+    "Le bundle principal reste volumineux : un chantier de découpage et de performance est encore nécessaire."
+  ]
+}

@@ -1,0 +1,18 @@
+// @vitest-environment jsdom
+import {afterEach,beforeEach,describe,it,expect,vi} from 'vitest'
+import {render,screen,cleanup,fireEvent,waitFor} from '@testing-library/react'
+import WorkspaceFinance from './WorkspaceFinance'
+import WorkspaceSettings from './WorkspaceSettings'
+import {loadFinance,financeCommand,loadWorkspaceSettings,saveWorkspaceSettings} from './services/workspaceFinance'
+vi.mock('./services/workspaceFinance',()=>({loadFinance:vi.fn(),financeCommand:vi.fn(),loadWorkspaceSettings:vi.fn(),saveWorkspaceSettings:vi.fn()}))
+const limited={accounts:[],entries:[],requests:[],rights:{finance:false,create_account:false,movement:false,all_requests:false,approve:false,submit:true,owner:false}}
+afterEach(cleanup)
+beforeEach(()=>{vi.clearAllMocks();vi.mocked(loadFinance).mockResolvedValue(limited);vi.mocked(loadWorkspaceSettings).mockResolvedValue({company:{company_name:'Test',settings_revision:0},can_edit:false})})
+describe('workspace financial interfaces',()=>{
+ it('does not expose treasury writes without accounting rights',async()=>{render(<WorkspaceFinance mode="treasury" currentProfileId="me"/>);await screen.findByText('Consultation comptable non autorisée.');expect(screen.queryByText('Ajouter banque / caisse')).toBeNull()})
+ it('distinguishes own requests from the HR-wide view',async()=>{render(<WorkspaceFinance mode="loans" currentProfileId="me"/>);await screen.findByText(/uniquement vos propres demandes/);expect(screen.getByText('Ma demande de prêt / avance')).toBeTruthy();expect(screen.queryByText('Approuver')).toBeNull()})
+ it('does not allow self approval, even when approval is granted',async()=>{vi.mocked(loadFinance).mockResolvedValue({...limited,rights:{...limited.rights,approve:true,all_requests:true},requests:[{id:'loan',applicant_id:'me',applicant_name:'Moi',kind:'PRET',amount:100,currency:'GNF',reason:'Test',installments:1,first_due_on:'2026-10-10',status:'EN_ATTENTE',repaid:0}]});render(<WorkspaceFinance mode="loans" currentProfileId="me"/>);await screen.findByText('Moi');expect(screen.queryByText('Approuver')).toBeNull();expect(screen.getByText('Annuler')).toBeTruthy()})
+ it('blocks duplicate submissions while a request is pending',async()=>{vi.mocked(financeCommand).mockImplementation(()=>new Promise(()=>{}));render(<WorkspaceFinance mode="loans" currentProfileId="me"/>);fireEvent.click(await screen.findByText('Ma demande de prêt / avance'));const button=screen.getByText('Confirmer et enregistrer');fireEvent.submit(button.closest('form')!);fireEvent.submit(button.closest('form')!);await waitFor(()=>expect(financeCommand).toHaveBeenCalledTimes(1));expect(screen.getByText('Enregistrement…').getAttribute('disabled')).not.toBeNull()})
+ it('disables company editing when the server denies it',async()=>{render(<WorkspaceSettings/>);const input=await screen.findByLabelText('Nom de l’entreprise');expect(input.closest('fieldset')?.disabled).toBe(true);expect(screen.queryByText('Enregistrer les réglages')).toBeNull()})
+ it('preserves unsaved fields on a revision conflict',async()=>{vi.mocked(loadWorkspaceSettings).mockResolvedValue({company:{company_name:'Test',settings_revision:2},can_edit:true});vi.mocked(saveWorkspaceSettings).mockRejectedValue(new Error('Réglages modifiés ailleurs.'));render(<WorkspaceSettings/>);const input=await screen.findByLabelText('Nom de l’entreprise');fireEvent.change(input,{target:{value:'Mon nom conservé'}});fireEvent.submit(screen.getByText('Enregistrer les réglages').closest('form')!);await screen.findByRole('alert');expect((input as HTMLInputElement).value).toBe('Mon nom conservé');expect(saveWorkspaceSettings).toHaveBeenCalledWith(expect.objectContaining({company_name:'Mon nom conservé'}),2)})
+})

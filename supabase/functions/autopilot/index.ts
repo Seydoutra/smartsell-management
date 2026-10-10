@@ -1,4 +1,4 @@
-import { authenticated, edgeError, handleOptions, json } from "../_shared/http.ts";
+import { authenticated, edgeError, handleOptions, json, requireActions } from "../_shared/http.ts";
 
 type ProposedAction={title:string;rationale:string;category:"FINANCE"|"PROJET"|"COMMERCIAL"|"COMMUNICATION";priority:"NORMALE"|"HAUTE"|"URGENTE";action_type:"OPEN_PAGE"|"COMPLETE_TASK"|"MARK_INVOICE_SENT"|"SCHEDULE_FOLLOW_UP"|"PREPARE_MESSAGE";target_page:string;source_type:string;source_id:string|null;proposed_payload:Record<string,unknown>;risk_level:"FAIBLE"|"MODERE"|"ELEVE"};
 const day=86_400_000;
@@ -18,11 +18,16 @@ Deno.serve(async(request)=>{
   if(request.method!=="POST")return json(request,{error:"Méthode non autorisée"},405);
   try{
     const{admin,user}=await authenticated(request),body=await request.json() as Record<string,unknown>,mode=String(body.mode||"");
-    const[{data:profile,error:profileError},{data:access}]=await Promise.all([admin.from("profiles").select("full_name,role,roles").eq("id",user.id).single(),admin.from("user_access_controls").select("denied_permissions").eq("profile_id",user.id).maybeSingle()]);
+    const[{data:profile,error:profileError},{data:access}]=await Promise.all([admin.from("profiles").select("full_name,role,roles,tenant_owner_id").eq("id",user.id).single(),admin.from("user_access_controls").select("denied_permissions").eq("profile_id",user.id).maybeSingle()]);
     if(profileError)throw profileError;
     const roles=(profile.roles?.length?profile.roles:[profile.role]) as string[],privileged=roles.some(role=>["SUPER_ADMIN","ADMIN","MANAGER"].includes(role)),denied=(access?.denied_permissions||[]) as string[];
     if(roles.includes("CLIENT"))return json(request,{error:"Accès réservé à l'équipe SmartSell"},403);
-    const permitted=(permission:string)=>privileged||!denied.includes(permission);
+    const tenant=profile.tenant_owner_id||user.id;
+    const requiredViews=["clients.view","projects.view","tasks.view","invoices.view"];
+    await requireActions(admin,user.id,requiredViews);
+    const grants=new Map<string,boolean>();
+    for(const key of ["invoices.send","tasks.update","projects.update","clients.update","invoices.update"]){const {data,error}=await admin.rpc("member_action_allowed",{p_profile_id:user.id,p_action:key});grants.set(key,!error&&data===true)}
+    const permitted=(permission:string)=>grants.get(permission)===true;
 
     if(mode==="run"){
       let{data:settings,error:settingsError}=await admin.from("autopilot_settings").select("*").eq("profile_id",user.id).maybeSingle();if(settingsError)throw settingsError;
@@ -31,10 +36,10 @@ Deno.serve(async(request)=>{
       const{data:run,error:runError}=await admin.from("autopilot_runs").insert({requested_by:user.id,status:"EN_COURS"}).select().single();if(runError)throw runError;
       try{
         const[invoicesQ,tasksQ,projectsQ,prospectsQ]=await Promise.all([
-          admin.from("invoices").select("id,number,status,due_date,total,currency,client_id,clients(name,email,phone)"),
-          admin.from("tasks").select("id,title,status,due_at,assignee_id,project_id,projects(name)"),
-          admin.from("projects").select("id,name,status,progress,ends_on,manager_id,client_id,clients(name)"),
-          admin.from("prospects").select("id,company,contact_name,stage,next_follow_up_at,owner_id,email,phone")
+          admin.from("invoices").select("id,number,status,due_date,total,currency,client_id,clients(name,email,phone)").eq("tenant_owner_id",tenant),
+          admin.from("tasks").select("id,title,status,due_at,assignee_id,project_id,projects(name)").eq("tenant_owner_id",tenant),
+          admin.from("projects").select("id,name,status,progress,ends_on,manager_id,client_id,clients(name)").eq("tenant_owner_id",tenant),
+          admin.from("prospects").select("id,company,contact_name,stage,next_follow_up_at,owner_id,email,phone").eq("tenant_owner_id",tenant)
         ]);for(const query of[invoicesQ,tasksQ,projectsQ,prospectsQ])if(query.error)throw query.error;
         const now=new Date(),invoices=invoicesQ.data||[],tasks=tasksQ.data||[],projects=projectsQ.data||[],prospects=prospectsQ.data||[];
         const overdueInvoices=invoices.filter(row=>row.due_date&&new Date(row.due_date)<now&&!['PAYEE','ANNULEE'].includes(row.status));
@@ -59,7 +64,7 @@ Deno.serve(async(request)=>{
 
     const actionId=String(body.action_id||"");if(!actionId)return json(request,{error:"Action manquante"},400);
     const{data:action,error:actionError}=await admin.from("autopilot_actions").select("*").eq("id",actionId).single();if(actionError)throw actionError;
-    if(action.owner_id!==user.id&&!privileged)return json(request,{error:"Action non autorisée"},403);
+    if(action.owner_id!==user.id)return json(request,{error:"Action non autorisée"},403);
 
     if(mode==="decide"){
       if(action.status!=="A_VALIDER")return json(request,{error:"Cette action a déjà été traitée"},409);
@@ -79,9 +84,9 @@ Deno.serve(async(request)=>{
       let result:Record<string,unknown>={detail:"Action ouverte dans SmartSell."};
       try{
         const claim=await admin.from("autopilot_actions").update({status:"EXECUTEE",executed_at:new Date().toISOString(),result:{detail:"Exécution en cours"}}).eq("id",actionId).eq("status","APPROUVEE").select("id").maybeSingle();if(claim.error)throw claim.error;if(!claim.data)return json(request,{error:"Cette action est déjà en cours ou exécutée"},409);
-        if(action.action_type==="COMPLETE_TASK"){const update=await admin.from("tasks").update({status:"TERMINE",completed_at:new Date().toISOString()}).eq("id",action.source_id).select("id,status").single();if(update.error)throw update.error;result={detail:"Tâche marquée comme terminée.",record:update.data}}
-        else if(action.action_type==="MARK_INVOICE_SENT"){const update=await admin.from("invoices").update({status:"ENVOYEE"}).eq("id",action.source_id).not("status","in",'(PAYEE,ANNULEE)').select("id,status").single();if(update.error)throw update.error;result={detail:"Facture marquée comme envoyée.",record:update.data}}
-        else if(action.action_type==="SCHEDULE_FOLLOW_UP"){const at=String(action.proposed_payload?.next_follow_up_at||"");if(!at||Number.isNaN(new Date(at).getTime()))throw new Error("Date de relance invalide");const update=await admin.from("prospects").update({next_follow_up_at:at}).eq("id",action.source_id).select("id,next_follow_up_at").single();if(update.error)throw update.error;result={detail:`Nouvelle relance programmée le ${dateLabel(at)}.`,record:update.data}}
+        if(action.action_type==="COMPLETE_TASK"){const update=await admin.from("tasks").update({status:"TERMINE",completed_at:new Date().toISOString()}).eq("id",action.source_id).select("id,status").eq("tenant_owner_id",tenant).single();if(update.error)throw update.error;result={detail:"Tâche marquée comme terminée.",record:update.data}}
+        else if(action.action_type==="MARK_INVOICE_SENT"){const update=await admin.from("invoices").update({status:"ENVOYEE"}).eq("id",action.source_id).not("status","in",'(PAYEE,ANNULEE)').select("id,status").eq("tenant_owner_id",tenant).single();if(update.error)throw update.error;result={detail:"Facture marquée comme envoyée.",record:update.data}}
+        else if(action.action_type==="SCHEDULE_FOLLOW_UP"){const at=String(action.proposed_payload?.next_follow_up_at||"");if(!at||Number.isNaN(new Date(at).getTime()))throw new Error("Date de relance invalide");const update=await admin.from("prospects").update({next_follow_up_at:at}).eq("id",action.source_id).select("id,next_follow_up_at").eq("tenant_owner_id",tenant).single();if(update.error)throw update.error;result={detail:`Nouvelle relance programmée le ${dateLabel(at)}.`,record:update.data}}
         else if(action.action_type==="PREPARE_MESSAGE")result={detail:"Brouillon préparé. Aucun message n'a été envoyé automatiquement.",message:String(action.proposed_payload?.message||""),recipient:String(action.proposed_payload?.recipient||"")};
         const completed=await admin.from("autopilot_actions").update({result}).eq("id",actionId).eq("status","EXECUTEE").select().single();if(completed.error)throw completed.error;
         await admin.from("activity_logs").insert({actor_id:user.id,action:"EXECUTE",entity_type:"autopilot_action",entity_id:actionId,metadata:{action_type:action.action_type,source_type:action.source_type,source_id:action.source_id,result}});
