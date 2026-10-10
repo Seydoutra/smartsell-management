@@ -1,4 +1,6 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import BillingRecovery from './BillingRecovery'
+import {createBillingOnce,clearBillingDraft,writeBillingDraft} from './services/agencyWorkflow'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Bot, CalendarClock, Check, ChevronRight, FileDown, FileSpreadsheet, Link2, MessageCircle, Monitor, Pencil, Plus, Send, ShieldCheck, Smartphone, Trash2, Upload, Users, X } from 'lucide-react'
 import { companyProfile } from './lib/companyProfile'
@@ -162,6 +164,18 @@ export function BillingCreateForm({kind,clients,projects,services,clientFilter,o
   const [confirmed,setConfirmed]=useState(false)
   const [busy,setBusy]=useState(false)
   const [error,setError]=useState('')
+  const formRef=useRef<HTMLFormElement>(null),operationId=useRef<string>(crypto.randomUUID()),restoreProject=useRef<string|null>(null)
+  const [draftVersion,setDraftVersion]=useState(0)
+  useEffect(()=>{if(restoreProject.current!==null){const field=formRef.current?.elements.namedItem('project_id') as HTMLSelectElement|null;if(field)field.value=projects.some(p=>p.id===restoreProject.current&&p.client_id===clientId)?restoreProject.current:'';restoreProject.current=null}},[clientId,projects,draftVersion])
+  const draftKey=`billing:${kind}:${clientFilter||'new'}`
+  const collectDraft=()=>({operationId:operationId.current,clientId,items,taxEnabled,date:String(new FormData(formRef.current!).get('date')||''),currency:String(new FormData(formRef.current!).get('currency')||'GNF'),discount:String(new FormData(formRef.current!).get('discount')||'0'),project_id:String(new FormData(formRef.current!).get('project_id')||'')})
+  const restoreDraft=(draft:Record<string,unknown>)=>{
+    if(typeof draft.clientId!=='string'||!clients.some(row=>row.id===draft.clientId)||!Array.isArray(draft.items)||!draft.items.length||!draft.items.every(item=>item&&typeof item.description==='string'&&['quantity','unit_price','tax_rate'].every(key=>typeof item[key]==='number'&&Number.isFinite(item[key])))){setError('Ce brouillon est incomplet ou référence un client indisponible.');return}
+    restoreProject.current=String(draft.project_id||'')
+    setClientId(draft.clientId);setItems(draft.items as InvoiceItem[]);setTaxEnabled(Boolean(draft.taxEnabled));if(typeof draft.operationId==='string')operationId.current=draft.operationId
+    for(const name of ['date','currency','discount']){const field=formRef.current?.elements.namedItem(name) as HTMLInputElement|null;if(field)field.value=String(draft[name]||'')}
+    setConfirmed(false);setDraftVersion(value=>value+1)
+  }
   const total=items.reduce((sum,item)=>sum+item.quantity*item.unit_price*(1+(taxEnabled?item.tax_rate:0)/100),0)
   const updateItem=(index:number,patch:Partial<InvoiceItem>)=>setItems(current=>current.map((item,i)=>i===index?{...item,...patch}:item))
   const submit=async(event:FormEvent<HTMLFormElement>)=>{
@@ -180,13 +194,16 @@ export function BillingCreateForm({kind,clients,projects,services,clientFilter,o
     setError('')
     setBusy(true)
     try{
+      if(!create&&!requireConfirmation)await writeBillingDraft(draftKey,collectDraft())
       const common={client_id:clientId,project_id:String(values.get('project_id')||'')||undefined,currency:String(values.get('currency')||'GNF'),discount,items:prepared}
-      const document=create?await create({kind,clientId,projectId:common.project_id,date,currency:common.currency,discount,items:prepared}):kind==='FACTURE'?await createInvoice({...common,due_date:date}):await createQuote({...common,valid_until:date})
+      const document=create?await create({kind,clientId,projectId:common.project_id,date,currency:common.currency,discount,items:prepared}):await createBillingOnce(operationId.current,kind,{client_id:clientId,project_id:common.project_id||null,date,currency:common.currency,discount,items:prepared})
+      if(!create)try{await clearBillingDraft(draftKey)}catch{/* The persisted operation ID makes restoring this draft safe. */}
       onCreated(document)
     }catch(cause){setError(cause instanceof Error?cause.message:'La création a échoué. Réessayez après avoir vérifié votre connexion.')}
     finally{setBusy(false)}
   }
-  return <form className="entity-form billing-create-form" onSubmit={submit} onChange={event=>{if((event.target as HTMLElement).getAttribute('name')!=='command_confirmation')setConfirmed(false)}} noValidate aria-busy={busy}>
+  return <form ref={formRef} className="entity-form billing-create-form" onSubmit={submit} onChange={event=>{setDraftVersion(value=>value+1);if((event.target as HTMLElement).getAttribute('name')!=='command_confirmation')setConfirmed(false)}} noValidate aria-busy={busy}>
+    <BillingRecovery draftKey={draftKey} revision={JSON.stringify([clientId,items,taxEnabled,draftVersion])} collect={collectDraft} restore={restoreDraft} enabled={!create&&!requireConfirmation&&!busy}/>
     <div className="form-grid">
       <Field label="Client"><select name="client_id" required value={clientId} onChange={event=>setClientId(event.target.value)}><option value="">Choisir un client…</option>{clients.map(client=><option value={client.id} key={client.id}>{client.name}</option>)}</select></Field>
       <Field label="Projet"><select name="project_id" key={clientId}><option value="">Sans projet</option>{projects.filter(project=>project.client_id===clientId).map(project=><option value={project.id} key={project.id}>{project.name}</option>)}</select></Field>

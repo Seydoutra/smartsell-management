@@ -3,7 +3,10 @@ import { BookOpenCheck, CalendarDays, ChartNoAxesCombined, ExternalLink, FileSpr
 import type { Client, CreativeApproval, EditorialItem, Project, SocialIntegration } from './types/models'
 import { allowedSocialViews, editorialStatuses, isSafeWebUrl, latestApproval, metricValue, publishedLinks, socialChannels, socialProviders, socialStatusLabel, socialViewLabels, type EditorialView, type SocialRights, type SocialView } from './lib/smartSocial'
 import { statusTone } from './lib/statusTone'
-import { createCreativeApproval, uploadEditorialAsset } from './services/repository'
+import { uploadEditorialAsset } from './services/repository'
+import {requestEditorialReview} from './services/agencyWorkflow'
+import CreativeReview from './CreativeReview'
+import ClientBrandProfile from './ClientBrandProfile'
 import { deleteSocialEditorial, deleteSocialReference, importSocialEditorial, loadSocialConnections, loadSocialEditorial, saveSocialEditorial, saveSocialReference } from './services/smartSocialRepository'
 import EditorialCalendar from './EditorialCalendar'
 import EditorialPreparationTable from './EditorialPreparationTable'
@@ -55,9 +58,7 @@ export function SocialEditorialStudio({tenantOwnerId,rights,view='CALENDAR'}:{te
     if(review?.status==='A_VALIDER'&&item.status==='A_VALIDER'){setError('Une demande est déjà en attente chez ce client.');return}
     setBusy(true);setError('')
     try{
-      await createCreativeApproval({client_id:item.client_id,editorial_item_id:item.id,title:item.title,
-        description:[item.caption,item.hashtags,item.production_notes].filter(Boolean).join('\n\n'),asset_url:item.asset_urls?.[0]||null,asset_type:item.content_type||'CONTENU',version:(review?.version||0)+1})
-      await saveSocialEditorial(tenantOwnerId,{...item,status:'A_VALIDER'},item.id)
+      await requestEditorialReview(item.id)
       setSelected(undefined);setNotice('La création est disponible dans le portail client pour validation.');await load()
     }catch(cause){setError(errorMessage(cause))}finally{setBusy(false)}
   }
@@ -74,6 +75,8 @@ export function SocialEditorialStudio({tenantOwnerId,rights,view='CALENDAR'}:{te
     </>}
     {selected!==undefined&&<div className="modal-backdrop" onMouseDown={()=>!busy&&setSelected(undefined)}><section className="modal wide-modal social-content-modal" role="dialog" aria-modal="true" aria-label={selected?.title||'Nouvelle publication'} onMouseDown={event=>event.stopPropagation()}><div className="modal-head"><div><span className="eyebrow"><i/> SMART SOCIAL</span><h2>{selected?.title||'Nouvelle publication'}</h2></div><button type="button" className="icon-btn" aria-label="Fermer la publication" disabled={busy} onClick={()=>setSelected(undefined)}><X/></button></div>
       {error&&<div className="error-banner" role="alert">{error}</div>}
+      {selected?.client_id&&<ClientBrandProfile clientId={selected.client_id}/ >}
+      {selected&&latestApproval(selected,approvals)&&<CreativeReview key={latestApproval(selected,approvals)!.id} approval={latestApproval(selected,approvals)!} canComment={rights.update} previous={approvals.filter(a=>a.editorial_item_id===selected.id&&a.version<latestApproval(selected,approvals)!.version).sort((a,b)=>b.version-a.version)[0]}/ >}
       {selected&&!rights.update?<SocialContentPreview item={selected} approvals={approvals}/>:<SocialContentForm key={selected?.id||'new'} item={selected||undefined} clients={clients} projects={projects} busy={busy} onError={setError} onSubmit={async input=>{
         if(busy||(selected?!rights.update:!rights.create))return;setBusy(true);setError('')
         try{await saveSocialEditorial(tenantOwnerId,input,selected?.id);setSelected(undefined);setNotice('Publication enregistrée.');await load()}catch(cause){setError(errorMessage(cause))}finally{setBusy(false)}

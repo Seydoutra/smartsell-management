@@ -59,6 +59,8 @@ import TeamActivityDashboard from "./TeamActivityDashboard";
 import SmartSocial from "./SmartSocial";
 import CommercialPipeline from './CommercialPipeline';
 import ClientSocialDashboard from './ClientSocialDashboard';
+import ClientBrandProfile from './ClientBrandProfile';
+import ClientJourney from './ClientJourney';
 import ModuleNavigation from './ModuleNavigation';
 import ActionCommand from './ActionCommand';
 import { commandKinds, commandPermission } from './lib/actionCommand';
@@ -732,6 +734,8 @@ function ClientDetail({
   onNavigate,
   rights,
   tenantOwnerId,
+  canStartDelivery=false,
+  canViewBilling=false,
 }: {
   id: string;
   onClose: () => void;
@@ -739,6 +743,8 @@ function ClientDetail({
   onNavigate: (page: "Projets" | "Tâches" | "Facturation", clientId: string) => void;
   rights: CrudRights;
   tenantOwnerId:string;
+  canStartDelivery?:boolean;
+  canViewBilling?:boolean;
 }) {
   const [data, setData] = useState<Awaited<
       ReturnType<typeof getClientWorkspace>
@@ -835,6 +841,8 @@ function ClientDetail({
             <button type="button" className="detail-kpi-link" onClick={()=>{onClose();onNavigate("Facturation",id)}} aria-label={`Voir les factures de ${data.client.name}`}><Stat name="Facturé" value={money(data.invoices.reduce((s, x) => s + Number(x.total), 0))} copy={`Payé ${money(paid)} · Ouvrir`} /></button>
           </div>
           <ClientSocialDashboard tenantOwnerId={tenantOwnerId} clientId={id} clientName={data.client.name} canEdit={rights.update}/>
+          <ClientBrandProfile clientId={id} canEdit={rights.update}/>
+          {canViewBilling&&<ClientJourney clientId={id} canStart={canStartDelivery} onChanged={()=>{void load();onChanged()}}/>}
           <DetailList
             title="Projets"
             rows={data.projects.map((x) => [
@@ -908,7 +916,7 @@ function DetailList({ title, rows }: { title: string; rows: string[][] }) {
 
 // Social connections are now part of the Smart Social workspace.
 
-function ClientsPage({ rights, onNavigate, tenantOwnerId, canViewOffers, intent }: { rights: CrudRights; onNavigate: (page: "Projets" | "Tâches" | "Facturation", clientId: string) => void; tenantOwnerId:string; canViewOffers:boolean; intent:ModuleIntent }) {
+function ClientsPage({ rights, onNavigate, tenantOwnerId, canViewOffers, intent,canStartDelivery=false,canViewBilling=false }: { rights: CrudRights; onNavigate: (page: "Projets" | "Tâches" | "Facturation", clientId: string) => void; tenantOwnerId:string; canViewOffers:boolean; intent:ModuleIntent;canStartDelivery?:boolean;canViewBilling?:boolean }) {
   const [rows, setRows] = useState<Client[]>([]),
     [workspace,setWorkspace]=useState<'CLIENTS'|'PIPELINE'>(intent.view==='PIPELINE'?'PIPELINE':'CLIENTS'),
     [open, setOpen] = useState(false),
@@ -1021,6 +1029,8 @@ function ClientsPage({ rights, onNavigate, tenantOwnerId, canViewOffers, intent 
         {selected && (
           <ClientDetail
             id={selected}
+            canStartDelivery={canStartDelivery}
+            canViewBilling={canViewBilling}
             tenantOwnerId={tenantOwnerId}
             onClose={() => setSelected(null)}
             onChanged={load}
@@ -3281,7 +3291,7 @@ function Shell({
               {currentPage === "Dashboard" ? (
                 <Dashboard profile={profile} access={access} accessLoaded={accessLoaded} onNavigate={navigate} english={englishDashboard} />
               ) : currentPage === "Clients" ? (
-                <ClientsPage rights={rightsFor('clients')} tenantOwnerId={profile.tenant_owner_id||profile.id} canViewOffers={actionAllowed('services.view')} intent={routeIntent} onNavigate={(next,clientId)=>navigate(next,clientId)} />
+                <ClientsPage canViewBilling={actionAllowed('invoices.view')} canStartDelivery={actionAllowed('projects.create')&&actionAllowed('invoices.update')} rights={rightsFor('clients')} tenantOwnerId={profile.tenant_owner_id||profile.id} canViewOffers={actionAllowed('services.view')} intent={routeIntent} onNavigate={(next,clientId)=>navigate(next,clientId)} />
               ) : currentPage === "Projets" ? (
                 <ProjectsPage rights={rightsFor('projects')} currentProfileId={profile.id} clientFilter={clientFilter} onClearFilter={()=>navigate("Projets")} />
               ) : currentPage === "Tâches" ? (
