@@ -1,7 +1,7 @@
 // Self-contained A4 stylesheet. Also used when the browser cannot reload CSS.
 export default `
 [data-invoice-export]{font:14px/1.5 Arial,sans-serif!important;color:#18151b!important;background:#fff!important;text-align:left!important}
-[data-invoice-export] *{box-sizing:border-box;animation:none!important;transition:none!important;max-width:none;letter-spacing:normal}
+[data-invoice-export] *{box-sizing:border-box;animation:none!important;transition:none!important;max-width:none;font-family:Arial,sans-serif!important;font-kerning:none!important;letter-spacing:0!important;word-spacing:normal!important}
 [data-invoice-export] .invoice-sheet{display:block!important;width:794px!important;max-width:none!important;min-width:0!important;background:#fff!important;color:#18151b!important;padding:36px!important;margin:0!important;border-radius:0!important;position:relative!important;overflow:visible!important}
 [data-invoice-export] .invoice-accent{position:absolute;left:0;top:0;right:0;height:7px;background:#6a2b85}
 [data-invoice-export] .invoice-brand{display:flex!important;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #18151b;padding-bottom:18px;gap:20px}

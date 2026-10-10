@@ -30,6 +30,8 @@ describe('invoice PDF download pipeline',()=>{
     expect(style.textContent).toContain('width:150px!important')
     expect(style.textContent).toContain('width:125px!important')
     expect(style.textContent).toContain('grid-template-columns:1fr auto!important')
+    expect(style.textContent).toContain('font-family:Arial,sans-serif!important')
+    expect(style.textContent).toContain('letter-spacing:0!important')
     expect(clonedDocument.body.appendChild).toHaveBeenCalledWith(cloned)
   })
   it('reports an empty rendering rather than downloading a blank file',async()=>{
