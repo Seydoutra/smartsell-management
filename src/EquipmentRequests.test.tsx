@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest'
 import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react'
-const api=vi.hoisted(()=>({load:vi.fn(),configure:vi.fn(),submit:vi.fn(),decide:vi.fn(),checkout:vi.fn(),back:vi.fn(),upload:vi.fn(),url:vi.fn(),discard:vi.fn(),validate:vi.fn()}))
+const api=vi.hoisted(()=>({load:vi.fn(),configure:vi.fn(),submit:vi.fn(),decide:vi.fn(),checkout:vi.fn(),back:vi.fn(),upload:vi.fn(),url:vi.fn(),discard:vi.fn(),validate:vi.fn(),pdf:vi.fn()}))
+vi.mock('./lib/equipmentBonPdf',()=>({downloadEquipmentBon:api.pdf}))
 vi.mock('./services/equipmentRequests',()=>({loadEquipmentWorkspace:api.load,configureEquipmentReviewer:api.configure,submitEquipmentRequest:api.submit,decideEquipmentRequest:api.decide,checkoutEquipmentRequest:api.checkout,returnEquipmentRequest:api.back,uploadEquipmentPhoto:api.upload,getEquipmentPhotoUrl:api.url,discardEquipmentPhotos:api.discard,validateEquipmentPhoto:api.validate}))
 import EquipmentRequests from './EquipmentRequests'
 const item={id:'i',equipment_id:'e',equipment_name:'Caméra',equipment_code:'CAM',condition_out:'Sans rayure',condition_out_photos:[],condition_in:null,condition_in_photos:[],return_condition:null,returned_at:null}
@@ -10,10 +11,18 @@ const workspace={can_review:false,can_configure:false,can_request:true,reviewer_
 beforeEach(()=>{vi.resetAllMocks();api.load.mockResolvedValue(workspace);api.submit.mockResolvedValue('req');api.discard.mockResolvedValue(undefined);api.upload.mockResolvedValue('private/photo.jpg')})
 afterEach(cleanup)
 describe('bons de matériel',()=>{
+ it('génère le PDF après validation confirmée et propose de le télécharger ensuite',async()=>{
+  const approved={...request,status:'APPROUVEE'};api.load.mockResolvedValue({...workspace,can_review:true});api.decide.mockImplementation(async()=>{api.load.mockResolvedValue({...workspace,can_review:true,requests:[approved]})});
+  render(<EquipmentRequests tenantOwnerId="tenant"/>);fireEvent.click(await screen.findByText('Tournage'));fireEvent.click(screen.getByRole('button',{name:'Approuver'}));await waitFor(()=>expect(api.pdf).toHaveBeenCalledWith(approved));fireEvent.click(screen.getByRole('button',{name:'Télécharger le bon PDF'}));expect(api.pdf).toHaveBeenCalledTimes(2);
+ });
+ it('transmet la quantité choisie et affiche l’état réel du SMS',async()=>{
+  api.load.mockResolvedValue({...workspace,equipment:[{...workspace.equipment[0],quantity:5,available_quantity:4}],requests:[{...request,status:'APPROUVEE',sms:{status:'FAILED',error:'Numéro manquant'}}]});render(<EquipmentRequests tenantOwnerId="tenant"/>);fireEvent.click(await screen.findByText('Tournage'));expect(screen.getByText(/SMS au demandeur : Échec/)).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'Fermer le bon'}));fireEvent.click(screen.getByRole('button',{name:'Demander un bon de sortie'}));fireEvent.click(screen.getByRole('checkbox'));fireEvent.change(screen.getByLabelText('Quantité de Caméra'),{target:{value:'3'}});
+  fireEvent.change(screen.getByLabelText('Motif / mission'),{target:{value:'Tournage'}});fireEvent.change(screen.getByLabelText('Lieu / destination'),{target:{value:'Conakry'}});fireEvent.change(screen.getByLabelText('Retour prévu (heure de Conakry)'),{target:{value:'2026-12-10T10:00'}});fireEvent.click(screen.getByRole('button',{name:'Transmettre la demande'}));await waitFor(()=>expect(api.submit).toHaveBeenCalledWith(expect.objectContaining({quantities:{e:3}})));
+ });
  it('permet une demande sans offrir au collaborateur la validation',async()=>{
   render(<EquipmentRequests tenantOwnerId="tenant"/>);fireEvent.click(await screen.findByRole('button',{name:'Demander un bon de sortie'}));
   fireEvent.change(screen.getByLabelText('Motif / mission'),{target:{value:'Tournage'}});fireEvent.change(screen.getByLabelText('Lieu / destination'),{target:{value:'Conakry'}});fireEvent.change(screen.getByLabelText('Retour prévu (heure de Conakry)'),{target:{value:'2026-12-10T10:00'}});fireEvent.click(screen.getByRole('checkbox'));fireEvent.click(screen.getByRole('button',{name:'Transmettre la demande'}));
-  await screen.findByText('Demande transmise au responsable et au propriétaire.');expect(api.submit).toHaveBeenCalledWith({reason:'Tournage',destination:'Conakry',returnAt:'2026-12-10T10:00:00.000Z',equipment:['e']});
+  await screen.findByText('Demande transmise au responsable et au propriétaire.');expect(api.submit).toHaveBeenCalledWith({reason:'Tournage',destination:'Conakry',returnAt:'2026-12-10T10:00:00.000Z',equipment:['e'],quantities:{}});
   fireEvent.click(screen.getByText('Tournage'));expect(screen.queryByRole('button',{name:'Approuver'})).toBeNull();
  });
  it('affiche la décision seulement pour le responsable, avec refus motivé',async()=>{

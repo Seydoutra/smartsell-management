@@ -36,3 +36,7 @@ verify_jwt = false
 
 [functions.performance-goals]
 verify_jwt = false
+
+# Cron-only: handler requires CRON_SECRET or the existing service-role credential.
+[functions.equipment-decision-notify]
+verify_jwt = false

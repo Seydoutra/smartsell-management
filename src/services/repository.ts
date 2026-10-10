@@ -191,7 +191,7 @@ export async function deleteEditorialItem(id:string){const {error}=await db().fr
 export async function listExpenses():Promise<Expense[]>{const {data,error}=await db().from('expenses').select('*,projects(name)').order('spent_on',{ascending:false});fail(error);return data as Expense[]}
 export async function createExpense(input:Partial<Expense>){const {data:{user}}=await db().auth.getUser();const {data,error}=await db().from('expenses').insert({...input,submitted_by:user?.id}).select().single();fail(error);return data as Expense}
 export async function updateExpenseStatus(id:string,status:string){const {data:{user}}=await db().auth.getUser();const {data,error}=await db().from('expenses').update({status,approved_by:status==='APPROUVE'?user?.id:null}).eq('id',id).select().single();fail(error);return data as Expense}
-export async function listEquipment():Promise<Equipment[]>{const {data,error}=await db().from('equipment').select('*').order('name');fail(error);return data as Equipment[]}
+export async function listEquipment():Promise<Equipment[]>{const {data,error}=await db().rpc('list_equipment_stock');fail(error);return data as Equipment[]}
 export async function createEquipment(input:Partial<Equipment>){const {data,error}=await db().from('equipment').insert(input).select().single();fail(error);return data as Equipment}
 export async function updateEquipment(id:string,input:Partial<Equipment>){const {data,error}=await db().from('equipment').update(input).eq('id',id).select().single();fail(error);return data as Equipment}
 export async function deleteEquipment(id:string){const {error}=await db().from('equipment').delete().eq('id',id);fail(error)}

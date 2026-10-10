@@ -4,11 +4,11 @@ import {readFile} from 'node:fs/promises'
 import {pathToFileURL} from 'node:url'
 const {PGlite}=await import(pathToFileURL(process.argv[2]).href);const pg=new PGlite();
 const A='11111111-1111-4111-8111-111111111111',B='22222222-2222-4222-8222-222222222222',D='33333333-3333-4333-8333-333333333333',U='44444444-4444-4444-8444-444444444444',C='55555555-5555-4555-8555-555555555555',E1='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',E2='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',EB='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
-await pg.exec(`create role authenticated;create role anon;create schema auth;grant usage on schema auth to authenticated;
+await pg.exec(`create role authenticated;create role anon;create role service_role;create schema auth;grant usage on schema auth to authenticated;
 create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
 create table profiles(id uuid primary key,tenant_owner_id uuid,full_name text,role text,active boolean default true,is_temporary boolean default false,access_expires_at timestamptz);
 create table user_access_controls(profile_id uuid primary key,denied_permissions text[] default '{}');
-create table equipment(id uuid primary key,tenant_owner_id uuid,code text,name text,condition text,status text);
+create table equipment(id uuid primary key,tenant_owner_id uuid,code text,name text,condition text,status text,notes text);
 create table equipment_movements(id uuid primary key default gen_random_uuid(),tenant_owner_id uuid,equipment_id uuid,movement_type text,handled_by uuid,condition_notes text,reason text);
 create table notifications(id uuid default gen_random_uuid(),tenant_owner_id uuid,profile_id uuid,channel text,title text,body text,entity_type text,entity_id uuid);
 create table activity_logs(id bigserial,tenant_owner_id uuid,actor_id uuid,action text,entity_type text,entity_id uuid,metadata jsonb);
@@ -24,8 +24,8 @@ create function enforce_trial_write_access() returns trigger language plpgsql se
 create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text);alter table storage.objects enable row level security;grant usage on schema storage to authenticated;grant select,insert,delete on storage.objects to authenticated;
 grant select,insert,update,delete on equipment,expenses,purchase_requests,equipment_movements to authenticated;
 insert into profiles(id,tenant_owner_id,full_name,role) values('${A}','${A}','Manager A','SUPER_ADMIN'),('${B}','${B}','Manager B','SUPER_ADMIN'),('${D}','${A}','Adama QA','COLLAB'),('${U}','${A}','Collaborateur QA','COLLAB'),('${C}','${A}','Client QA','CLIENT');
-insert into equipment values('${E1}','${A}','QA1','Caméra','Bonne','DISPONIBLE'),('${E2}','${A}','QA2','Micro','Bon','DISPONIBLE'),('${EB}','${B}','QAB','Autre caméra','Bonne','DISPONIBLE');`);
-for(const file of ['v63_equipment_requests.sql','v64_company_purchases_expenses.sql']){const sql=await readFile(new URL('../supabase/'+file,import.meta.url),'utf8');await pg.exec(sql);await pg.exec(sql)}
+insert into equipment(id,tenant_owner_id,code,name,condition,status) values('${E1}','${A}','QA1','Caméra','Bonne','DISPONIBLE'),('${E2}','${A}','QA2','Micro','Bon','DISPONIBLE'),('${EB}','${B}','QAB','Autre caméra','Bonne','DISPONIBLE');`);
+for(const file of ['v63_equipment_requests.sql','v64_company_purchases_expenses.sql','v71_equipment_notes_fix.sql','v72_equipment_stock_and_decisions.sql']){const sql=await readFile(new URL('../supabase/'+file,import.meta.url),'utf8');await pg.exec(sql);await pg.exec(sql)}
 async function login(id){await pg.exec(`reset role;set request.jwt.claim.sub='${id}';set role authenticated;`)}
 const refused=async(sql,pattern)=>assert.rejects(pg.exec(sql),pattern);
 await login(A);await pg.exec(`select configure_equipment_reviewer('${D}')`);
@@ -48,7 +48,7 @@ for(const id of [E1,E2])await pg.exec(`insert into storage.objects(bucket_id,nam
 await refused(`select checkout_equipment_request('${req}','${JSON.stringify(evidence('OUT',[E1]))}')`,/chaque matériel/);
 await pg.exec(`select checkout_equipment_request('${req}','${JSON.stringify(evidence('OUT',[E1,E2]))}')`);
 await refused(`select checkout_equipment_request('${req}','${JSON.stringify(evidence('OUT',[E1,E2]))}')`,/approuvée/);
-await login(A);await refused(`update equipment set status='DISPONIBLE' where id='${E1}'`,/réservé/);
+await login(A);await refused(`update equipment set status='DISPONIBLE' where id='${E1}'`,/réservé|bons actifs/);
 await refused(`select record_equipment_movement('${E1}','RETOUR','Bon','')`,/bon de sortie/);
 await login(D);
 for(const id of [E1,E2])await pg.exec(`insert into storage.objects(bucket_id,name) values('equipment-evidence','${A}/${req}/${id}/IN/photo.jpg')`);
@@ -79,6 +79,34 @@ await login(B);assert.equal((await pg.query(`select count(*)::int n from expense
 await refused(`select company_purchase_action('APPROVE','{"id":"${purchase}"}')`,/introuvable/);
 await login(U);await refused(`select company_purchase_action('CREATE','{"title":"Disque","justification":"Test","amount":100,"currency":"GNF"}')`,/autorisée/);
 assert.equal((await pg.query(`select count(*)::int n from expenses`)).rows[0].n,0);
+// Multi-unit stock, automatic references, no tenant leakage, durable SMS claims.
+await login(A);await pg.exec(`update equipment set quantity=5 where id='${E2}'`);
+await login(U);
+assert.equal((await pg.query(`select equipment_free_quantity('${E2}') n`)).rows[0].n,5);
+const multi=(await pg.query(`select submit_equipment_request_quantities('Mission lot','Conakry',now()+interval '1 day','[{"equipment_id":"${E2}","quantity":3}]') id`)).rows[0].id;
+const other=(await pg.query(`select submit_equipment_request_quantities('Mission concurrente','Conakry',now()+interval '1 day','[{"equipment_id":"${E2}","quantity":3}]') id`)).rows[0].id;
+await login(D);await pg.exec(`select decide_equipment_request('${multi}',true,'Accord lot')`);
+assert.equal((await pg.query(`select equipment_free_quantity('${E2}') n`)).rows[0].n,2);
+await refused(`select decide_equipment_request('${other}',true,'')`,/réservé/);
+const multiEvidence=stage=>JSON.stringify([{equipment_id:E2,notes:'Constat du lot',condition:'CONFORME',photos:[`${A}/${multi}/${E2}/${stage}/photo.jpg`]}]);
+await pg.exec(`insert into storage.objects(bucket_id,name) values('equipment-evidence','${A}/${multi}/${E2}/OUT/photo.jpg')`);
+await pg.exec(`select checkout_equipment_request('${multi}','${multiEvidence('OUT')}')`);
+assert.equal((await pg.query(`select equipment_free_quantity('${E2}') n`)).rows[0].n,2);
+await pg.exec(`insert into storage.objects(bucket_id,name) values('equipment-evidence','${A}/${multi}/${E2}/IN/photo.jpg')`);
+await pg.exec(`select return_equipment_request('${multi}','${multiEvidence('IN')}')`);
+assert.equal((await pg.query(`select equipment_free_quantity('${E2}') n`)).rows[0].n,5);
+await login(A);await refused(`update equipment set quantity_in_use=1 where id='${E2}'`,/automatiquement/);
+await refused(`select claim_equipment_decision_sms()`,/permission denied/);
+await login(B);assert.equal((await pg.query(`select equipment_free_quantity('${E2}') n`)).rows[0].n,null);
+assert.equal((await pg.query('select count(*)::int n from equipment_decision_sms')).rows[0].n,0);
+await pg.exec('reset role');
+assert.equal((await pg.query(`select quantity from equipment_movements where reason like 'Bon ${multi}%'`)).rows[0].quantity,3);
+assert.equal((await pg.query('select count(*)::int n from equipment where reference is null')).rows[0].n,0);
+assert.equal((await pg.query('select count(distinct reference)::int n from equipment')).rows[0].n,3);
+const pending=(await pg.query('select count(*)::int n from equipment_decision_sms')).rows[0].n;
+await pg.exec('set role service_role');
+assert.equal((await pg.query('select * from claim_equipment_decision_sms()')).rows.length,pending);
+assert.equal((await pg.query('select * from claim_equipment_decision_sms()')).rows.length,0);
 await pg.exec(`reset role;update profiles set is_temporary=true,access_expires_at=now()-interval '1 day' where id='${A}';`);
 await login(U);await refused(`select submit_equipment_request('Mission','Conakry',now()+interval '1 day',array['${E2}']::uuid[])`,/Essai terminé/);
 await pg.close();console.log('PostgreSQL local : réservations concurrentes, photos privées obligatoires, retours partiels, dégradations, notifications, rôles, isolation et conversion d’achat idempotente validés.');
