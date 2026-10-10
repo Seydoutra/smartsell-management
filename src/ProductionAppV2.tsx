@@ -3280,7 +3280,7 @@ function Shell({
         </header>
         {expiredTrial&&<div className="trial-expired-banner" role="status"><span>Votre essai est terminé. Vos données restent visibles, mais les actions sont désactivées.</span><button type="button" onClick={()=>navigate('Abonnement')}>Choisir un abonnement</button></div>}
         <main>
-          {!online&&<div className="offline-banner" role="status"><strong>Mode hors connexion</strong><span>Les écrans déjà chargés restent disponibles. Attendez le retour du réseau avant d’enregistrer une modification.</span></div>}
+          {!online&&<div className="offline-banner" role="status"><strong>Connexion à la plateforme indisponible</strong><span>Les écrans déjà chargés restent disponibles. Vérifiez la connexion avant d’enregistrer une modification.</span><button type="button" className="ghost-action" onClick={()=>window.dispatchEvent(new Event('smartsell:check-connection'))}>Vérifier la connexion</button></div>}
           <AnimatePresence mode="wait">
             <motion.div
               key={`${currentPage}:${workspaceRevision}`}
