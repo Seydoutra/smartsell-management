@@ -842,7 +842,7 @@ function ClientDetail({
           </div>
           <ClientSocialDashboard tenantOwnerId={tenantOwnerId} clientId={id} clientName={data.client.name} canEdit={rights.update}/>
           <ClientBrandProfile clientId={id} canEdit={rights.update}/>
-          {canViewBilling&&<ClientJourney clientId={id} canStart={canStartDelivery} onChanged={()=>{void load();onChanged()}}/>}
+          {canViewBilling&&<ClientJourney key={id} clientId={id} canStart={canStartDelivery} onBilling={()=>{onClose();onNavigate("Facturation",id)}} onChanged={()=>{void load();onChanged()}}/>}
           <DetailList
             title="Projets"
             rows={data.projects.map((x) => [

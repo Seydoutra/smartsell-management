@@ -13,6 +13,13 @@ export async function saveClientBrand(clientId:string,data:BrandData,revision:nu
 }
 export async function startClientDelivery(quoteId:string,name:string,starts:string,ends:string){const id=checked(await db().rpc('start_client_delivery',{p_quote_id:quoteId,p_name:name,p_starts_on:starts,p_ends_on:ends})) as string;invalidateBillingDocuments();return id}
 export async function requestEditorialReview(id:string){return checked(await db().rpc('request_editorial_review',{p_editorial_id:id})) as string}
+export async function loadClientBillingJourney(clientId:string){
+ const [quotes,invoices]=await Promise.all([
+  db().from('quotes').select('*,quote_items(*)').eq('client_id',clientId).order('created_at',{ascending:false}),
+  db().from('invoices').select('*,payments(*)').eq('client_id',clientId).order('created_at',{ascending:false})
+ ]);
+ return {quotes:checked(quotes) as Quote[],invoices:checked(invoices) as Invoice[]}
+}
 export async function createBillingOnce(operationId:string,kind:'FACTURE'|'DEVIS',payload:Record<string,unknown>){
  const id=checked(await db().rpc('create_billing_document_once',{p_operation_id:operationId,p_kind:kind,p_payload:payload}));
  invalidateBillingDocuments()
