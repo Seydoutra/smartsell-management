@@ -14,7 +14,7 @@ function queryDatabase(query){
 if(mode==='query'){
  console.log(queryDatabase(process.argv[3]));
 }else if(mode==='migrate'){
- const file=process.argv[3];if(!/^supabase\/v7[12]_equipment_[a-z_]+\.sql$/.test(file)&&file!=='supabase/v74_goal_cockpit.sql')throw new Error('Unexpected migration target');
+ const file=process.argv[3];if(!/^supabase\/v7[12]_equipment_[a-z_]+\.sql$/.test(file)&&!['supabase/v74_goal_cockpit.sql','supabase/v75_commercial_orchestration.sql'].includes(file))throw new Error('Unexpected migration target');
  queryDatabase(await readFile(file,'utf8'));console.log('Migration applied:',file);
 }else if(mode==='deploy'){
  const slug='equipment-decision-notify';

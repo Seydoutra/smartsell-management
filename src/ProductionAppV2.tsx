@@ -58,6 +58,7 @@ import TeamChat from "./TeamChat";
 import TeamActivityDashboard from "./TeamActivityDashboard";
 import SmartSocial from "./SmartSocial";
 import CommercialPipeline from './CommercialPipeline';
+import OrchestrationCenter from './OrchestrationCenter';
 import ClientSocialDashboard from './ClientSocialDashboard';
 import ClientBrandProfile from './ClientBrandProfile';
 import ClientJourney from './ClientJourney';
@@ -918,7 +919,7 @@ function DetailList({ title, rows }: { title: string; rows: string[][] }) {
 
 function ClientsPage({ rights, onNavigate, tenantOwnerId, canViewOffers, intent,canStartDelivery=false,canViewBilling=false }: { rights: CrudRights; onNavigate: (page: "Projets" | "Tâches" | "Facturation", clientId: string) => void; tenantOwnerId:string; canViewOffers:boolean; intent:ModuleIntent;canStartDelivery?:boolean;canViewBilling?:boolean }) {
   const [rows, setRows] = useState<Client[]>([]),
-    [workspace,setWorkspace]=useState<'CLIENTS'|'PIPELINE'>(intent.view==='PIPELINE'?'PIPELINE':'CLIENTS'),
+    [workspace,setWorkspace]=useState<'CLIENTS'|'PIPELINE'|'AUTOMATIONS'>(intent.view==='PIPELINE'?'PIPELINE':'CLIENTS'),
     [open, setOpen] = useState(false),
     [selected, setSelected] = useState<string | null>(null),
     [error, setError] = useState("");
@@ -942,7 +943,8 @@ function ClientsPage({ rights, onNavigate, tenantOwnerId, canViewOffers, intent,
         add="Nouveau client"
       />
       <ErrorBar value={error} />
-      <div className="crm-workspace-tabs"><button className={workspace==='CLIENTS'?'active':''} onClick={()=>setWorkspace('CLIENTS')}><Users/>Clients & comptes</button><button className={workspace==='PIPELINE'?'active':''} onClick={()=>setWorkspace('PIPELINE')}><Target/>Pipeline commercial</button></div>
+      <div className="crm-workspace-tabs"><button className={workspace==='CLIENTS'?'active':''} onClick={()=>setWorkspace('CLIENTS')}><Users/>Clients & comptes</button><button className={workspace==='PIPELINE'?'active':''} onClick={()=>setWorkspace('PIPELINE')}><Target/>Pipeline commercial</button><button className={workspace==='AUTOMATIONS'?'active':''} onClick={()=>setWorkspace('AUTOMATIONS')}><Target/>Automatisations</button></div>
+      {workspace==='AUTOMATIONS'&&<OrchestrationCenter onNavigate={onNavigate}/>}
       {workspace==='PIPELINE'&&<CommercialPipeline tenantOwnerId={tenantOwnerId} rights={rights} canViewOffers={canViewOffers} intent={intent}/>}
       {workspace==='CLIENTS'&&<>
       <div className="records panel">
