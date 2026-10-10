@@ -1,15 +1,21 @@
-import {useEffect,useState} from 'react'
+import {useEffect,useState,useRef} from 'react'
 import {performanceGoals,askAiAssistant} from './services/repository'
 import {distributeGoal,goalTotals,type GoalState,type PerformanceGoal,type GoalStep} from './lib/performanceGoals'
 import './performance-goals.css'
+import {GoalSimulator,GoalRadar} from './GoalCockpit'
+import {loadGoalCockpit,setGoalSource} from './services/goalCockpitRepository'
+import type {GoalCockpitState,GoalSource} from './lib/goalCockpit'
 const statusLabels={DRAFT:'Brouillon',ACTIVE:'En cours',CLOSED:'Clôturé'}
 export function PerformanceGoals(){
  const [state,setState]=useState<GoalState|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[creating,setCreating]=useState(false);
- const run=async(body:Record<string,unknown>)=>{setBusy(true);setError('');try{setState(await performanceGoals(body));if(body.mode!=='list')setNotice('Enregistré.');return true}catch(e){setError(e instanceof Error?e.message:'Action impossible');return false}finally{setBusy(false)}};
+ const [cockpit,setCockpit]=useState<GoalCockpitState|null>(null),[cockpitError,setCockpitError]=useState('');const lock=useRef(false);
+ const run=async(body:Record<string,unknown>)=>{if(lock.current)return false;lock.current=true;setBusy(true);setError('');try{setState(await performanceGoals(body));try{setCockpit(await loadGoalCockpit());setCockpitError('')}catch(e){setCockpit(null);setCockpitError(e instanceof Error?e.message:'Cockpit indisponible')}if(body.mode!=='list')setNotice('Enregistré.');return true}catch(e){setError(e instanceof Error?e.message:'Action impossible');return false}finally{lock.current=false;setBusy(false)}};
  useEffect(()=>{void run({mode:'list'})},[]);
  return <section className="operations-center performance-goals"><header className="module-head"><div><span className="eyebrow">PILOTAGE DES ÉQUIPES</span><h1>Objectifs & performance</h1><p>Fixer une cible, valider sa répartition et suivre les résultats semaine après semaine.</p></div><button disabled={busy} onClick={()=>void run({mode:'list'})}>Actualiser</button></header>
  {error&&<p role="alert" className="error-banner">{error}</p>}{notice&&<p role="status">{notice}</p>}{!state&&<p>{busy?'Chargement…':'Service indisponible. Actualisez pour réessayer.'}</p>}
+ {cockpitError&&<p role="alert">Radar et simulation indisponibles : {cockpitError}. Le suivi manuel reste disponible.</p>}
  {state&&<><div className="goal-kpis"><div><strong>{state.goals.filter(g=>g.status==='ACTIVE').length}</strong> Objectifs en cours</div><div><strong>{state.goals.filter(g=>g.status==='DRAFT').length}</strong> À valider</div><div><strong>{state.goals.filter(g=>g.status==='CLOSED').length}</strong> Bilans clôturés</div></div>
+ {state.can_manage&&cockpit?.can_manage&&<GoalSimulator data={cockpit}/>}
  {state.can_manage&&<button className="primary-btn" onClick={()=>setCreating(!creating)}>Nouvel objectif mensuel</button>}
  {!state.can_manage&&<p>Vous voyez les objectifs qui vous sont attribués. Vous pouvez mettre à jour vos propres étapes.</p>}
  {creating&&<form className="panel entity-form" onSubmit={async e=>{e.preventDefault();const f=new FormData(e.currentTarget),people=f.getAll('people').map(String),target=Number(f.get('target')),period=String(f.get('period')),title=String(f.get('title'));const plan=distributeGoal(target,period,people,String(f.get('activity')));if(!plan.length){setError('Sélectionnez des responsables et une cible suffisante pour quatre étapes par personne.');return}if(await run({mode:'create',title,metric:String(f.get('metric')),target,period:period+'-01',plan}))setCreating(false)}}>
@@ -17,15 +23,17 @@ export function PerformanceGoals(){
  <label>Activité opérationnelle à répartir<input name="activity" required maxLength={500} placeholder="Ex. Prospecter, qualifier puis relancer les prospects"/></label>
  <fieldset><legend>Responsables (plusieurs possibles)</legend><div className="goal-people">{state.team.map(p=><label key={p.id}><input type="checkbox" name="people" value={p.id}/>{p.name}</label>)}</div></fieldset><p>La proposition répartit la cible à parts égales sur quatre périodes. Vous pourrez modifier les équipes, les cibles et les activités avant validation.</p><button className="primary-btn" disabled={busy}>Créer le brouillon de répartition</button></form>}
  {!state.goals.length&&<div className="panel"><h2>Aucun objectif pour le moment</h2><p>{state.can_manage?'Créez votre première cible mensuelle pour organiser votre équipe.':'Votre manager peut vous attribuer un objectif.'}</p></div>}
- {state.goals.map(goal=><GoalCard key={goal.id+'-'+goal.revision} goal={goal} state={state} busy={busy} run={run}/>)}</>}
+ {state.goals.map(goal=><GoalCard key={goal.id+'-'+goal.revision} goal={goal} state={state} busy={busy} run={run} cockpit={cockpit} onSource={async(source)=>{if(lock.current)return;lock.current=true;setBusy(true);setError('');try{await setGoalSource(goal.id,goal.revision,source)}catch(e){setError(e instanceof Error?e.message:'Source non enregistrée');return}finally{lock.current=false;setBusy(false)}await run({mode:'list'})}}/>)}</>}
  </section>
 }
-function GoalCard({goal,state,busy,run}:{goal:PerformanceGoal;state:GoalState;busy:boolean;run:(body:Record<string,unknown>)=>Promise<boolean>}){
+function GoalCard({goal,state,busy,run,cockpit,onSource}:{cockpit:GoalCockpitState|null;onSource:(source:GoalSource)=>Promise<void>;goal:PerformanceGoal;state:GoalState;busy:boolean;run:(body:Record<string,unknown>)=>Promise<boolean>}){
  const [plan,setPlan]=useState(goal.plan),[review,setReview]=useState(goal.review),[advice,setAdvice]=useState(''),[aiBusy,setAiBusy]=useState(false);
  const totals=goalTotals(plan),percent=totals.target?Math.round(totals.actual/totals.target*100):0;
  const patch=(id:string,value:Partial<GoalStep>)=>setPlan(rows=>rows.map(s=>s.id===id?{...s,...value}:s));
  const action=(body:Record<string,unknown>)=>run({id:goal.id,revision:goal.revision,...body});
  return <article className="panel goal-card"><header><div><span className={'goal-status '+goal.status}>{statusLabels[goal.status]}</span><h2>{goal.title}</h2><p>{goal.period.slice(0,7)} · {goal.metric}</p></div><strong>{totals.actual.toLocaleString('fr-FR')} / {totals.target.toLocaleString('fr-FR')}</strong></header>
+ {state.can_manage&&cockpit?.goals[goal.id]&&<GoalRadar goal={goal} evidence={cockpit.goals[goal.id]} sources={cockpit.sources} busy={busy} onSource={source=>void onSource(source)}/>}
+ <p className="goal-method">Suivi déclaré des étapes (distinct du résultat automatique)</p>
  <progress max={100} value={Math.min(100,percent)} aria-label="Progression de l’objectif"/><p>{percent}% atteint · Écart restant : {Math.max(0,totals.target-totals.actual).toLocaleString('fr-FR')} {goal.metric}</p>
  {state.can_manage&&goal.status==='DRAFT'&&<><p>Cible globale : {goal.target.toLocaleString('fr-FR')} · Répartition : {totals.target.toLocaleString('fr-FR')}. Ajustez avant validation.</p><button disabled={busy||aiBusy} onClick={async()=>{setAiBusy(true);try{setAdvice(await askAiAssistant(`Propose un plan opérationnel concis sur quatre semaines pour cet objectif : ${goal.title}, cible ${goal.target} ${goal.metric}, mois ${goal.period}. ${new Set(plan.map(s=>s.profile_id)).size} responsables. Indique tes hypothèses, ne présente pas de taux de conversion inventés comme des faits. Aucune action ne sera exécutée automatiquement.`, 'Conseil pour objectif mensuel'))}catch(e){setAdvice(e instanceof Error?e.message:'IA indisponible')}finally{setAiBusy(false)}}}>{aiBusy?'Conseil en cours…':'Demander des suggestions IA'}</button>{advice&&<p className="goal-advice">{advice}</p>}</>}
  <div className="goal-step-list">{plan.map(step=><section className="goal-step" key={step.id}><h3>Semaine {step.week} · {state.team.find(p=>p.id===step.profile_id)?.name||'Responsable'}</h3>
