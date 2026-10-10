@@ -1,5 +1,6 @@
 import { adminClient, edgeError, handleOptions, json } from "../_shared/http.ts";
 import { sendNimbaSms } from "../_shared/nimba.ts";
+import { automatedRecipientEligible } from "../_shared/notificationEligibility.ts";
 
 Deno.serve(async (request) => {
   const options = handleOptions(request); if (options) return options;
@@ -14,7 +15,7 @@ Deno.serve(async (request) => {
     if (error) return json(request, { error: error.message }, 500);
     let sent = 0, skipped = 0;
     for (const profile of profiles || []) {
-      if ((profile.roles||[profile.role]).includes('CLIENT') || (profile.access_expires_at && new Date(profile.access_expires_at)<=now)) {skipped++;continue;}
+      if (!await automatedRecipientEligible(admin, profile.id, profile.tenant_owner_id || profile.id)) {skipped++;continue;}
       const {data:claim,error:claimError}=await admin.from('team_digest_deliveries').insert({profile_id:profile.id,tenant_owner_id:profile.tenant_owner_id||profile.id,kind,digest_date:dateKey,status:'PROCESSING'}).select('id').single();
       if (claimError?.code==='23505') {skipped++;continue;}
       if (claimError || !claim) throw claimError||new Error('Réservation de notification impossible');

@@ -19,7 +19,7 @@ if(mode==='query'){
  queryDatabase(await readFile(file,'utf8'));console.log('Migration applied:',file);
 }else if(mode==='deploy-rights'){
  const slug=process.argv[3];
- if(!['autopilot','agency-intelligence','growth-intelligence','create-client-access','create-beta-tester','campaign-dispatch','team-digest','google-calendar-start','track-activity','send-communication'].includes(slug))throw new Error('Unexpected function target');
+ if(!['autopilot','agency-intelligence','growth-intelligence','create-client-access','create-beta-tester','campaign-dispatch','team-digest','task-reminders','google-calendar-sync','google-calendar-start','track-activity','send-communication'].includes(slug))throw new Error('Unexpected function target');
  const {build}=createRequire(import.meta.resolve('vite'))('esbuild');
  const bundle=await build({entryPoints:['supabase/functions/'+slug+'/index.ts'],bundle:true,write:false,format:'esm',platform:'neutral',external:['npm:*'],logLevel:'silent'});
  const form=new FormData();form.append('metadata',JSON.stringify({name:slug,entrypoint_path:'index.ts',verify_jwt:false}));form.append('file',new Blob([bundle.outputFiles[0].text],{type:'application/typescript'}),'index.ts');

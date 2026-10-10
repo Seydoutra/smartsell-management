@@ -1,5 +1,6 @@
 import { adminClient, json } from "../_shared/http.ts";
 import { sendNimbaSms } from "../_shared/nimba.ts";
+import { automatedRecipientEligible } from "../_shared/notificationEligibility.ts";
 
 const messages = [
   (name: string, title: string, due: string) => `Bonjour ${name}. Petit rappel SmartSell : « ${title} » est prévue pour ${due}. Vous avez encore le temps de bien vous organiser.`,
@@ -16,14 +17,14 @@ Deno.serve(async (request) => {
   if (!authorized) return json(request, { error: "Non autorisé" }, 401);
   const admin = adminClient(), now = new Date();
   const { data: assignments, error: assignmentError } = await admin.from('task_assignment_sms')
-    .select('id,task_id,profile_id,tenant_owner_id,tasks(title,status,creator_id,tenant_owner_id),recipient:profiles!task_assignment_sms_profile_id_fkey(full_name,phone,tenant_owner_id,active)')
+    .select('id,task_id,profile_id,tenant_owner_id,tasks(title,due_at,status,creator_id,tenant_owner_id),recipient:profiles!task_assignment_sms_profile_id_fkey(full_name,phone,tenant_owner_id,active)')
     .eq('status','PENDING').lte('scheduled_for',now.toISOString()).order('scheduled_for').limit(100);
   if (assignmentError) return json(request, { error: assignmentError.message }, 500);
   let assignmentSent = 0, assignmentFailed = 0;
   for (const assignment of assignments || []) {
     const task = Array.isArray(assignment.tasks) ? assignment.tasks[0] : assignment.tasks;
     const profile = Array.isArray(assignment.recipient) ? assignment.recipient[0] : assignment.recipient;
-    if (!task || !profile?.active || ['TERMINE','ANNULEE'].includes(task.status) || task.tenant_owner_id !== profile.tenant_owner_id) {
+    if (!task || !profile?.active || ['TERMINE','ANNULEE'].includes(task.status) || task.tenant_owner_id !== profile.tenant_owner_id || !await automatedRecipientEligible(admin, assignment.profile_id, assignment.tenant_owner_id)) {
       await admin.from('task_assignment_sms').update({ status:'CANCELLED' }).eq('id',assignment.id);
       continue;
     }
@@ -52,7 +53,7 @@ Deno.serve(async (request) => {
   for (const assignment of projectAssignments || []) {
     const project = Array.isArray(assignment.projects) ? assignment.projects[0] : assignment.projects;
     const profile = Array.isArray(assignment.recipient) ? assignment.recipient[0] : assignment.recipient;
-    if (!project || !profile?.active || project.status === 'ANNULE' || project.tenant_owner_id !== profile.tenant_owner_id) {
+    if (!project || !profile?.active || project.status === 'ANNULE' || project.tenant_owner_id !== profile.tenant_owner_id || !await automatedRecipientEligible(admin, assignment.profile_id, assignment.tenant_owner_id)) {
       await admin.from('project_assignment_sms').update({status:'CANCELLED'}).eq('id',assignment.id);
       continue;
     }
@@ -80,7 +81,7 @@ Deno.serve(async (request) => {
   for (const reminder of reminders || []) {
     const task = Array.isArray(reminder.tasks) ? reminder.tasks[0] : reminder.tasks;
     const profile = Array.isArray(reminder.profiles) ? reminder.profiles[0] : reminder.profiles;
-    if (!task || ['TERMINE','ANNULEE'].includes(task.status) || !task.notification_channels?.includes('SMS') || !task.due_at || new Date(task.due_at) <= now) {
+    if (!task || ['TERMINE','ANNULEE'].includes(task.status) || !task.notification_channels?.includes('SMS') || !task.due_at || new Date(task.due_at) <= now || !await automatedRecipientEligible(admin, reminder.profile_id, task.tenant_owner_id)) {
       await admin.from("task_reminder_schedule").update({ status: "CANCELLED" }).eq("id", reminder.id); cancelled++; continue;
     }
     // Le mode test doit être explicitement activé. Une variable absente ne doit
