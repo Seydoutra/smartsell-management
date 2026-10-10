@@ -643,7 +643,7 @@ function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { pro
       canAccounting?listPayments():Promise.resolve([]),
       canAccounting?listExpenses():Promise.resolve([]),
       canSuppliers?listSuppliers():Promise.resolve([]),
-      canTeam?listProfiles():Promise.resolve([]),
+      canTeam?listTeamProfiles():Promise.resolve([]),
       canTeam?listUserSessions():Promise.resolve([]),
       canTeam&&roles.includes('SUPER_ADMIN')?listActivityLogs():Promise.resolve([]),
     ]).then(([a, b, d, e, f, g, h, j, k, l]) => {
@@ -656,8 +656,9 @@ function Dashboard({ profile, access, accessLoaded, onNavigate, english }: { pro
       setExpenses(g);
       setSuppliers(h);
       setTeam(j);
-      setSessions(k);
-      setActivityLogs(l);
+      const memberIds = new Set(j.map(member=>member.id));
+      setSessions(k.filter(session=>memberIds.has(session.profile_id)));
+      setActivityLogs(l.filter(log=>memberIds.has(log.actor_id)));
     }).catch((error)=>{if(active)setLoadError(error instanceof Error?error.message:'Impossible de charger les indicateurs.')}).finally(()=>{if(active)setLoading(false)});
     if(canIntelligence)void loadIntelligence();
     return()=>{active=false};

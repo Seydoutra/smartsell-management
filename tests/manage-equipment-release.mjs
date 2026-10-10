@@ -15,11 +15,11 @@ function queryDatabase(query){
 if(mode==='query'){
  console.log(queryDatabase(process.argv[3]));
 }else if(mode==='migrate'){
- const file=process.argv[3];if(!/^supabase\/v7[12]_equipment_[a-z_]+\.sql$/.test(file)&&!['supabase/v74_goal_cockpit.sql','supabase/v75_commercial_orchestration.sql','supabase/v76_server_rights_hardening.sql','supabase/v77_workspace_treasury_loans.sql','supabase/v78_storage_and_cron_hardening.sql','supabase/v79_reminder_dispatch_claims.sql'].includes(file))throw new Error('Unexpected migration target');
+ const file=process.argv[3];if(!/^supabase\/v7[12]_equipment_[a-z_]+\.sql$/.test(file)&&!['supabase/v74_goal_cockpit.sql','supabase/v75_commercial_orchestration.sql','supabase/v76_server_rights_hardening.sql','supabase/v77_workspace_treasury_loans.sql','supabase/v78_storage_and_cron_hardening.sql','supabase/v79_reminder_dispatch_claims.sql','supabase/v80_calendar_worker.sql'].includes(file))throw new Error('Unexpected migration target');
  queryDatabase(await readFile(file,'utf8'));console.log('Migration applied:',file);
 }else if(mode==='deploy-rights'){
  const slug=process.argv[3];
- if(!['autopilot','agency-intelligence','growth-intelligence','create-client-access','create-beta-tester','campaign-dispatch','team-digest','task-reminders','google-calendar-sync','google-calendar-start','track-activity','send-communication'].includes(slug))throw new Error('Unexpected function target');
+ if(!['autopilot','agency-intelligence','growth-intelligence','create-client-access','create-beta-tester','campaign-dispatch','team-digest','task-reminders','google-calendar-sync','google-calendar-callback','google-calendar-start','track-activity','send-communication'].includes(slug))throw new Error('Unexpected function target');
  const {build}=createRequire(import.meta.resolve('vite'))('esbuild');
  const bundle=await build({entryPoints:['supabase/functions/'+slug+'/index.ts'],bundle:true,write:false,format:'esm',platform:'neutral',external:['npm:*'],logLevel:'silent'});
  const form=new FormData();form.append('metadata',JSON.stringify({name:slug,entrypoint_path:'index.ts',verify_jwt:false}));form.append('file',new Blob([bundle.outputFiles[0].text],{type:'application/typescript'}),'index.ts');

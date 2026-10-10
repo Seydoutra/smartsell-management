@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { canvaAction, listProfiles } from './services/repository'
+import { canvaAction, listTeamProfiles } from './services/repository'
 import type { Profile } from './types/models'
 import './canva-access-manager.css'
 
@@ -11,7 +11,7 @@ export default function CanvaAccessManager({currentProfileId}:{currentProfileId:
   useEffect(()=>{let alive=true;void canvaAction<{canManage:boolean}>('status').then(async status=>{
     if(!alive||!status.canManage)return
     setOwner(true)
-    const [result,members]=await Promise.all([canvaAction<{items:Grant[]}>('permissions'),listProfiles()])
+    const [result,members]=await Promise.all([canvaAction<{items:Grant[]}>('permissions'),listTeamProfiles()])
     if(alive){setGrants(Object.fromEntries(result.items.map(item=>[item.profileId,item])));setProfiles(members)}
   }).catch(cause=>{if(alive)setError(cause instanceof Error?cause.message:'Droits Canva indisponibles')});return()=>{alive=false}},[])
   if(!owner)return null

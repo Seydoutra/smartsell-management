@@ -37,9 +37,17 @@ export async function getGoogleAccessToken(connection: Connection) {
   return data.access_token;
 }
 
-export async function createGoogleEvent(accessToken: string, calendarId: string, event: { title: string; description?: string | null; start: string; reminderMinutes: number }) {
+export async function createGoogleEvent(accessToken: string, calendarId: string, event: { taskId?: string; title: string; description?: string | null; start: string; reminderMinutes: number }) {
+  const eventId = event.taskId ? `sm${event.taskId.replaceAll('-', '')}` : undefined;
   const start = new Date(event.start), end = new Date(start.getTime() + 60 * 60_000);
-  const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId || "primary")}/events`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ summary: event.title, description: event.description || "Tâche SmartSell", start: { dateTime: start.toISOString(), timeZone: "Africa/Conakry" }, end: { dateTime: end.toISOString(), timeZone: "Africa/Conakry" }, reminders: { useDefault: false, overrides: [{ method: "popup", minutes: event.reminderMinutes }, { method: "email", minutes: event.reminderMinutes }] }, extendedProperties: { private: { source: "smartsell" } } }) });
+  const endpoint = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId || 'primary')}/events`;
+  const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ id: eventId, summary: event.title, description: event.description || "Tâche SmartSell", start: { dateTime: start.toISOString(), timeZone: "Africa/Conakry" }, end: { dateTime: end.toISOString(), timeZone: "Africa/Conakry" }, reminders: { useDefault: false, overrides: [{ method: "popup", minutes: event.reminderMinutes }, { method: "email", minutes: event.reminderMinutes }] }, extendedProperties: { private: { source: "smartsell", ...(event.taskId ? {taskId:event.taskId} : {}) } } }) });
+  if (response.status === 409 && eventId) {
+    const existing = await fetch(`${endpoint}/${eventId}`, { headers: { authorization: `Bearer ${accessToken}` } });
+    const saved = await existing.json() as {id?: string; extendedProperties?: {private?: {source?: string; taskId?: string}}};
+    if (existing.ok && saved.id === eventId && saved.extendedProperties?.private?.source === 'smartsell' && saved.extendedProperties.private.taskId === event.taskId) return eventId;
+    throw new Error('Événement Google existant non reconnu');
+  }
   const data = await response.json() as { id?: string; error?: { message?: string } };
   if (!response.ok || !data.id) throw new Error(data.error?.message || "Création de l’événement Google impossible");
   return data.id;
