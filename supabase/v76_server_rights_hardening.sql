@@ -130,7 +130,7 @@ begin
  join pg_attribute child_col on child_col.attrelid=c.conrelid and child_col.attnum=c.conkey[1]
  join pg_attribute parent_col on parent_col.attrelid=c.confrelid and parent_col.attnum=c.confkey[1]
  where c.conrelid=tg_relid and c.contype='f' and cardinality(c.conkey)=1
- and child_col.attname in ('client_id','project_id','task_id','invoice_id','quote_id','supplier_id','equipment_id','campaign_id','group_id','request_id','approval_id','profile_id','recipient_id','assignee_id','manager_id','owner_id')
+ and child_col.attname in ('client_id','project_id','task_id','invoice_id','quote_id','supplier_id','template_id','source_purchase_id','category_id','equipment_id','campaign_id','group_id','request_id','approval_id','profile_id','recipient_id','assignee_id','manager_id','owner_id')
  and exists(select 1 from pg_attribute a where a.attrelid=c.confrelid and a.attname='tenant_owner_id' and not a.attisdropped)
  loop
  v:=body->>fk.child_column;if v is null then continue;end if;
@@ -140,7 +140,7 @@ begin
  return new;
 end$$;
 revoke all on function guard_business_relationship_scope() from public,anon,authenticated;
-do $$declare t text;begin foreach t in array array['clients','client_contacts','prospects','prospect_activities','projects','project_members','tasks','task_assignees','task_comments','editorial_items','editorial_comments','invoices','invoice_items','quotes','quote_items','payments','expenses','commercial_documents','commercial_document_items','equipment_bookings','shoots','shoot_members','campaigns','campaign_recipients','contact_group_members','employee_records','leave_requests','client_portal_access','client_portal_messages','creative_approvals','creative_feedback'] loop
+do $$declare t text;begin foreach t in array array['service_catalog','social_integrations','communication_jobs','communication_logs','call_logs','call_list_contacts','equipment_movements','purchase_requests','contracts','documents','clients','client_contacts','prospects','prospect_activities','projects','project_members','tasks','task_assignees','task_comments','editorial_items','editorial_comments','invoices','invoice_items','quotes','quote_items','payments','expenses','commercial_documents','commercial_document_items','equipment_bookings','shoots','shoot_members','campaigns','campaign_recipients','contact_group_members','employee_records','leave_requests','client_portal_access','client_portal_messages','creative_approvals','creative_feedback'] loop
  if to_regclass('public.'||t) is null then continue;end if;
  execute format('drop trigger if exists business_relationship_scope on public.%I',t);
  execute format('create trigger business_relationship_scope before insert or update on public.%I for each row execute function guard_business_relationship_scope()',t);
