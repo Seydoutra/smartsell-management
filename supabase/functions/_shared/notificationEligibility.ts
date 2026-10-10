@@ -13,3 +13,10 @@ export async function automatedRecipientEligible(admin: any, profileId: string, 
   const owner = data?.find((row: any) => row.id === tenantId);
   return recipient?.tenant_owner_id === tenantId && notificationProfileEligible(recipient) && notificationProfileEligible(owner);
 }
+
+export async function claimReminder(admin: any, table: string, id: string) {
+  if (!['task_assignment_sms', 'project_assignment_sms', 'task_reminder_schedule'].includes(table)) throw new Error('File de rappel invalide');
+  const {data,error} = await admin.from(table).update({status:'PROCESSING'}).eq('id',id).eq('status','PENDING').select('id').maybeSingle();
+  if (error) throw new Error('Réservation du rappel impossible');
+  return !!data;
+}

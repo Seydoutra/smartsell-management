@@ -15,7 +15,7 @@ function queryDatabase(query){
 if(mode==='query'){
  console.log(queryDatabase(process.argv[3]));
 }else if(mode==='migrate'){
- const file=process.argv[3];if(!/^supabase\/v7[12]_equipment_[a-z_]+\.sql$/.test(file)&&!['supabase/v74_goal_cockpit.sql','supabase/v75_commercial_orchestration.sql','supabase/v76_server_rights_hardening.sql','supabase/v77_workspace_treasury_loans.sql','supabase/v78_storage_and_cron_hardening.sql'].includes(file))throw new Error('Unexpected migration target');
+ const file=process.argv[3];if(!/^supabase\/v7[12]_equipment_[a-z_]+\.sql$/.test(file)&&!['supabase/v74_goal_cockpit.sql','supabase/v75_commercial_orchestration.sql','supabase/v76_server_rights_hardening.sql','supabase/v77_workspace_treasury_loans.sql','supabase/v78_storage_and_cron_hardening.sql','supabase/v79_reminder_dispatch_claims.sql'].includes(file))throw new Error('Unexpected migration target');
  queryDatabase(await readFile(file,'utf8'));console.log('Migration applied:',file);
 }else if(mode==='deploy-rights'){
  const slug=process.argv[3];

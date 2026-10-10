@@ -1,6 +1,6 @@
 import { adminClient, json } from "../_shared/http.ts";
 import { sendNimbaSms } from "../_shared/nimba.ts";
-import { automatedRecipientEligible } from "../_shared/notificationEligibility.ts";
+import { automatedRecipientEligible, claimReminder } from "../_shared/notificationEligibility.ts";
 
 const messages = [
   (name: string, title: string, due: string) => `Bonjour ${name}. Petit rappel SmartSell : « ${title} » est prévue pour ${due}. Vous avez encore le temps de bien vous organiser.`,
@@ -28,6 +28,7 @@ Deno.serve(async (request) => {
       await admin.from('task_assignment_sms').update({ status:'CANCELLED' }).eq('id',assignment.id);
       continue;
     }
+    if (!await claimReminder(admin, 'task_assignment_sms', assignment.id)) continue;
     const phone = Deno.env.get('COMMUNICATION_TEST_MODE') === 'true'
       ? Deno.env.get('COMMUNICATION_TEST_PHONE') : profile.phone;
     const due = task.due_at ? new Date(task.due_at).toLocaleString('fr-FR',{timeZone:'Africa/Conakry',dateStyle:'short',timeStyle:'short'}) : 'à définir';
@@ -57,6 +58,7 @@ Deno.serve(async (request) => {
       await admin.from('project_assignment_sms').update({status:'CANCELLED'}).eq('id',assignment.id);
       continue;
     }
+    if (!await claimReminder(admin, 'project_assignment_sms', assignment.id)) continue;
     const phone = Deno.env.get('COMMUNICATION_TEST_MODE') === 'true'
       ? Deno.env.get('COMMUNICATION_TEST_PHONE') : profile.phone;
     const name = String(profile.full_name || 'collaborateur').split(/\s+/)[0];
@@ -84,6 +86,7 @@ Deno.serve(async (request) => {
     if (!task || ['TERMINE','ANNULEE'].includes(task.status) || !task.notification_channels?.includes('SMS') || !task.due_at || new Date(task.due_at) <= now || !await automatedRecipientEligible(admin, reminder.profile_id, task.tenant_owner_id)) {
       await admin.from("task_reminder_schedule").update({ status: "CANCELLED" }).eq("id", reminder.id); cancelled++; continue;
     }
+    if (!await claimReminder(admin, 'task_reminder_schedule', reminder.id)) continue;
     // Le mode test doit être explicitement activé. Une variable absente ne doit
     // jamais détourner les rappels vers un seul numéro de test en production.
     const testMode = Deno.env.get("COMMUNICATION_TEST_MODE") === "true";

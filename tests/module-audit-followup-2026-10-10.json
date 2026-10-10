@@ -1,0 +1,10 @@
+{
+  "scope": "Suite d’audit : pas une certification exhaustive de tous les parcours",
+  "automatedTests": {"vitest": 243, "result": "passed"},
+  "postgresqlSuitesPassed": ["workspace-finance", "assignment-team", "payment-traceability", "equipment-requests", "client-social-reporting", "goal-cockpit", "orchestration", "supplier-isolation", "user-rights", "reminder-claims"],
+  "productionChanges": ["v79_reminder_dispatch_claims", "task-reminders", "team-digest", "google-calendar-sync"],
+  "corrections": ["Échéance chargée dans le SMS d’affectation", "Destinataire et propriétaire de l’espace actifs et non expirés avant notifications automatiques", "Pas de SMS automatique aux clients ou comptes sandbox", "Réservation atomique des rappels avant appel au fournisseur", "Tâches annulées exclues de Google Agenda", "Erreur de sauvegarde d’un événement Google non masquée"],
+  "apiAnonymousAccessChecks": {"send-communication":401,"task-reminders":401,"team-digest":401,"google-calendar-start":401,"google-calendar-sync":401,"canva-connect":401,"agency-intelligence":401},
+  "productionConnectionInventory": {"googleCalendarConnected":0,"canvaConnectionsStored":1},
+  "limits": ["Aucune session navigateur connectée disponible pour les parcours authentifiés", "Aucun envoi SMS payant, email, publication sociale ou paiement réel effectué", "Connexion Canva enregistrée ne prouve pas la validité du jeton", "Tests réels OAuth Meta/LinkedIn/Google/Canva restant à effectuer", "Rappels PROCESSING laissés en attente après crash : vérifier le fournisseur avant reprise manuelle", "Synchronisation Google actuelle limitée à l’affectation principale et à la création initiale : édition, suppression et affectations multiples restent à compléter", "Une interruption après création Google et avant sauvegarde locale peut produire un doublon lors d’une relance"]
+}
