@@ -1,6 +1,7 @@
 import { CSSProperties, FormEvent, MouseEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import EquipmentRequests from './EquipmentRequests';
+import CalendarSyncPanel from './CalendarSyncPanel';
 import CompanyCosts from './CompanyCosts';
 import WorkspaceFinance from './WorkspaceFinance';
 import WorkspaceSettings from './WorkspaceSettings';
@@ -101,7 +102,6 @@ import SubscriptionPage from './SubscriptionPage';
 import SupportCenter from './SupportCenter';
 import ReferralDashboard from './ReferralDashboard';
 import {
-  connectGoogleCalendar,
   createCampaign,
   createCallList,
   createContactGroup,
@@ -128,7 +128,6 @@ import {
   executeNextBestAction,
   askAiAssistant,
   generateAgencyIntelligence,
-  getCalendarConnection,
   getCompanySettings,
   getClientWorkspace,
   getProfile,
@@ -188,7 +187,6 @@ import type {
   AccessControl,
   ActivityLog,
   AgencyBriefing,
-  CalendarConnection,
   CallList,
   CallListContact,
   CallLog,
@@ -1359,9 +1357,6 @@ function TasksPage({
     [profiles, setProfiles] = useState<Profile[]>([]),
     [open, setOpen] = useState(false),
     [selected, setSelected] = useState<Task | null>(null),
-    [calendarConnection, setCalendarConnection] =
-      useState<CalendarConnection | null>(null),
-    [calendarBusy, setCalendarBusy] = useState(false),
     [view,setView]=useState<'LIST'|'KANBAN'>('LIST'),
     [scope,setScope]=useState<'MINE'|'ALL'>('MINE'),
     [planningView,setPlanningView]=useState<'CALENDAR'|'LIST'>('CALENDAR'),
@@ -1377,14 +1372,10 @@ function TasksPage({
   }, []);
   useEffect(() => {
     if (planning) {
-      void getCalendarConnection()
-        .then(setCalendarConnection)
-        .catch((e) => setError(e.message));
       const params = new URLSearchParams(location.hash.split("?")[1] || location.search);
       const state = params.get("calendar");
       if (state === "connected") {
         setError("");
-        void getCalendarConnection().then(setCalendarConnection);
       } else if (state) {
         setError(state === "invalid_state" ? "La demande Google a expiré. Cliquez à nouveau sur Connecter Google Agenda." : "La connexion Google Agenda n’a pas abouti. Vérifiez le compte Google choisi puis réessayez.");
       }
@@ -1422,43 +1413,7 @@ function TasksPage({
       />
       {clientFilter && <div className="filter-banner"><span>Affichage des tâches du client sélectionné.</span><button type="button" onClick={onClearFilter}>Afficher toutes les tâches</button></div>}
       <div className="work-scope-tabs" role="group" aria-label="Portée des tâches"><button type="button" className={scope==='MINE'?'active':''} onClick={()=>setScope('MINE')}>Mes tâches <span>{myTasks.length}</span></button><button type="button" className={scope==='ALL'?'active':''} onClick={()=>setScope('ALL')}>Toutes les tâches <span>{rows.length}</span></button></div>
-      {planning && (
-        <section className="panel calendar-connection">
-          <div className="channel-icon">
-            <CalendarDays />
-          </div>
-          <div>
-            <strong>Synchronisation Google Agenda</strong>
-            <p>
-              {calendarConnection?.connected
-                ? `Connecté à ${calendarConnection.calendar_email || "Google Agenda"}. Les tâches assignées sont synchronisées automatiquement.`
-                : "Chaque collaborateur connecte une seule fois son propre compte Google. Ses tâches assignées apparaissent ensuite automatiquement dans son agenda."}
-            </p>
-          </div>
-          {calendarConnection?.connected ? (
-            <span className="status success">Connecté</span>
-          ) : (
-            <button
-              className="primary-btn compact"
-              disabled={calendarBusy}
-              onClick={async () => {
-                try {
-                  setCalendarBusy(true);
-                  await connectGoogleCalendar();
-                } catch (e) {
-                  setCalendarBusy(false);
-                  setError(
-                    e instanceof Error ? e.message : "Connexion impossible",
-                  );
-                }
-              }}
-            >
-              <CalendarDays />
-              {calendarBusy ? "Connexion…" : "Connecter Google Agenda"}
-            </button>
-          )}
-        </section>
-      )}
+      {planning && <CalendarSyncPanel onChanged={()=>void load()}/>}
       {planning && <div className="smart-reminder-note"><Bell/><div><strong>3 rappels SMS intelligents</strong><span>Ils sont répartis à 50 %, 80 % et 95 % du délai disponible. Le lien du SMS permet de confirmer la tâche et d’arrêter immédiatement les rappels suivants.</span></div></div>}
       <ErrorBar value={error} />
       {planning&&<div className="kanban-toolbar"><button className={planningView==='CALENDAR'?'active':''} onClick={()=>setPlanningView('CALENDAR')}>Calendrier global</button><button className={planningView==='LIST'?'active':''} onClick={()=>setPlanningView('LIST')}>Liste des tâches</button></div>}

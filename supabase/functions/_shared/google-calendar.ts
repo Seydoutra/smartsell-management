@@ -53,7 +53,7 @@ export async function createGoogleEvent(accessToken: string, calendarId: string,
   return data.id;
 }
 
-async function ownedEvent(accessToken:string,calendarId:string,eventId:string,taskId:string){
+export async function ownedEvent(accessToken:string,calendarId:string,eventId:string,taskId:string){
  const endpoint=`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId||'primary')}/events/${encodeURIComponent(eventId)}`;
  const response=await fetch(endpoint,{headers:{authorization:`Bearer ${accessToken}`}});
  if(response.status===404||response.status===410)return null;
@@ -63,9 +63,10 @@ async function ownedEvent(accessToken:string,calendarId:string,eventId:string,ta
  if(data.extendedProperties?.private?.source!=='smartsell'||data.extendedProperties.private.taskId!==taskId)throw new Error('Événement Google non reconnu : modification refusée');
  return {endpoint,data};
 }
-export async function updateGoogleEvent(accessToken:string,calendarId:string,eventId:string,event:{taskId:string;title:string;description?:string|null;start:string;reminderMinutes:number}){
+export async function updateGoogleEvent(accessToken:string,calendarId:string,eventId:string,event:{taskId:string;title:string;description?:string|null;start:string;reminderMinutes:number},expectedEtag?:string){
  const saved=await ownedEvent(accessToken,calendarId,eventId,event.taskId);
  if(!saved)throw new Error('Événement Google absent : reconnexion du planning requise');
+ if(expectedEtag && saved.data.etag!==expectedEtag)throw new Error('Google a changé pendant la synchronisation : réessayez');
  const start=new Date(event.start),end=new Date(start.getTime()+60*60_000);
  const response=await fetch(saved.endpoint+'?sendUpdates=none',{method:'PATCH',headers:{authorization:`Bearer ${accessToken}`,'content-type':'application/json',...(saved.data.etag?{'if-match':saved.data.etag}:{})},body:JSON.stringify({summary:event.title,description:event.description||'Tâche Smartsell Management',start:{dateTime:start.toISOString(),timeZone:'Africa/Conakry'},end:{dateTime:end.toISOString(),timeZone:'Africa/Conakry'},reminders:{useDefault:false,overrides:[{method:'popup',minutes:event.reminderMinutes},{method:'email',minutes:event.reminderMinutes}]}})});
  if(!response.ok)throw new Error('Mise à jour Google impossible : '+response.status);
