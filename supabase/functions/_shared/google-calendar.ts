@@ -37,8 +37,8 @@ export async function getGoogleAccessToken(connection: Connection) {
   return data.access_token;
 }
 
-export async function createGoogleEvent(accessToken: string, calendarId: string, event: { taskId?: string; title: string; description?: string | null; start: string; reminderMinutes: number }) {
-  const eventId = event.taskId ? `sm${event.taskId.replaceAll('-', '')}` : undefined;
+export async function createGoogleEvent(accessToken: string, calendarId: string, event: { taskId?: string; eventKey?: string; title: string; description?: string | null; start: string; reminderMinutes: number }) {
+  const eventId = event.eventKey ? `sm${event.eventKey.replaceAll('-', '')}` : event.taskId ? `sm${event.taskId.replaceAll('-', '')}` : undefined;
   const start = new Date(event.start), end = new Date(start.getTime() + 60 * 60_000);
   const endpoint = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId || 'primary')}/events`;
   const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ id: eventId, summary: event.title, description: event.description || "Tâche SmartSell", start: { dateTime: start.toISOString(), timeZone: "Africa/Conakry" }, end: { dateTime: end.toISOString(), timeZone: "Africa/Conakry" }, reminders: { useDefault: false, overrides: [{ method: "popup", minutes: event.reminderMinutes }, { method: "email", minutes: event.reminderMinutes }] }, extendedProperties: { private: { source: "smartsell", ...(event.taskId ? {taskId:event.taskId} : {}) } } }) });
@@ -51,4 +51,29 @@ export async function createGoogleEvent(accessToken: string, calendarId: string,
   const data = await response.json() as { id?: string; error?: { message?: string } };
   if (!response.ok || !data.id) throw new Error(data.error?.message || "Création de l’événement Google impossible");
   return data.id;
+}
+
+async function ownedEvent(accessToken:string,calendarId:string,eventId:string,taskId:string){
+ const endpoint=`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId||'primary')}/events/${encodeURIComponent(eventId)}`;
+ const response=await fetch(endpoint,{headers:{authorization:`Bearer ${accessToken}`}});
+ if(response.status===404||response.status===410)return null;
+ const data=await response.json();
+ if(!response.ok)throw new Error(data.error?.message||'Lecture de l’événement Google impossible');
+ if(data.status==='cancelled')return null;
+ if(data.extendedProperties?.private?.source!=='smartsell'||data.extendedProperties.private.taskId!==taskId)throw new Error('Événement Google non reconnu : modification refusée');
+ return {endpoint,data};
+}
+export async function updateGoogleEvent(accessToken:string,calendarId:string,eventId:string,event:{taskId:string;title:string;description?:string|null;start:string;reminderMinutes:number}){
+ const saved=await ownedEvent(accessToken,calendarId,eventId,event.taskId);
+ if(!saved)throw new Error('Événement Google absent : reconnexion du planning requise');
+ const start=new Date(event.start),end=new Date(start.getTime()+60*60_000);
+ const response=await fetch(saved.endpoint+'?sendUpdates=none',{method:'PATCH',headers:{authorization:`Bearer ${accessToken}`,'content-type':'application/json',...(saved.data.etag?{'if-match':saved.data.etag}:{})},body:JSON.stringify({summary:event.title,description:event.description||'Tâche Smartsell Management',start:{dateTime:start.toISOString(),timeZone:'Africa/Conakry'},end:{dateTime:end.toISOString(),timeZone:'Africa/Conakry'},reminders:{useDefault:false,overrides:[{method:'popup',minutes:event.reminderMinutes},{method:'email',minutes:event.reminderMinutes}]}})});
+ if(!response.ok)throw new Error('Mise à jour Google impossible : '+response.status);
+ return eventId;
+}
+export async function deleteGoogleEvent(accessToken:string,calendarId:string,eventId:string,taskId:string){
+ const saved=await ownedEvent(accessToken,calendarId,eventId,taskId);
+ if(!saved)return;
+ const response=await fetch(saved.endpoint+'?sendUpdates=none',{method:'DELETE',headers:{authorization:`Bearer ${accessToken}`,...(saved.data.etag?{'if-match':saved.data.etag}:{})}});
+ if(!response.ok&&response.status!==404&&response.status!==410)throw new Error('Suppression Google impossible : '+response.status);
 }

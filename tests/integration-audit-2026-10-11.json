@@ -1,0 +1,7 @@
+{
+  "scope": "SMS assignment, restricted collaborator server policies, Google Calendar lifecycle",
+  "sms": {"recipientSuffix": "9064", "assignmentServerStatus": "SENT", "receptionConfirmedByUser": true, "testTaskCompleted": true},
+  "restrictedCollaborator": {"identity": "Adama Bangoura", "testMethod": "authenticated PostgreSQL role and JWT subject under real production RLS, transaction rolled back", "clientRead": true, "clientDeletion": false, "invoiceRead": false, "accountingRead": false, "directSelfElevationBlocked": true, "browserLoginTest": false},
+  "googleCalendar": {"migration": "v81_calendar_lifecycle", "functionVersion": 21, "realTitleAndTimeUpdateVerified": true, "realDeletionVerified": true, "googleDeletedEventStatus": "cancelled", "durableDeletionOutbox": true, "ownershipVerifiedBeforeMutation": true},
+  "limits": ["Outbound Smartsell to Google synchronization, not bidirectional", "Current event synchronization remains limited to the primary task assignee", "Does not certify every restricted action in every module"]
+}
