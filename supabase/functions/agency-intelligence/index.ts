@@ -1,8 +1,9 @@
 import { authenticated, edgeError, handleOptions, json, requireActions } from "../_shared/http.ts";
+import { operationalActions } from "../_shared/operational-actions.ts";
 
 type Invoice = { id:string; number:string; client_id:string; total:number; status:string; due_date:string|null; clients?:{name:string}|null };
-type Task = { id:string; title:string; project_id:string|null; status:string; priority:string; due_at:string|null; projects?:{name:string;client_id:string|null}|null };
-type Project = { id:string; name:string; client_id:string|null; status:string; progress:number; ends_on:string|null; clients?:{name:string}|null };
+type Task = { id:string; title:string; project_id:string|null; status:string; priority:string; due_at:string|null; assignee_id?:string|null; task_assignees?:{profile_id:string}[]; projects?:{name:string;client_id:string|null}|null };
+type Project = { id:string; name:string; client_id:string|null; status:string; progress:number; ends_on:string|null; manager_id?:string|null; project_members?:{profile_id:string}[]; clients?:{name:string}|null };
 
 const number = (value: unknown) => Number(value || 0);
 const firstName = (value: string) => value.trim().split(/\s+/)[0] || "Manager";
@@ -26,9 +27,9 @@ Deno.serve(async (request) => {
 
     const [clientsQ, projectsQ, invoicesQ, tasksQ, paymentsQ, expensesQ, prospectsQ] = await Promise.all([
       admin.from("clients").select("id,name,status").eq("tenant_owner_id", tenantOwnerId),
-      admin.from("projects").select("id,name,client_id,status,progress,ends_on,clients(name)").eq("tenant_owner_id", tenantOwnerId),
+      admin.from("projects").select("id,name,client_id,status,progress,ends_on,manager_id,project_members(profile_id),clients(name)").eq("tenant_owner_id", tenantOwnerId),
       admin.from("invoices").select("id,number,client_id,total,status,due_date,clients(name)").eq("tenant_owner_id", tenantOwnerId),
-      admin.from("tasks").select("id,title,project_id,status,priority,due_at,projects(name,client_id)").eq("tenant_owner_id", tenantOwnerId),
+      admin.from("tasks").select("id,title,project_id,status,priority,due_at,assignee_id,task_assignees(profile_id),projects(name,client_id)").eq("tenant_owner_id", tenantOwnerId),
       admin.from("payments").select("amount,paid_at").eq("tenant_owner_id", tenantOwnerId),
       admin.from("expenses").select("amount,status,spent_on").eq("tenant_owner_id", tenantOwnerId),
       admin.from("prospects").select("id,company,stage,next_follow_up_at").eq("tenant_owner_id", tenantOwnerId)
@@ -76,8 +77,7 @@ Deno.serve(async (request) => {
     await admin.from("next_best_actions").delete().eq("owner_id",user.id).eq("status","A_FAIRE");
     const actions:Record<string,unknown>[] = [];
     for (const invoice of overdueInvoices.slice(0,3)) actions.push({owner_id:user.id,source_type:"INVOICE",source_id:invoice.id,client_id:invoice.client_id,title:`Relancer ${invoice.clients?.name||"le client"}`,reason:`La facture ${invoice.number} de ${number(invoice.total).toLocaleString("fr-FR")} GNF est échue.`,priority:"URGENTE",action_type:"NAVIGATE",target_page:"Facturation",action_payload:{client_id:invoice.client_id,invoice_id:invoice.id}});
-    for (const task of overdueTasks.slice(0,2)) actions.push({owner_id:user.id,source_type:"TASK",source_id:task.id,client_id:task.projects?.client_id||null,project_id:task.project_id,title:`Finaliser : ${task.title}`,reason:`Échéance dépassée${task.projects?.name?` sur ${task.projects.name}`:""}.`,priority:task.priority==="URGENTE"?"URGENTE":"HAUTE",action_type:"COMPLETE_TASK",target_page:"Tâches",action_payload:{task_id:task.id,client_id:task.projects?.client_id||null}});
-    for (const project of riskyProjects.slice(0,2)) actions.push({owner_id:user.id,source_type:"PROJECT",source_id:project.id,client_id:project.client_id,project_id:project.id,title:`Replanifier ${project.name}`,reason:`Échéance dépassée avec ${number(project.progress)}% d’avancement.`,priority:"HAUTE",action_type:"NAVIGATE",target_page:"Projets",action_payload:{client_id:project.client_id,project_id:project.id}});
+    actions.push(...operationalActions(user.id,projects,tasks,now));
     // An empty tenant must remain empty: do not fabricate a recommendation
     // that looks like data inherited from the platform owner.
     const { data: savedActions, error: actionsError } = actions.length
