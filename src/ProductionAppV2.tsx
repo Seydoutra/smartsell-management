@@ -1185,12 +1185,16 @@ function ProjectDetail({
             onClick={async () => {
               if (
                 confirm(
-                  `Supprimer le projet ${data.project.name} et ses tâches ?`,
+                  `Supprimer le projet ${data.project.name} ? Ses tâches, publications et documents seront conservés sans rattachement au projet.`,
                 )
               ) {
-                await deleteProject(id);
-                onChanged();
-                onClose();
+                try {
+                  await deleteProject(id);
+                  onChanged();
+                  onClose();
+                } catch (cause) {
+                  setError(cause instanceof Error ? cause.message : "Suppression du projet impossible.");
+                }
               }
             }}
           />

@@ -11,6 +11,7 @@ import { demoData, DemoRecord } from './lib/demoData'
 import { endSession, getDemoActivity, pulseSession, startSession, trackActivity } from './services/activityTracker'
 import { isDemoMode } from './services/supabase'
 import ProductionApp from './ProductionAppV2'
+import PublicInvoicePage from './PublicInvoicePage'
 import LandingPage from './LandingPage'
 import ReferralLandingPage from './ReferralLandingPage'
 import MarketingPage from './MarketingPage'
@@ -226,6 +227,7 @@ export default function App(){
   },[])
   const navigate=(next:Route)=>{const destination=next==='landing'?import.meta.env.BASE_URL:next==='referral'?marketingPath('parrainage'):marketingRoutes.includes(next as MarketingRoute)?marketingPath(next as MarketingRoute):`${import.meta.env.BASE_URL}#${next}`;if(location.pathname+location.hash!==destination){location.assign(destination);return}setRoute(next);window.scrollTo({top:0})}
   if(route==='privacy'||route==='terms')return <LegalPage kind={route} onBack={()=>navigate('landing')}/>
+  if(location.hash.startsWith('#invoice?'))return <PublicInvoicePage/>;
   if(route==='verify')return <VerifyDocumentPage/>
   if(route==='referral')return <ReferralLandingPage onBack={()=>navigate('landing')} onSignUp={()=>navigate('signup')} onLogin={()=>navigate('app')}/>
   if(marketingRoutes.includes(route as MarketingRoute))return <MarketingPage route={route as MarketingRoute} onHome={()=>navigate('landing')} onSignUp={()=>navigate('signup')} onLogin={()=>navigate('app')}/>
