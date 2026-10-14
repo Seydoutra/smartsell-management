@@ -2534,10 +2534,9 @@ function DocumentsPage({rights}:{rights:CrudRights}) {
               <p>
                 <strong>Projet :</strong> {selected.projects?.name || "—"}
               </p>
-              <p>
-                <strong>Montant :</strong>{" "}
-                {money(selected.total, selected.currency)}
-              </p>
+              {selected.invoice_number&&<p><strong>Facture associée :</strong> {selected.invoice_number}</p>}
+              {selected.kind==='BON_LIVRAISON'&&selected.commercial_document_items?.map(item=><p key={item.id}>{item.description} · Quantité livrée : <strong>{item.quantity}</strong></p>)}
+              {selected.kind!=='BON_LIVRAISON'&&<p><strong>Montant :</strong> {money(selected.total, selected.currency)}</p>}
               <p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{selected.notes}</p>
               <div className="form-actions">
                 <button
@@ -3285,7 +3284,7 @@ function Shell({
               ) : currentPage === "Fournisseurs" ? (
                 <SuppliersPage admin={admin} canCreate={actionAllowed('suppliers.create')} canUpdate={actionAllowed('suppliers.update')} canDelete={actionAllowed('suppliers.delete')} />
               ) : currentPage === "Facturation" ? (
-                <BillingV3 admin={actionAllowed('invoices.delete')} canCreate={actionAllowed('invoices.create')} canUpdate={actionAllowed('invoices.update')} canSend={actionAllowed('invoices.send')} signedBySmartsell={profile.is_platform_owner===true} clientFilter={clientFilter} intent={routeIntent} onClearFilter={()=>navigate("Facturation")} />
+                <BillingV3 admin={actionAllowed('invoices.delete')} canCreate={actionAllowed('invoices.create')} canUpdate={actionAllowed('invoices.update')} canSend={actionAllowed('invoices.send')} canViewDeliveries={actionAllowed('documents.view')} canCreateDelivery={actionAllowed('documents.create')} signedBySmartsell={profile.is_platform_owner===true} clientFilter={clientFilter} intent={routeIntent} onClearFilter={()=>navigate("Facturation")} />
               ) : currentPage === "Documents" ? (
                 <DocumentsPage rights={rightsFor('documents')} />
               ) : currentPage === "Comptabilité" ? (

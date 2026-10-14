@@ -37,7 +37,7 @@ export async function commercialPdfFile(document:CommercialDocument,company:Comp
     pdf.text(`Page ${page}`,margin,285)
     y=58
   }
-  const ensure=(height:number)=>{if(y+height>274){pdf.addPage();header()}}
+  const ensure=(height:number)=>{if(y+height>274){const font=pdf.getFont(),size=pdf.getFontSize(),color=pdf.getTextColor();pdf.addPage();header();pdf.setFont(font.fontName,font.fontStyle);pdf.setFontSize(size);pdf.setTextColor(color)}}
   const wrapped=(text:string,width=pageWidth-margin*2,fontSize=10,lineHeight=5.4)=>{
     pdf.setFontSize(fontSize)
     for(const paragraph of text.split('\n')){
@@ -59,8 +59,16 @@ export async function commercialPdfFile(document:CommercialDocument,company:Comp
   pdf.setFont('helvetica','normal');pdf.setFontSize(11)
   pdf.text(client.slice(0,44),margin,y);pdf.text((document.projects?.name||'Sans projet').slice(0,36),112,y);y+=13
   if(document.expected_date){pdf.setFontSize(9);pdf.setTextColor(102,95,107);pdf.text(`Date prévue : ${date(document.expected_date)}`,margin,y);y+=9}
-  if(Number(document.total)>0){pdf.setFillColor(246,244,247);pdf.roundedRect(margin,y,pageWidth-margin*2,18,3,3,'F');pdf.setFont('helvetica','bold');pdf.setFontSize(10);pdf.setTextColor(36,30,40);pdf.text('Montant indicatif',margin+6,y+11);pdf.text(price,pageWidth-margin-6,y+11,{align:'right'});y+=27}
-  pdf.setFont('helvetica','bold');pdf.setFontSize(9);pdf.setTextColor(43,37,48);pdf.text('CONTENU DU DOCUMENT',margin,y);y+=8
+  if(document.invoice_number){pdf.setFont('helvetica','bold');pdf.setTextColor(43,37,48);wrapped(`Facture associée : ${document.invoice_number}`);y+=5}
+  if(document.kind==='BON_LIVRAISON'&&document.commercial_document_items?.length){
+    ensure(18);pdf.setFont('helvetica','bold');pdf.setFontSize(10);pdf.setTextColor(43,37,48);pdf.text('ARTICLES LIVRÉS',margin,y);pdf.text('QUANTITÉ',pageWidth-margin,y,{align:'right'});y+=10
+    for(const item of [...document.commercial_document_items].sort((a,b)=>a.sort_order-b.sort_order)){
+      pdf.setFont('helvetica','normal');pdf.setFontSize(10);ensure(Math.min(216,(pdf.splitTextToSize(item.description,130) as string[]).length*5.4+9));pdf.text(String(Number(item.quantity)),pageWidth-margin,y,{align:'right'});wrapped(item.description,130);pdf.setDrawColor(222,218,225);pdf.line(margin,y,pageWidth-margin,y);y+=8
+    }
+    ensure(25);pdf.setFontSize(9);wrapped('Réceptionnaire : ____________________    Signature : ____________________',pageWidth-margin*2,9);y+=6
+  }
+  if(document.kind!=='BON_LIVRAISON'&&Number(document.total)>0){pdf.setFillColor(246,244,247);pdf.roundedRect(margin,y,pageWidth-margin*2,18,3,3,'F');pdf.setFont('helvetica','bold');pdf.setFontSize(10);pdf.setTextColor(36,30,40);pdf.text('Montant indicatif',margin+6,y+11);pdf.text(price,pageWidth-margin-6,y+11,{align:'right'});y+=27}
+  ensure(18);pdf.setFont('helvetica','bold');pdf.setFontSize(9);pdf.setTextColor(43,37,48);pdf.text('CONTENU DU DOCUMENT',margin,y);y+=8
   pdf.setFont('helvetica','normal');pdf.setTextColor(55,49,60)
   wrapped(document.notes?.trim()||'Aucun contenu détaillé renseigné.')
   if(document.kind==='CONTRAT_CLIENT'){
